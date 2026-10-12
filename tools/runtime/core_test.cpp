@@ -1,5 +1,5 @@
 // A small driver for the runtime core, built outside ./engine:
-//   g++ -std=c++20 -O1 -g -Isrc tools/runtime/core_test.cpp $(ls src/runtime/*.cpp src/builtins/*.cpp src/unicode/*.cpp) -o /tmp/core_test
+//   tools/runtime/build.sh (builds it with the runtime and the runtime-owned built-ins, then runs it)
 #include <cmath>
 #include <cstdio>
 #include <string>
@@ -143,6 +143,82 @@ int main() {
   CHECK(!CreateDataProperty(big, PropertyKey(u"4294967295"), Value::number(1)).release() == false);
 
   CHECK(heap().cellCount() > 0);
+
+  // Built-ins, called the way JS would call them.
+  Object* global = realm->globalObject();
+  auto method = [&](const char16_t* object, const char16_t* name) {
+    Object* o = Get(global, PropertyKey(object)).release().asObject();
+    return std::make_pair(o, Get(o, PropertyKey(name)).release());
+  };
+  auto call = [&](std::pair<Object*, Value> m, Value thisValue, Args args) { return Call(m.second, thisValue, args); };
+  Object* data = CreateArrayFromList({Value::number(1), Value(newStringFromUtf8("x")), Value::null()});
+  Object* holder = OrdinaryObjectCreate(realm->intrinsic(Intrinsic::ObjectPrototype));
+  (void)CreateDataProperty(holder, PropertyKey(u"a"), data);
+  auto json = call(method(u"JSON", u"stringify"), Value(), {Value(holder)});
+  CHECK(json.isNormal() && str(json.value().asString()) == R"({"a":[1,"x",null]})");
+  auto parsed = call(method(u"JSON", u"parse"), Value(), {Value(newStringFromUtf8(R"({"b":[true,2.5e1]})"))});
+  CHECK(parsed.isNormal() && parsed.value().isObject());
+  auto objKeys = call(method(u"Object", u"keys"), Value(), {parsed.value()});
+  CHECK(objKeys.isNormal() && LengthOfArrayLike(objKeys.value().asObject()).release() == 1);
+  Value arrayProto = realm->intrinsic(Intrinsic::ArrayPrototype);
+  auto join = Call(Get(arrayProto.asObject(), PropertyKey(u"join")).release(), data, {Value(newStringFromUtf8("-"))});
+  CHECK(join.isNormal() && str(join.value().asString()) == "1-x-");
+  Object* nums = CreateArrayFromList({Value::number(3), Value::number(10), Value::number(2)});
+  (void)Call(Get(arrayProto.asObject(), PropertyKey(u"sort")).release(), nums, {});
+  CHECK(Get(nums, PropertyKey::index(0)).release().asNumber() == 10);
+  auto fixed = Call(Get(realm->intrinsic(Intrinsic::NumberPrototype), PropertyKey(u"toFixed")).release(), Value::number(1.005), {Value::number(2)});
+  CHECK(fixed.isNormal() && str(fixed.value().asString()) == "1.00");
+  auto prec = Call(Get(realm->intrinsic(Intrinsic::NumberPrototype), PropertyKey(u"toPrecision")).release(), Value::number(123.456), {Value::number(4)});
+  CHECK(prec.isNormal() && str(prec.value().asString()) == "123.5");
+  auto upper = Call(Get(realm->intrinsic(Intrinsic::StringPrototype), PropertyKey(u"toUpperCase")).release(), Value(newStringFromUtf8("stra\xc3\x9f""e")), {});
+  CHECK(upper.isNormal() && str(upper.value().asString()) == "STRASSE");
+  auto tag = Call(Get(realm->intrinsic(Intrinsic::ObjectPrototype), PropertyKey(u"toString")).release(), data, {});
+  CHECK(tag.isNormal() && str(tag.value().asString()) == "[object Array]");
+  auto err = Construct(Get(global, PropertyKey(u"TypeError")).release().asObject(), {Value(newStringFromUtf8("boom"))});
+  CHECK(err.isNormal());
+  auto errStr = Call(Get(err.value(), PropertyKey(u"toString")).release(), err.value(), {});
+  CHECK(errStr.isNormal() && str(errStr.value().asString()) == "TypeError: boom");
+
+  Object* dateCtor = Get(global, PropertyKey(u"Date")).release().asObject();
+  auto utc = Call(Get(dateCtor, PropertyKey(u"UTC")).release(), dateCtor, {Value::number(2020), Value::number(1), Value::number(29)});
+  CHECK(utc.isNormal() && utc.value().asNumber() == 1582934400000.0);
+  auto date = Construct(dateCtor, {utc.value()});
+  CHECK(date.isNormal());
+  auto iso = Invoke(date.value(), PropertyKey(u"toISOString"));
+  CHECK(iso.isNormal() && str(iso.value().asString()) == "2020-02-29T00:00:00.000Z");
+  auto dateParse = Get(dateCtor, PropertyKey(u"parse")).release();
+  auto back = Call(dateParse, dateCtor, {iso.value()});
+  CHECK(back.isNormal() && back.value().asNumber() == 1582934400000.0);
+  for (const char16_t* method : {u"toString", u"toUTCString"}) {
+    auto text = Invoke(date.value(), PropertyKey(method));
+    auto parsedBack = Call(dateParse, dateCtor, {text.value()});
+    CHECK(parsedBack.isNormal() && parsedBack.value().asNumber() == 1582934400000.0);
+  }
+  Object* u8 = Get(global, PropertyKey(u"Uint8Array")).release().asObject();
+  Object* f16 = Get(global, PropertyKey(u"Float16Array")).release().asObject();
+  auto ta = Construct(u8, {Value(CreateArrayFromList({Value::number(300), Value::number(-1), Value::number(7)}))});
+  CHECK(ta.isNormal());
+  CHECK(Get(ta.value(), PropertyKey::index(0)).release().asNumber() == 44);
+  CHECK(Get(ta.value(), PropertyKey::index(1)).release().asNumber() == 255);
+  CHECK(Get(ta.value(), PropertyKey(u"length")).release().asNumber() == 3);
+  auto sortedTa = Invoke(ta.value(), PropertyKey(u"sort"));
+  CHECK(sortedTa.isNormal() && Get(ta.value(), PropertyKey::index(0)).release().asNumber() == 7);
+  auto joined = Invoke(ta.value(), PropertyKey(u"join"));
+  CHECK(joined.isNormal() && str(joined.value().asString()) == "7,44,255");
+  auto half = Construct(f16, {Value(CreateArrayFromList({Value::number(1.0009765625), Value::number(65520), Value::number(5.960464477539063e-8)}))});
+  CHECK(Get(half.value(), PropertyKey::index(0)).release().asNumber() == 1.0009765625);
+  CHECK(Get(half.value(), PropertyKey::index(1)).release().asNumber() == INFINITY);
+  CHECK(Get(half.value(), PropertyKey::index(2)).release().asNumber() == 5.960464477539063e-8);
+  Object* buf = Get(ta.value(), PropertyKey(u"buffer")).release().asObject();
+  auto dv = Construct(Get(global, PropertyKey(u"DataView")).release().asObject(), {Value(buf)});
+  auto u16 = Invoke(dv.value(), PropertyKey(u"getUint16"), {Value::number(1)});
+  CHECK(u16.isNormal() && u16.value().asNumber() == 44 * 256 + 255);
+  auto tag2 = Call(Get(realm->intrinsic(Intrinsic::ObjectPrototype), PropertyKey(u"toString")).release(), ta.value(), {});
+  CHECK(str(tag2.value().asString()) == "[object Uint8Array]");
+
+  auto far = Construct(dateCtor, {Value::number(-8.64e15)});
+  auto farIso = Invoke(far.value(), PropertyKey(u"toISOString"));
+  CHECK(farIso.isNormal() && str(farIso.value().asString()) == "-271821-04-20T00:00:00.000Z");
 
   // The collector: garbage goes, objects reachable from the stack and from realms stay.
   heap().setCollectorEnabled(true);

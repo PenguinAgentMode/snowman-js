@@ -247,6 +247,7 @@ Result<std::vector<PropertyKey>> ProxyObject::OwnPropertyKeys() {
   }
   bool extensibleTarget = TRY(snowman::IsExtensible(target));
   std::vector<PropertyKey> targetKeys = TRY(target->OwnPropertyKeys());
+  RootedKeys rootedTargetKeys(targetKeys);
   std::vector<PropertyKey> targetConfigurableKeys, targetNonconfigurableKeys;
   for (const PropertyKey& key : targetKeys) {
     auto desc = TRY(target->GetOwnProperty(key));

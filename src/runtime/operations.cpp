@@ -198,10 +198,50 @@ Result<bool> IsExtensible(Object* object) { return object->IsExtensible(); }
 
 Result<Value> Get(Object* object, const PropertyKey& key) { return object->Get(key, object); }
 
+// GetV on a primitive is ToObject(V).[[Get]](P, V). The wrapper's own properties are only a String's
+// "length" and indices, so they are answered here and everything else goes straight to the prototype,
+// without allocating the wrapper.
 Result<Value> GetV(Value value, const PropertyKey& key) {
   if (value.isObject()) return value.asObject()->Get(key, value);
-  Object* object = TRY(ToObject(value));
-  return object->Get(key, value);
+  Realm* realm = vm().currentRealm();
+  Intrinsic proto;
+  switch (value.type()) {
+    case ValueType::String: {
+      String* s = value.asString();
+      if (key.isIndex()) {
+        if (key.asIndex() < s->length()) {
+          char16_t unit = s->at(key.asIndex());
+          return Value(newString(std::u16string_view(&unit, 1)));
+        }
+      } else if (key.isString() && key.asString()->view() == u"length") {
+        return Value::number(double(s->length()));
+      }
+      proto = Intrinsic::StringPrototype;
+      break;
+    }
+    case ValueType::Number:
+      proto = Intrinsic::NumberPrototype;
+      break;
+    case ValueType::Boolean:
+      proto = Intrinsic::BooleanPrototype;
+      break;
+    case ValueType::Symbol:
+      proto = Intrinsic::SymbolPrototype;
+      break;
+    case ValueType::BigInt:
+      proto = Intrinsic::BigIntPrototype;
+      break;
+    default: {
+      Object* object = TRY(ToObject(value));
+      return object->Get(key, value);
+    }
+  }
+  Object* prototype = realm->intrinsic(proto);
+  if (!prototype) {
+    Object* object = TRY(ToObject(value));
+    return object->Get(key, value);
+  }
+  return prototype->Get(key, value);
 }
 
 Result<void> Set(Object* object, const PropertyKey& key, Value value, bool throwOnFailure) {
@@ -265,6 +305,7 @@ Result<bool> SetIntegrityLevel(Object* object, IntegrityLevel level) {
   bool status = TRY(object->PreventExtensions());
   if (!status) return false;
   std::vector<PropertyKey> keys = TRY(object->OwnPropertyKeys());
+  RootedKeys rootedKeys(keys);
   if (level == IntegrityLevel::Sealed) {
     for (const PropertyKey& k : keys) {
       PropertyDescriptor desc;
@@ -290,6 +331,7 @@ Result<bool> TestIntegrityLevel(Object* object, IntegrityLevel level) {
   bool extensible = TRY(IsExtensible(object));
   if (extensible) return false;
   std::vector<PropertyKey> keys = TRY(object->OwnPropertyKeys());
+  RootedKeys rootedKeys(keys);
   for (const PropertyKey& k : keys) {
     auto currentDesc = TRY(object->GetOwnProperty(k));
     if (currentDesc) {
@@ -417,6 +459,7 @@ Result<void> CopyDataProperties(Object* target, Value source, const std::vector<
   if (source.isNullish()) return {};
   Object* from = TRY(ToObject(source));
   std::vector<PropertyKey> keys = TRY(from->OwnPropertyKeys());
+  RootedKeys rootedKeys(keys);
   for (const PropertyKey& nextKey : keys) {
     bool excluded = false;
     for (const PropertyKey& e : excludedKeys) {
