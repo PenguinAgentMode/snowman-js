@@ -57,6 +57,9 @@ bool IsCallable(Value argument);
 bool IsConstructor(Value argument);
 bool IsIntegralNumber(Value argument);
 bool IsRegExpLike(Value argument);  // [[RegExpMatcher]] check only; IsRegExp (Symbol.match) is Result<bool>
+// The RegExp built-in registers how to recognise an object with a [[RegExpMatcher]] slot.
+using RegExpCheck = bool (*)(Object* object);
+void setRegExpCheck(RegExpCheck check);
 Result<bool> IsRegExp(Value argument);
 bool SameValue(Value x, Value y);
 bool SameValueZero(Value x, Value y);
@@ -99,6 +102,9 @@ Result<Realm*> GetFunctionRealm(Object* object);
 Result<void> CopyDataProperties(Object* target, Value source, const std::vector<PropertyKey>& excludedKeys);
 
 // 10.1 Ordinary objects
+// 10.1.9.2 OrdinarySetWithOwnDescriptor
+Result<bool> OrdinarySetWithOwnDescriptor(Object* object, const PropertyKey& key, Value value, Value receiver,
+                                          std::optional<PropertyDescriptor> ownDesc);
 Result<Object*> GetPrototypeFromConstructor(Object* constructor, Intrinsic intrinsicDefaultProto);
 // OrdinaryCreateFromConstructor: T's constructor takes the prototype first, then `args`.
 template <class T, class... A>
@@ -129,6 +135,9 @@ struct IteratorRecord {
 };
 enum class IteratorKind { Sync, Async };
 Result<IteratorRecord> GetIteratorFromMethod(Value object, Value method);
+// 27.1.6.1 CreateAsyncFromSyncIterator: defined by src/interp/ (async_from_sync_iterator.cpp); the runtime
+// has a weak fallback that throws a TypeError.
+Result<IteratorRecord> CreateAsyncFromSyncIterator(const IteratorRecord& syncIteratorRecord);
 Result<IteratorRecord> GetIterator(Value object, IteratorKind kind);
 Result<IteratorRecord> GetIteratorDirect(Object* object);
 Result<Object*> IteratorNext(IteratorRecord& record, std::optional<Value> value = std::nullopt);

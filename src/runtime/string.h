@@ -42,6 +42,9 @@ bool equals(const String* a, const String* b);
 // a + b
 String* concat(String* a, String* b);
 
+// WhiteSpace or LineTerminator (12.2, 12.3): StrWhiteSpaceChar, what String.prototype.trim removes.
+bool isWhiteSpaceOrLineTerminator(char16_t c);
+
 // UTF-8 <-> UTF-16 helpers shared by the runtime and the CLI.
 std::u16string utf8ToUtf16(std::string_view utf8);
 std::string utf16ToUtf8(std::u16string_view utf16);

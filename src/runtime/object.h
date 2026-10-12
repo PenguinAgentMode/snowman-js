@@ -66,6 +66,10 @@ class Object : public Cell {
   virtual Result<Value> Call(Value thisArgument, Args args);
   virtual Result<Object*> Construct(Args args, Object* newTarget);
 
+  // False for objects whose [[GetPrototypeOf]] is not the ordinary one (Proxy): OrdinarySetPrototypeOf's
+  // cycle check stops there.
+  virtual bool hasOrdinaryGetPrototypeOf() const { return true; }
+
   // Internal slots live in subclasses; test and downcast with these.
   template <class T>
   bool is() const {
