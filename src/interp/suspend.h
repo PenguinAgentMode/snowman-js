@@ -31,7 +31,7 @@ class SuspendableObject : public Object {
   std::unique_ptr<Coroutine> coroutine;
   ECMAScriptFunction* function = nullptr;
   NativeBody nativeBody = nullptr;
-  Value nativeData;  // for nativeBody
+  Cell* nativeData = nullptr;  // for nativeBody
   // The body's completion, once finished.
   bool finished = false;
   bool outcomeIsThrow = false;
@@ -82,7 +82,7 @@ Value AsyncGeneratorThrow(Value generator, Value exception);
 
 // AsyncBlockStart for a native body (module top-level await): runs body on a coroutine until it awaits or
 // finishes, and settles capability with its completion.
-void AsyncNativeBlockStart(PromiseCapability* capability, SuspendableObject::NativeBody body, Value data,
+void AsyncNativeBlockStart(PromiseCapability* capability, SuspendableObject::NativeBody body, Cell* data,
                            InterpContext& context);
 
 }  // namespace snowman::interp

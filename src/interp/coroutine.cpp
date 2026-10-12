@@ -3,8 +3,8 @@
 // The collector scans coroutine stacks conservatively, so each one is registered with the heap: the running
 // coroutine with its whole range (the collector scans the stack it runs on from the stack pointer up), a
 // suspended one (or the thread's own stack while a coroutine runs) from its saved stack pointer up.
-// __builtin_unwind_init() spills the callee-saved registers before every switch, so pointers held in
-// registers are on a scanned stack too.
+// The switch pushes the callee-saved registers on the stack it leaves, so pointers held in registers are on
+// a scanned stack too.
 #include "interp/coroutine.h"
 
 #include <pthread.h>
@@ -18,6 +18,45 @@
 
 #include "runtime/heap.h"
 #include "runtime/vm.h"
+
+// snowman_coroutine_switch(save, next): push the callee-saved registers, store the stack pointer in *save,
+// switch to the stack `next` and pop its registers. A new stack starts in snowman_coroutine_start with the
+// coroutine in rbx.
+extern "C" void snowman_coroutine_switch(void** save, void* next);
+extern "C" void snowman_coroutine_start();
+asm(R"(
+  .text
+  .globl snowman_coroutine_switch
+  .type snowman_coroutine_switch, @function
+snowman_coroutine_switch:
+  pushq %rbp
+  pushq %rbx
+  pushq %r12
+  pushq %r13
+  pushq %r14
+  pushq %r15
+  movq %rsp, (%rdi)
+  movq %rsi, %rsp
+  popq %r15
+  popq %r14
+  popq %r13
+  popq %r12
+  popq %rbx
+  popq %rbp
+  ret
+  .size snowman_coroutine_switch, .-snowman_coroutine_switch
+  .globl snowman_coroutine_start
+  .type snowman_coroutine_start, @function
+snowman_coroutine_start:
+  movq %rbx, %rdi
+  call snowman_coroutine_main
+  ud2
+  .size snowman_coroutine_start, .-snowman_coroutine_start
+)");
+
+extern "C" [[noreturn]] void snowman_coroutine_main(void* self) {
+  snowman::interp::Coroutine::trampoline(static_cast<snowman::interp::Coroutine*>(self));
+}
 
 namespace snowman::interp {
 
@@ -77,14 +116,13 @@ void Coroutine::releaseStack() {
   mapping_ = stackLow_ = stackHigh_ = nullptr;
 }
 
-void Coroutine::trampoline(unsigned high, unsigned low) {
-  auto* self = reinterpret_cast<Coroutine*>((uintptr_t(high) << 32) | uintptr_t(low));
+void Coroutine::trampoline(Coroutine* self) {
   self->entry_(self, self->data_);
   self->finished_ = true;
   heap().removeStack(self->registeredLow_);
   self->registeredLow_ = nullptr;
-  setcontext(&self->resumer_);
-  std::abort();  // unreachable
+  snowman_coroutine_switch(&self->selfSp_, self->resumerSp_);
+  std::abort();  // never resumed
 }
 
 void Coroutine::resume() {
@@ -106,20 +144,20 @@ void Coroutine::resume() {
     }
     stackLow_ = mapping_ + guard;
     stackHigh_ = stackLow_ + stackSize_;
-    getcontext(&self_);
-    self_.uc_stack.ss_sp = stackLow_;
-    self_.uc_stack.ss_size = stackSize_;
-    self_.uc_link = nullptr;
-    auto address = reinterpret_cast<uintptr_t>(this);
-    makecontext(&self_, reinterpret_cast<void (*)()>(&Coroutine::trampoline), 2, unsigned(address >> 32),
-                unsigned(address & 0xFFFFFFFFu));
+    // The frame snowman_coroutine_switch pops: r15 r14 r13 r12 rbx(this) rbp, then the return address.
+    // snowman_coroutine_start's call then runs with a 16-byte aligned stack.
+    auto** frame = reinterpret_cast<void**>(stackHigh_ - 72);
+    for (int i = 0; i < 6; i++) frame[i] = nullptr;
+    frame[4] = this;
+    frame[6] = reinterpret_cast<void*>(&snowman_coroutine_start);
+    selfSp_ = frame;
     started_ = true;
   }
 
-  __builtin_unwind_init();
   // The resumer's stack stays live from here up while the coroutine runs.
   Coroutine* resumer = gCurrent;
-  const void* resumerSp = approximateStackPointer();
+  // Below the registers the switch pushes on the resumer's stack.
+  const void* resumerSp = static_cast<const char*>(approximateStackPointer()) - 128;
   if (resumer) {
     heap().removeStack(resumer->registeredLow_);
     resumer->registeredLow_ = resumerSp;
@@ -138,7 +176,7 @@ void Coroutine::resume() {
   gCurrent = this;
   running_ = true;
 
-  swapcontext(&resumer_, &self_);
+  snowman_coroutine_switch(&resumerSp_, selfSp_);
 
   running_ = false;
   gCurrent = resumerCoroutine_;
@@ -153,12 +191,11 @@ void Coroutine::resume() {
 
 void Coroutine::suspend() {
   if (!running_) std::abort();
-  __builtin_unwind_init();
   const void* sp = approximateStackPointer();
   heap().removeStack(registeredLow_);
-  registeredLow_ = sp;
-  heap().addStack(sp, stackHigh_);
-  swapcontext(&self_, &resumer_);
+  registeredLow_ = static_cast<const char*>(sp) - 128;  // below the registers the switch pushes
+  heap().addStack(registeredLow_, stackHigh_);
+  snowman_coroutine_switch(&selfSp_, resumerSp_);
   // resume() registered the whole stack again.
 }
 

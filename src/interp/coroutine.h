@@ -1,11 +1,10 @@
-// Stackful coroutines (ucontext, mmap'd stacks with a guard page). Generators and async functions run their
+// Stackful coroutines (a small x86-64 register switch, mmap'd stacks with a guard page). Generators and async functions run their
 // bodies on one, so the evaluator stays a plain recursive function: yield and await are a switch back to the
 // resumer. The CLI also runs the whole program on a large one, so CheckStack() can turn deep recursion into a
 // RangeError. INTERFACES.md section 12.
 #pragma once
 
 #include <cstddef>
-#include <ucontext.h>
 
 namespace snowman::interp {
 
@@ -35,8 +34,11 @@ class Coroutine {
   // The innermost running coroutine (nullptr on the thread's own stack).
   static Coroutine* current();
 
+ public:
+  // Where a new coroutine's stack starts (internal to coroutine.cpp).
+  [[noreturn]] static void trampoline(Coroutine* self);
+
  private:
-  static void trampoline(unsigned high, unsigned low);
   void releaseStack();
 
   Entry entry_;
@@ -46,8 +48,8 @@ class Coroutine {
   char* stackLow_ = nullptr;
   char* stackHigh_ = nullptr;
   const void* registeredLow_ = nullptr;  // the range currently registered with the heap starts here
-  ucontext_t self_{};
-  ucontext_t resumer_{};
+  void* selfSp_ = nullptr;     // the coroutine's saved stack pointer while it is not running
+  void* resumerSp_ = nullptr;  // the resumer's while the coroutine runs
   const char* resumerStackLimit_ = nullptr;
   Coroutine* resumerCoroutine_ = nullptr;
   bool started_ = false;
