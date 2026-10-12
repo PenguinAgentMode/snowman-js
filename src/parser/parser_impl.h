@@ -136,6 +136,11 @@ class Parser {
   // Names collected by the current checkLVal* pass (BoundNames).
   std::vector<std::u16string>* collect_ = nullptr;
   std::vector<std::pair<std::u16string, uint32_t>>* collectParams_ = nullptr;
+  // Modules: exported names (duplicates are errors) and `export {x}` bindings checked at the end.
+  std::unordered_set<std::u16string> exportedNames_;
+  std::vector<std::pair<std::u16string, uint32_t>> exportedBindings_;
+  void addExportName(const std::u16string& name, uint32_t pos);
+  std::u16string moduleExportNameString(Node* n);
 
   // --- tokens
   void next();
@@ -294,5 +299,6 @@ class Parser {
 };
 
 std::u16string_view sliceOf(const std::u16string& source, const Node* n);
+void computeParamInfo(Function* fn);
 
 }  // namespace snowman::parser
