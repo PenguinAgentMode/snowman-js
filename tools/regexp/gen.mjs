@@ -273,7 +273,9 @@ export function execPatterns(n, seed) {
       let s = '';
       for (let j = 1 + Math.floor(r() * 4); j > 0; j--) {
         const a = atom(depth);
-        s += a + (/^(\^|\$|\\b|\\B|\(\?<[=!])/.test(a) || (u && /^\(\?[=!]/.test(a)) ? '' : quant());
+        // Quantified groups nest at most two deep, so that no case is exponential on 10 characters.
+        const group = a.startsWith('(');
+        s += a + (/^(\^|\$|\\b|\\B|\(\?<[=!])/.test(a) || (u && /^\(\?[=!]/.test(a)) || (group && depth > 1) ? '' : quant());
       }
       return s;
     };

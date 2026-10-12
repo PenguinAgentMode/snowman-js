@@ -5,6 +5,7 @@
 // stdout, one line per case: "E <message>" (SyntaxError), "N" (no match), "X" (resource exhausted) or
 // "M s0 e0 s1 e1 ..." (spans, -1 -1 for a group that did not participate).
 //   g++ -std=c++20 -O2 -Isrc -o build/exec_driver tools/regexp/exec_driver.cpp src/regexp/*.cpp src/unicode/*.cpp
+#include <cstdlib>
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -22,7 +23,9 @@ int main() {
   std::ios::sync_with_stdio(false);
   std::string line;
   std::vector<snowman::regexp::Span> spans;
-  while (std::getline(std::cin, line)) {
+  bool trace = std::getenv("EXEC_DRIVER_TRACE") != nullptr;  // case numbers to stderr, to find a slow one
+  for (size_t n = 0; std::getline(std::cin, line); n++) {
+    if (trace) std::cerr << n << std::endl;
     std::vector<std::string> fields;
     std::stringstream ss(line);
     std::string field;

@@ -97,6 +97,13 @@ for (const p of patterns) {
   }
 }
 
+if (args.includes('--dump')) {
+  // the driver's input, for running it alone (EXEC_DRIVER_TRACE=1 build/exec_driver < file)
+  const hex = (t) => [...Array(t.length).keys()].map((i) => t.charCodeAt(i).toString(16).padStart(4, '0')).join('');
+  for (const c of cases) console.log(`${hex(c.flags)}\t${hex(c.pattern)}\t${hex(c.input)}\t${c.lastIndex}`);
+  process.exit(0);
+}
+
 // ---- compare ----
 const ours = runExecDriver(cases);
 let agree = 0;
