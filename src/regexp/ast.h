@@ -11,20 +11,10 @@
 #include <string_view>
 #include <vector>
 
+#include "regexp/regexp.h"
 #include "unicode/unicode.h"
 
 namespace snowman::regexp {
-
-struct Flags {
-  bool hasIndices = false;   // d
-  bool global = false;       // g
-  bool ignoreCase = false;   // i
-  bool multiline = false;    // m
-  bool dotAll = false;       // s
-  bool unicode = false;      // u
-  bool unicodeSets = false;  // v
-  bool sticky = false;       // y
-};
 
 // Flags a modifier group (?ims-ims:...) can change; each node records the ones in effect where it appears.
 enum ModFlag : uint8_t { kIgnoreCase = 1, kMultiline = 2, kDotAll = 4 };
