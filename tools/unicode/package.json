@@ -1,0 +1,10 @@
+{
+  "name": "snowman-unicode-tools",
+  "private": true,
+  "description": "Unicode 17.0 data for gen-regexp.mjs (alias lists, emoji sequences, case folding). Code point sets come from node itself.",
+  "type": "module",
+  "devDependencies": {
+    "@unicode/unicode-17.0.0": "2.0.7",
+    "unicode-property-value-aliases-ecmascript": "2.2.1"
+  }
+}
