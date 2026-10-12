@@ -1253,14 +1253,16 @@ void Parser::finishModule(Program* program) {
     const ImportEntry* ie = nullptr;
     for (auto& i : program->importEntries)
       if (e.localName && i.localName == *e.localName) ie = &i;
-    if (!ie || ie->isNamespaceObject) {
+    if (!ie) {
       locals.push_back(std::move(e));
       continue;
     }
+    // A re-export of an import; `import * as ns from "m"; export {ns}` re-exports m's namespace like
+    // `export * as ns from "m"`.
     ExportEntry indirect;
     indirect.exportName = e.exportName;
     indirect.moduleRequest = ie->moduleRequest;
-    indirect.importKind = ExportEntry::ImportKind::Name;
+    indirect.importKind = ie->isNamespaceObject ? ExportEntry::ImportKind::All : ExportEntry::ImportKind::Name;
     indirect.importName = ie->importName;
     indirect.node = e.node;
     program->indirectExportEntries.push_back(std::move(indirect));
