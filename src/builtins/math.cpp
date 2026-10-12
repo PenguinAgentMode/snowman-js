@@ -4,6 +4,7 @@
 #include <cmath>
 
 #include "builtins/util.h"
+#include "runtime/bigint.h"
 
 namespace snowman::builtins {
 
@@ -124,6 +125,72 @@ Result<Value> Math_hypot(NativeCall& call) {
   return num(std::sqrt(sum) * largest);
 }
 
+// The exact sum of finite doubles, as an integer count of 2^-1074 (the smallest subnormal).
+BigInt* scaledExact(double n) {
+  uint64_t bits = std::bit_cast<uint64_t>(n);
+  int exp = int((bits >> 52) & 0x7FF);
+  uint64_t mant = bits & ((uint64_t(1) << 52) - 1);
+  if (exp == 0) exp = 1;
+  else mant |= uint64_t(1) << 52;
+  BigInt* m = BigInt::leftShift(BigInt::fromUint64(mant), BigInt::fromInt64(exp - 1));
+  return std::signbit(n) ? BigInt::unaryMinus(m) : m;
+}
+
+// The double nearest to sum × 2^-1074 (ties to even).
+double unscale(const BigInt* sum) {
+  const std::vector<uint32_t>& mag = sum->magnitude();
+  if (mag.empty()) return 0;
+  uint64_t bitLength = uint64_t(mag.size() - 1) * 32 + uint64_t(32 - std::countl_zero(mag.back()));
+  double result;
+  if (bitLength <= 64) {
+    uint64_t v = mag[0] | (mag.size() > 1 ? uint64_t(mag[1]) << 32 : 0);
+    result = std::ldexp(double(v), -1074);
+  } else {
+    // The top 64 bits with a sticky bit for everything below: one correctly rounded conversion.
+    uint64_t shift = bitLength - 64;
+    BigInt* top = BigInt::signedRightShift(sum->isNegative() ? BigInt::unaryMinus(sum) : sum, BigInt::fromUint64(shift));
+    uint64_t v = top->toUint64();
+    bool sticky = false;
+    for (uint64_t i = 0; i < shift && !sticky; i++) sticky = (mag[i / 32] >> (i % 32)) & 1;
+    if (sticky) v |= 1;
+    result = std::ldexp(double(v), int(shift) - 1074);
+  }
+  return sum->isNegative() ? -result : result;
+}
+
+// Math.sumPrecise ( items )
+Result<Value> Math_sumPrecise(NativeCall& call) {
+  TRY(RequireObjectCoercible(call.args[0]));
+  IteratorRecord record = TRY(GetIterator(call.args[0], IteratorKind::Sync));
+  enum class State { MinusZero, Finite, PlusInfinity, MinusInfinity, NotANumber } state = State::MinusZero;
+  BigInt* sum = BigInt::fromInt64(0);
+  double count = 0;
+  while (true) {
+    std::optional<Value> next = TRY(IteratorStepValue(record));
+    if (!next) break;
+    count++;
+    if (count >= 9007199254740992.0) return closeIteratorWithThrow(record, ThrowRangeError("Math.sumPrecise: too many values").value);
+    if (!next->isNumber()) return closeIteratorWithThrow(record, ThrowTypeError("Math.sumPrecise: value is not a number").value);
+    double n = next->asNumber();
+    if (state == State::NotANumber) continue;
+    if (std::isnan(n)) state = State::NotANumber;
+    else if (n == INFINITY) state = state == State::MinusInfinity ? State::NotANumber : State::PlusInfinity;
+    else if (n == -INFINITY) state = state == State::PlusInfinity ? State::NotANumber : State::MinusInfinity;
+    else if (!(n == 0 && std::signbit(n)) && (state == State::MinusZero || state == State::Finite)) {
+      state = State::Finite;
+      sum = BigInt::add(sum, scaledExact(n));
+    }
+  }
+  switch (state) {
+    case State::NotANumber: return num(NAN);
+    case State::PlusInfinity: return num(INFINITY);
+    case State::MinusInfinity: return num(-INFINITY);
+    case State::MinusZero: return num(-0.0);
+    case State::Finite: return num(unscale(sum));
+  }
+  return num(NAN);
+}
+
 uint64_t randomState[2];
 
 // 21.3.2.27 Math.random ( ): xorshift128+.
@@ -190,6 +257,7 @@ void installMath(Realm& realm) {
       {u"sin", 1, unary<std::sin>},
       {u"sinh", 1, unary<std::sinh>},
       {u"sqrt", 1, unary<std::sqrt>},
+      {u"sumPrecise", 1, Math_sumPrecise},
       {u"tan", 1, unary<std::tan>},
       {u"tanh", 1, unary<std::tanh>},
       {u"trunc", 1, unary<jsTrunc>},
