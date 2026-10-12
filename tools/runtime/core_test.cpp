@@ -179,6 +179,25 @@ int main() {
   auto errStr = Call(Get(err.value(), PropertyKey(u"toString")).release(), err.value(), {});
   CHECK(errStr.isNormal() && str(errStr.value().asString()) == "TypeError: boom");
 
+  Object* dateCtor = Get(global, PropertyKey(u"Date")).release().asObject();
+  auto utc = Call(Get(dateCtor, PropertyKey(u"UTC")).release(), dateCtor, {Value::number(2020), Value::number(1), Value::number(29)});
+  CHECK(utc.isNormal() && utc.value().asNumber() == 1582934400000.0);
+  auto date = Construct(dateCtor, {utc.value()});
+  CHECK(date.isNormal());
+  auto iso = Invoke(date.value(), PropertyKey(u"toISOString"));
+  CHECK(iso.isNormal() && str(iso.value().asString()) == "2020-02-29T00:00:00.000Z");
+  auto dateParse = Get(dateCtor, PropertyKey(u"parse")).release();
+  auto back = Call(dateParse, dateCtor, {iso.value()});
+  CHECK(back.isNormal() && back.value().asNumber() == 1582934400000.0);
+  for (const char16_t* method : {u"toString", u"toUTCString"}) {
+    auto text = Invoke(date.value(), PropertyKey(method));
+    auto parsedBack = Call(dateParse, dateCtor, {text.value()});
+    CHECK(parsedBack.isNormal() && parsedBack.value().asNumber() == 1582934400000.0);
+  }
+  auto far = Construct(dateCtor, {Value::number(-8.64e15)});
+  auto farIso = Invoke(far.value(), PropertyKey(u"toISOString"));
+  CHECK(farIso.isNormal() && str(farIso.value().asString()) == "-271821-04-20T00:00:00.000Z");
+
   // The collector: garbage goes, objects reachable from the stack and from realms stay.
   heap().setCollectorEnabled(true);
   Object* kept = OrdinaryObjectCreate(realm->intrinsic(Intrinsic::ObjectPrototype));
