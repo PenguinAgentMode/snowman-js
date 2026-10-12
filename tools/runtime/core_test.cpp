@@ -194,6 +194,28 @@ int main() {
     auto parsedBack = Call(dateParse, dateCtor, {text.value()});
     CHECK(parsedBack.isNormal() && parsedBack.value().asNumber() == 1582934400000.0);
   }
+  Object* u8 = Get(global, PropertyKey(u"Uint8Array")).release().asObject();
+  Object* f16 = Get(global, PropertyKey(u"Float16Array")).release().asObject();
+  auto ta = Construct(u8, {Value(CreateArrayFromList({Value::number(300), Value::number(-1), Value::number(7)}))});
+  CHECK(ta.isNormal());
+  CHECK(Get(ta.value(), PropertyKey::index(0)).release().asNumber() == 44);
+  CHECK(Get(ta.value(), PropertyKey::index(1)).release().asNumber() == 255);
+  CHECK(Get(ta.value(), PropertyKey(u"length")).release().asNumber() == 3);
+  auto sortedTa = Invoke(ta.value(), PropertyKey(u"sort"));
+  CHECK(sortedTa.isNormal() && Get(ta.value(), PropertyKey::index(0)).release().asNumber() == 7);
+  auto joined = Invoke(ta.value(), PropertyKey(u"join"));
+  CHECK(joined.isNormal() && str(joined.value().asString()) == "7,44,255");
+  auto half = Construct(f16, {Value(CreateArrayFromList({Value::number(1.0009765625), Value::number(65520), Value::number(5.960464477539063e-8)}))});
+  CHECK(Get(half.value(), PropertyKey::index(0)).release().asNumber() == 1.0009765625);
+  CHECK(Get(half.value(), PropertyKey::index(1)).release().asNumber() == INFINITY);
+  CHECK(Get(half.value(), PropertyKey::index(2)).release().asNumber() == 5.960464477539063e-8);
+  Object* buf = Get(ta.value(), PropertyKey(u"buffer")).release().asObject();
+  auto dv = Construct(Get(global, PropertyKey(u"DataView")).release().asObject(), {Value(buf)});
+  auto u16 = Invoke(dv.value(), PropertyKey(u"getUint16"), {Value::number(1)});
+  CHECK(u16.isNormal() && u16.value().asNumber() == 44 * 256 + 255);
+  auto tag2 = Call(Get(realm->intrinsic(Intrinsic::ObjectPrototype), PropertyKey(u"toString")).release(), ta.value(), {});
+  CHECK(str(tag2.value().asString()) == "[object Uint8Array]");
+
   auto far = Construct(dateCtor, {Value::number(-8.64e15)});
   auto farIso = Invoke(far.value(), PropertyKey(u"toISOString"));
   CHECK(farIso.isNormal() && str(farIso.value().asString()) == "-271821-04-20T00:00:00.000Z");
