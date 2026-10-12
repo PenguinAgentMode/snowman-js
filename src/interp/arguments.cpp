@@ -10,11 +10,6 @@ namespace snowman::interp {
 
 namespace {
 
-class ArgumentsObject : public Object {
- public:
-  using Object::Object;
-};
-
 class MappedArgumentsObject final : public ArgumentsObject {
  public:
   MappedArgumentsObject(Object* prototype, Environment* env) : ArgumentsObject(prototype), env_(env) {}

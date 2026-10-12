@@ -1,6 +1,4 @@
 // Classes (15.7): ClassDefinitionEvaluation, class elements, and the private element operations (7.3.26–7.3.32).
-#include <unordered_map>
-
 #include "interp/interpreter.h"
 #include "runtime/builtins.h"
 #include "runtime/errors.h"
@@ -13,27 +11,23 @@ using namespace ast;
 
 namespace {
 
-// [[PrivateElements]] of every object that has any. A side table until Object carries the slot.
-class PrivateElementTable final : public RootProvider {
+// [[PrivateElements]]: the cell an object's privateElements slot holds.
+class PrivateElementList final : public Cell {
  public:
-  std::unordered_map<Object*, std::vector<PrivateElement>> elements;
-
-  void traceRoots(Tracer& tracer) override {
-    for (auto& [object, list] : elements) {
-      tracer.visit(object);
-      for (auto& element : list) {
-        tracer.visit(element.key);
-        tracer.visit(element.value);
-        tracer.visit(element.getter);
-        tracer.visit(element.setter);
-      }
+  void trace(Tracer& tracer) override {
+    for (auto& element : elements) {
+      tracer.visit(element.key);
+      tracer.visit(element.value);
+      tracer.visit(element.getter);
+      tracer.visit(element.setter);
     }
   }
+  std::vector<PrivateElement> elements;
 };
 
-PrivateElementTable& privateTable() {
-  static auto* table = new PrivateElementTable();
-  return *table;
+std::vector<PrivateElement>& privateElementsOf(Object* O) {
+  if (!O->privateElements) O->privateElements = snowman::make<PrivateElementList>();
+  return static_cast<PrivateElementList*>(O->privateElements)->elements;
 }
 
 Value privateNameString(PrivateName* name) {
@@ -46,10 +40,8 @@ Value privateNameString(PrivateName* name) {
 
 // 7.3.26 PrivateElementFind
 PrivateElement* PrivateElementFind(Object* O, PrivateName* P) {
-  auto& table = privateTable().elements;
-  auto it = table.find(O);
-  if (it == table.end()) return nullptr;
-  for (auto& element : it->second) {
+  if (!O->privateElements) return nullptr;
+  for (auto& element : static_cast<PrivateElementList*>(O->privateElements)->elements) {
     if (element.key == P) return &element;
   }
   return nullptr;
@@ -58,7 +50,7 @@ PrivateElement* PrivateElementFind(Object* O, PrivateName* P) {
 // 7.3.27 PrivateFieldAdd
 Result<void> PrivateFieldAdd(Object* O, PrivateName* P, Value value) {
   if (PrivateElementFind(O, P)) return ThrowTypeError("Cannot initialize #" + P->description->toUtf8() + " twice on the same object");
-  privateTable().elements[O].push_back(PrivateElement{P, PrivateElement::Kind::Field, value, Value(), Value()});
+  privateElementsOf(O).push_back(PrivateElement{P, PrivateElement::Kind::Field, value, Value(), Value()});
   return {};
 }
 
@@ -67,7 +59,7 @@ Result<void> PrivateMethodOrAccessorAdd(Object* O, const PrivateElement& method)
   if (PrivateElementFind(O, method.key)) {
     return ThrowTypeError("Cannot initialize #" + method.key->description->toUtf8() + " twice on the same object");
   }
-  privateTable().elements[O].push_back(method);
+  privateElementsOf(O).push_back(method);
   return {};
 }
 
