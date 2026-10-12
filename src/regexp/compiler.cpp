@@ -78,9 +78,13 @@ class Compiler {
       p_.groupNames.push_back(name);
       if (!name.empty()) p_.hasGroupNames = true;
     }
-    p_.anchoredStart = startsAnchored(pattern_.root);
+    p_.anchoredStart = startsAnchored(pattern_.root, 0);
     compile(pattern_.root, false);
     emit({Op::Match});
+    markFollowers();
+    if (!p_.anchoredStart) {
+      if (auto first = firstChars()) p_.firstChars.emplace(std::move(*first));
+    }
   }
 
  private:
@@ -126,7 +130,7 @@ class Compiler {
     const auto& rs = accepted.ranges();
     if (rs.size() == 1 && rs[0].first == rs[0].last) return {Op::Char, dir(backward), rs[0].first};
     if (rs.size() == 1 && rs[0].first == 0 && rs[0].last >= maxChar()) return {Op::Any, dir(backward)};
-    p_.sets.push_back(accepted);
+    p_.sets.emplace_back(accepted);
     return {Op::Set, dir(backward), static_cast<uint32_t>(p_.sets.size() - 1)};
   }
   // CharacterSetMatcher(rer, A, invert).
@@ -309,7 +313,11 @@ class Compiler {
   // ---- terms ----
 
   // The one instruction a single-character atom compiles to, if it is one (for Star).
-  std::optional<Inst> singleCharacter(const Node* n, bool backward) {
+  // These helpers look a bounded depth into the tree (recursion stays shallow; deeper nests just compile as
+  // they are).
+  static constexpr int kLookDepth = 16;
+
+  std::optional<Inst> singleCharacter(const Node* n, bool backward, int depth) {
     while ((n->kind == Node::Kind::NonCapturing || n->kind == Node::Kind::Sequence) && n->children.size() == 1) {
       n = n->children[0];
     }
@@ -318,6 +326,8 @@ class Compiler {
         return charMatcher(rer(n), n->value, backward);
       case Node::Kind::Dot:
         return Inst{n->mods & kDotAll ? Op::Any : Op::Dot, dir(backward)};
+      case Node::Kind::Disjunction:
+        return singleCharacterAlternatives(n, backward, depth + 1);
       case Node::Kind::Class: {
         size_t before = p_.code.size();
         compileClass(n, backward);
@@ -334,7 +344,65 @@ class Compiler {
     }
   }
 
-  void compile(const Node* n, bool backward) {
+  // The characters a single-character matcher accepts.
+  CharSet accepted(const Inst& m) const {
+    switch (m.op) {
+      case Op::Char:
+        return CharSet::of(m.a);
+      case Op::Set:
+        return p_.sets[m.a].set;
+      case Op::Dot:
+        return CharSet::range(0, maxChar()).subtract(lineTerminators());
+      default:
+        return CharSet::range(0, maxChar());
+    }
+  }
+  static const CharSet& lineTerminators() {
+    static const CharSet s = [] {
+      CharSet c;
+      for (char32_t x : {0x0A, 0x0D, 0x2028, 0x2029}) c.add(x);
+      c.ranges();
+      return c;
+    }();
+    return s;
+  }
+  std::optional<Inst> singleCharacterAlternatives(const Node* n, bool backward, int depth) {
+    if (depth > kLookDepth) return std::nullopt;
+    CharSet all;
+    for (const Node* alt : n->children) {
+      auto m = singleCharacter(alt, backward, depth);
+      if (!m) return std::nullopt;
+      all.addAll(accepted(*m));
+    }
+    return setMatcher(all, backward);
+  }
+
+  // A node to compile, or the rest of one (phase > 0) once a child is done. compile() runs them from an explicit
+  // stack, so deep nesting doesn't grow the C stack.
+  struct Task {
+    Task(const Node* node, bool back, uint32_t ph = 0, uint32_t x = 0, uint32_t y = 0, std::vector<uint32_t> js = {})
+        : n(node), backward(back), phase(ph), a(x), b(y), jumps(std::move(js)) {}
+    const Node* n;
+    bool backward;
+    uint32_t phase;
+    uint32_t a;  // Group: its register; lookaround: the LookStart; loop: its register; Disjunction: the Split
+    uint32_t b;  // loop: the Loop
+    std::vector<uint32_t> jumps;  // Disjunction: the Jumps to its end
+  };
+
+  void compile(const Node* root, bool backward) {
+    std::vector<Task> work;
+    work.emplace_back(Task{root, backward});
+    while (!work.empty()) {
+      Task t = std::move(work.back());
+      work.pop_back();
+      step(t, work);
+    }
+  }
+
+  void step(Task& t, std::vector<Task>& work) {
+    const Node* n = t.n;
+    bool backward = t.backward;
     switch (n->kind) {
       case Node::Kind::Empty:
         break;
@@ -348,48 +416,63 @@ class Compiler {
         compileClass(n, backward);
         break;
       case Node::Kind::Sequence:
-        // MatchSequence: right to left inside a lookbehind.
+        // MatchSequence: right to left inside a lookbehind. Pushed so that the first to compile is on top.
         if (backward) {
-          for (auto it = n->children.rbegin(); it != n->children.rend(); ++it) compile(*it, true);
+          for (const Node* child : n->children) work.emplace_back(Task{child, true});
         } else {
-          for (const Node* child : n->children) compile(child, false);
+          for (auto it = n->children.rbegin(); it != n->children.rend(); ++it) work.emplace_back(Task{*it, false});
         }
         break;
       case Node::Kind::Disjunction: {
-        std::vector<uint32_t> jumps;
-        for (size_t i = 0; i < n->children.size(); i++) {
-          bool last = i + 1 == n->children.size();
-          uint32_t split = last ? 0 : emit({Op::Split});
-          compile(n->children[i], backward);
-          if (!last) {
-            jumps.push_back(emit({Op::Jump}));
-            p_.code[split].a = here();
+        size_t count = n->children.size();
+        if (t.phase == 0) {
+          // Alternatives that each match one character reach the same state whichever matches: one set.
+          if (auto merged = singleCharacterAlternatives(n, backward, 0)) {
+            emit(*merged);
+            break;
           }
+        } else if (t.phase < count) {
+          // Alternative phase - 1 is done and wasn't the last: jump over the rest, the Split resumes here.
+          t.jumps.push_back(emit({Op::Jump}));
+          p_.code[t.a].a = here();
         }
-        for (uint32_t j : jumps) p_.code[j].a = here();
+        if (t.phase == count) {
+          for (uint32_t j : t.jumps) p_.code[j].a = here();
+          break;
+        }
+        uint32_t i = t.phase;
+        uint32_t split = i + 1 < count ? emit({Op::Split}) : 0;
+        work.emplace_back(Task{n, backward, i + 1, split, 0, std::move(t.jumps)});
+        work.emplace_back(Task{n->children[i], backward});
         break;
       }
-      case Node::Kind::Group: {
-        uint32_t reg = registers(1);
-        emit({Op::GroupStart, 0, reg});
-        compile(n->children[0], backward);
-        emit({Op::GroupEnd, dir(backward), n->index, reg});
+      case Node::Kind::Group:
+        if (t.phase == 0) {
+          uint32_t reg = registers(1);
+          emit({Op::GroupStart, 0, reg});
+          work.emplace_back(Task{n, backward, 1, reg});
+          work.emplace_back(Task{n->children[0], backward});
+        } else {
+          emit({Op::GroupEnd, dir(backward), n->index, t.a});
+        }
         break;
-      }
       case Node::Kind::NonCapturing:
-        compile(n->children[0], backward);
+        work.emplace_back(Task{n->children[0], backward});
         break;
       case Node::Kind::Lookahead:
-      case Node::Kind::Lookbehind: {
-        uint32_t reg = registers(2);
-        uint32_t start = emit({Op::LookStart, flagIf(n->negate, kNegative), reg, 0, n->firstCapture, n->lastCapture});
-        compile(n->children[0], n->kind == Node::Kind::Lookbehind);
-        uint32_t end = emit({Op::LookEnd, 0, reg, start});
-        p_.code[start].b = end;
+      case Node::Kind::Lookbehind:
+        if (t.phase == 0) {
+          uint32_t reg = registers(2);
+          uint32_t start = emit({Op::LookStart, flagIf(n->negate, kNegative), reg, 0, n->firstCapture, n->lastCapture});
+          work.emplace_back(Task{n, backward, 1, start});
+          work.emplace_back(Task{n->children[0], n->kind == Node::Kind::Lookbehind});
+        } else {
+          uint32_t end = emit({Op::LookEnd, 0, p_.code[t.a].a, t.a});
+          p_.code[t.a].b = end;
+        }
         break;
-      }
       case Node::Kind::Quantifier:
-        compileQuantifier(n, backward);
+        compileQuantifier(t, work);
         break;
       case Node::Kind::Backreference:
       case Node::Kind::NamedBackreference: {
@@ -417,17 +500,24 @@ class Compiler {
     }
   }
 
-  void compileQuantifier(const Node* n, bool backward) {
+  void compileQuantifier(Task& t, std::vector<Task>& work) {
+    const Node* n = t.n;
+    bool backward = t.backward;
+    if (t.phase == 1) {
+      emit({Op::LoopNext, 0, t.a, n->min, t.b});
+      p_.code[t.b].d = here();
+      return;
+    }
     const Node* atom = n->children[0];
     if (n->max == 0) return;  // RepeatMatcher step 1: the continuation, nothing else
     if (n->min == 1 && n->max == 1) {
       // One mandatory iteration: no empty check, and the atom's captures are undefined on entry.
-      compile(atom, backward);
+      work.emplace_back(Task{atom, backward});
       return;
     }
     uint8_t greedy = flagIf(n->greedy, kGreedy);
     if (n->firstCapture == n->lastCapture) {
-      if (auto single = singleCharacter(atom, backward)) {
+      if (auto single = singleCharacter(atom, backward, 0)) {
         emit({Op::Star, greedy, 0, n->min, n->max});
         emit(*single);
         return;
@@ -438,23 +528,105 @@ class Compiler {
     uint32_t loop = emit({Op::Loop, greedy, reg, n->min, n->max});
     emit({Op::LoopIter, 0, reg});
     if (n->firstCapture < n->lastCapture) emit({Op::ClearCaptures, 0, n->firstCapture, n->lastCapture});
-    compile(atom, backward);
-    emit({Op::LoopNext, 0, reg, n->min, loop});
-    p_.code[loop].d = here();
+    work.emplace_back(Task{n, backward, 1, reg, loop});
+    work.emplace_back(Task{atom, backward});
+  }
+
+  // A forward Star whose continuation is a Char of a BMP non-surrogate: the VM only tries positions where the
+  // input has that character.
+  void markFollowers() {
+    for (size_t pc = 0; pc + 2 < p_.code.size(); pc++) {
+      Inst& star = p_.code[pc];
+      const Inst& next = p_.code[pc + 2];
+      if (star.op != Op::Star || (p_.code[pc + 1].flags & kBackward)) continue;
+      if (next.op == Op::Char && !(next.flags & kBackward) && next.a <= 0xFFFF && (next.a < 0xD800 || next.a > 0xDFFF)) {
+        star.flags |= kFollow;
+        star.d = next.a;
+      }
+    }
+  }
+
+  // The characters any match starts with, from the bytecode: every path from the start reaches a character
+  // matcher before Match (zero-width assertions and lookarounds are passed over). nullopt if some path reaches
+  // Match, a backreference or a Dot/Any first.
+  std::optional<CharSet> firstChars() const {
+    CharSet first;
+    std::vector<uint32_t> work{0};
+    std::vector<bool> seen(p_.code.size());
+    while (!work.empty()) {
+      uint32_t pc = work.back();
+      work.pop_back();
+      if (seen[pc]) continue;
+      seen[pc] = true;
+      const Inst& in = p_.code[pc];
+      switch (in.op) {
+        case Op::Char:
+          first.add(in.a);
+          break;
+        case Op::Set:
+          first.addAll(p_.sets[in.a].set);
+          break;
+        case Op::Star: {
+          const Inst& m = p_.code[pc + 1];
+          if (m.op == Op::Char) {
+            first.add(m.a);
+          } else if (m.op == Op::Set) {
+            first.addAll(p_.sets[m.a].set);
+          } else {
+            return std::nullopt;
+          }
+          if (in.b == 0) work.push_back(pc + 2);
+          break;
+        }
+        case Op::Split:
+          work.push_back(pc + 1);
+          work.push_back(in.a);
+          break;
+        case Op::Jump:
+          work.push_back(in.a);
+          break;
+        case Op::Loop:
+          work.push_back(pc + 1);
+          if (in.b == 0) work.push_back(in.d);
+          break;
+        case Op::LoopNext:  // only reached through an empty iteration: the exit may follow
+          work.push_back(p_.code[in.c].d);
+          break;
+        case Op::LookStart:
+          work.push_back(in.b + 1);
+          break;
+        case Op::GroupStart:
+        case Op::GroupEnd:
+        case Op::ClearCaptures:
+        case Op::LoopInit:
+        case Op::LoopIter:
+        case Op::LineStart:
+        case Op::LineEnd:
+        case Op::WordBoundary:
+        case Op::NotWordBoundary:
+          work.push_back(pc + 1);
+          break;
+        default:  // Dot, Any, Backref, LookEnd, Match
+          return std::nullopt;
+      }
+    }
+    first.ranges();
+    return first;
   }
 
   // Only index 0 can match: every alternative starts with ^ and m is off there.
-  static bool startsAnchored(const Node* n) {
+  static bool startsAnchored(const Node* n, int depth) {
+    if (depth > kLookDepth) return false;
     switch (n->kind) {
       case Node::Kind::LineStart:
         return !(n->mods & kMultiline);
       case Node::Kind::Sequence:
-        return !n->children.empty() && startsAnchored(n->children[0]);
+        return !n->children.empty() && startsAnchored(n->children[0], depth + 1);
       case Node::Kind::Disjunction:
-        return std::all_of(n->children.begin(), n->children.end(), [](const Node* c) { return startsAnchored(c); });
+        return std::all_of(n->children.begin(), n->children.end(), [&](const Node* c) { return startsAnchored(c, depth + 1); });
       case Node::Kind::Group:
       case Node::Kind::NonCapturing:
-        return startsAnchored(n->children[0]);
+        return startsAnchored(n->children[0], depth + 1);
       default:
         return false;
     }
