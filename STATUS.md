@@ -2,10 +2,10 @@
 
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
-| parser | parser | `ws/parser` | `src/parser/`, `tools/parser/` | M1a, then M1b |
-| regexp | regexp | `ws/regexp` | `src/regexp/`, `src/unicode/`, `tools/unicode/` | validator (M1b negatives), then matcher |
-| runtime | runtime | `ws/runtime` | `src/runtime/` (implements the lead's headers), `src/builtins/` except interp's files | core, then M2 built-ins |
-| interp | interp | `ws/interp` | `src/interp/`; `src/builtins/` function_constructor, eval, generator, async_function, async_generator, async_from_sync_iterator, promise | coroutines/environments, then the evaluator; M2 |
+| parser | parser | `ws/parser` | `src/parser/`, `tools/parser/` | headers merged (7a2d507); parser in progress → M1a, M1b |
+| regexp | regexp | `ws/regexp` | `src/regexp/`, `src/unicode/`, `tools/unicode/` | validator merged (7a2d507); matcher (Phase B) |
+| runtime | runtime | `ws/runtime` | `src/runtime/` (implements the lead's headers), `src/builtins/` except interp's files | core merged (7a2d507); M2 built-ins |
+| interp | interp | `ws/interp` | `src/interp/`; `src/builtins/` function_constructor, eval, generator, async_function, async_generator, async_from_sync_iterator, promise | coroutines/environments (not pushed yet); evaluator; M2 |
 
 Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interfaces), `INTERFACES.md`, `PLAN.md`,
 `t262/`, `results/`, `STATUS.md`, `Makefile`.
