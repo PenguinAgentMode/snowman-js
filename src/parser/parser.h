@@ -50,8 +50,8 @@ enum class DynamicFunctionKind : uint8_t { Normal, Generator, Async, AsyncGenera
 // the parameter strings already joined with ",", `body` the body string. Parses them separately (each must
 // be a FormalParameters / FunctionBody on its own), then the synthesized source text
 //   <prefix> anonymous(<params>\n) {\n<body>\n}
-// which becomes Program::source and the function's sourceText. The Program's body holds a single
-// ExpressionStatement with the FunctionExpression.
+// The function's sourceText is exactly that text; Program::source is the text wrapped in parentheses and
+// the Program's body holds a single ExpressionStatement with the (parenthesized) FunctionExpression.
 ParseResult parseDynamicFunction(DynamicFunctionKind kind, std::u16string params, std::u16string body);
 
 // UTF-8 -> UTF-16 (ill-formed sequences become U+FFFD), and back (lone surrogates become U+FFFD).

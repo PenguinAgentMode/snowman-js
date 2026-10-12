@@ -709,7 +709,10 @@ struct AssignmentExpression : Node {
   using Base = Node;
   SNOWMAN_AST_NODE(AssignmentExpression)
   AssignmentOperator op = AssignmentOperator::Assign;  // ESTree `operator`
-  Pattern* left = nullptr;  // for `=`: any Pattern; otherwise Identifier or MemberExpression
+  // For `=`: any Pattern; otherwise Identifier or MemberExpression. Annex B web-compat: in sloppy code also a
+  // CallExpression (`f() = 1`, `f() += 1`): evaluate the call, then throw a ReferenceError. The same holds
+  // for UpdateExpression::argument and the left side of for-in / for-of.
+  Pattern* left = nullptr;
   Expression* right = nullptr;
 };
 

@@ -609,8 +609,10 @@ Node* Parser::parseFor(Pos start) {
             init->is<Identifier>() && !init->parenthesized && init->start == first.start)
           raise(init->start, "The left-hand side of a for-of loop may not be 'async'");
         if (startsWithLet && forOf) raise(init->start, "The left-hand side of a for-of loop may not start with let");
-        init = toAssignable(init, false, &errors);
-        checkLValPattern(init, Bind::None);
+        if (ctx_->strict || !init->is<CallExpression>()) {
+          init = toAssignable(init, false, &errors);
+          checkLValPattern(init, Bind::None);
+        }
       } else {
         checkExpressionErrors(&errors, true);
       }

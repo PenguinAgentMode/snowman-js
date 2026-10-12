@@ -143,11 +143,19 @@ Node* Parser::parseMaybeAssign(bool noIn, DestructuringErrors* refErrors) {
     T opTok = tok_.type;
     auto* node = startNode<AssignmentExpression>(start);
     node->op = assignOp(opTok);
-    if (opTok == T::Assign) left = toAssignable(left, false, refErrors);
+    // Annex B (web-compat): `f() = 1`, `f() += 1` in sloppy code throw at run time; never for `&&=` etc.
+    bool logical = opTok == T::AndEq || opTok == T::OrEq || opTok == T::NullishEq;
+    bool callTarget = !ctx_->strict && !logical && left->is<CallExpression>();
+    if (opTok == T::Assign && !callTarget) left = toAssignable(left, false, refErrors);
     if (!ownErrors) refErrors->parenthesizedAssign = refErrors->trailingComma = refErrors->doubleProto = -1;
     if (refErrors->shorthandAssign >= static_cast<int64_t>(left->start)) refErrors->shorthandAssign = -1;
-    if (opTok == T::Assign) checkLValPattern(left, Bind::None);
-    else checkLValSimple(left, Bind::None);
+    if (callTarget) {
+      // a run-time ReferenceError
+    } else if (opTok == T::Assign) {
+      checkLValPattern(left, Bind::None);
+    } else {
+      checkLValSimple(left, Bind::None);
+    }
     node->left = left;
     next();
     node->right = parseMaybeAssign(noIn);
@@ -263,7 +271,7 @@ Node* Parser::parseMaybeUnary(DestructuringErrors* refErrors, bool sawUnary, boo
     Node* argument = parseMaybeUnary(nullptr, true, update, noIn);
     checkExpressionErrors(refErrors, true);
     if (update) {
-      checkLValSimple(argument, Bind::None);
+      if (ctx_->strict || !argument->is<CallExpression>()) checkLValSimple(argument, Bind::None);
       auto* node = startNode<UpdateExpression>(start);
       node->op = op == T::Inc ? UpdateOperator::Increment : UpdateOperator::Decrement;
       node->prefix = true;
@@ -302,7 +310,7 @@ Node* Parser::parseMaybeUnary(DestructuringErrors* refErrors, bool sawUnary, boo
       node->op = is(T::Inc) ? UpdateOperator::Increment : UpdateOperator::Decrement;
       node->prefix = false;
       node->argument = expr;
-      checkLValSimple(expr, Bind::None);
+      if (ctx_->strict || !expr->is<CallExpression>()) checkLValSimple(expr, Bind::None);
       next();
       expr = finish(node);
     }
