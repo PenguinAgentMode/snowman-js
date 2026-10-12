@@ -446,10 +446,12 @@ class Parser {
       n->index = ++captureCount_;
       p_.groupNames.emplace_back();
     }
+    n->firstCapture = captureCount_ + 1;
     Node* body = parseDisjunction();
     if (!body) return nullptr;
     if (peek() != ')') return failNode("Unterminated group");
     pos_++;
+    n->lastCapture = captureCount_ + 1;
     n->children.push_back(body);
     return n;
   }
@@ -735,6 +737,7 @@ class Parser {
     item->kind = ClassItem::Kind::Property;
     item->property = *property;
     item->negated = negated;
+    item->loneGeneralCategory = !hasValue && property->kind == unicode::Property::Kind::GeneralCategory;
     return true;
   }
 
