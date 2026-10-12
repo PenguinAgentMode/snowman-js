@@ -71,13 +71,13 @@ bool Parser::isUsing(bool forHead) {
   if (nt.type != T::Name || nt.nlBefore) return false;
   if (!nt.escaped && (nt.kw == K::In || nt.kw == K::Instanceof)) return false;
   if (forHead && !nt.escaped && nt.kw == K::Of) {
-    // `for (using of ...)`: a for-of over the identifier `using`, unless `for (using of of ...)`.
+    // `for (using of ...)` is a for-of over the identifier `using`; `for (using of = x;;)` declares `of`.
     Lexer::State state = lexer_.save();
     Token t1, t2;
     lexer_.next(t1);
     lexer_.next(t2);
     lexer_.restore(state);
-    return t2.type == T::Name && !t2.escaped && t2.kw == K::Of && false;
+    return t2.type == T::Assign;
   }
   return true;
 }
@@ -409,6 +409,9 @@ Function* Parser::parseFunction(Function* node, bool statement, bool nullableId,
     auto* decl = static_cast<FunctionDeclaration*>(node);
     if (node->id) {
       declareFunction(decl, node->id->start);
+      // Annex B.3.2: a sloppy plain function declaration directly in a block is a var-hoisting candidate.
+      if (!hanging && !ctx_->strict && !node->async && !node->generator && scope_->kind != Scope::Kind::Root)
+        scope_->annexB.push_back(decl);
     } else {
       // export default function () {}
       declareLexicalName(u"*default*", Lex::OtherFunction, node, node->start);
