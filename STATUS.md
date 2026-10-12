@@ -12,10 +12,15 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-- Engine commit: 2551c6978 (main)
-- Parse-only (`results/2551c6978-parse.json`): 43,305 / 43,305 files; positives 38,860 / 38,860, negative-parse 4,445 / 4,445
-- Milestone: **M1b** (M1a 100.0% / 100.0%, M1b 100.0% / 100.0%); full run not yet measured
-- Command: `node t262/runner/milestones.mjs --parse-only results/2551c6978-parse.json`
+- Engine commit: eff4d1fa9 (main)
+- ES-core (`results/eff4d1fa9.json`): **38,993 / 43,305 files (90.04%)**; scenarios 74,645 / 82,724; test/harness
+  110 / 116; es5_language 4,353 / 4,538 (95.9%)
+- Parse-only (`results/2551c6978-parse.json`): 43,305 / 43,305
+- Milestone: **M7** (M1a, M1b, M2, M3, M4, M5, M6, M7 reached; M8 ≥ 95% not yet)
+- Command: `node t262/runner/milestones.mjs results/eff4d1fa9.json --parse-only results/2551c6978-parse.json`
+- Biggest gaps: RegExp built-in not merged (1,687 files), modules (397 + import 10; interp's module commits
+  unpushed), $262.detachArrayBuffer (~250 TypedArray/DataView/Atomics files), Iterator 230, String 188,
+  Atomics 177 (incl. $262.agent), DisposableStack/AsyncDisposableStack/SuppressedError 219, Uint8Array base64 62.
 
 ## Waivers
 
