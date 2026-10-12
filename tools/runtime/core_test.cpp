@@ -1,5 +1,5 @@
 // A small driver for the runtime core, built outside ./engine:
-//   g++ -std=c++20 -O1 -g -Isrc tools/runtime/core_test.cpp $(ls src/runtime/*.cpp src/builtins/*.cpp src/unicode/*.cpp) -o /tmp/core_test
+//   tools/runtime/build.sh (builds it with the runtime and the runtime-owned built-ins, then runs it)
 #include <cmath>
 #include <cstdio>
 #include <string>
