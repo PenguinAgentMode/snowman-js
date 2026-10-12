@@ -26,7 +26,7 @@ for (let i = 0; i < args.length; i++) {
 
 function walk(p, out) {
   if (fs.statSync(p).isDirectory()) {
-    for (const entry of fs.readdirSync(p).sort()) walk(path.join(p, entry), out);
+    for (const entry of fs.readdirSync(p).sort()) if (!entry.startsWith('.')) walk(path.join(p, entry), out);
   } else if (p.endsWith('.js') || p.endsWith('.mjs')) {
     out.push(p);
   }
