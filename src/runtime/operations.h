@@ -46,6 +46,8 @@ Result<double> ToIndex(Value value);
 std::optional<double> CanonicalNumericIndexString(String* argument);
 // Number::toString(x, radix) (shortest round-trip for radix 10).
 String* NumberToString(double x, int radix = 10);
+// 6.1.6.1.3 Number::exponentiate (the ** operator and Math.pow).
+double NumberExponentiate(double base, double exponent);
 // The pure numeric conversions, for callers that already have a double.
 int32_t DoubleToInt32(double d);
 uint32_t DoubleToUint32(double d);

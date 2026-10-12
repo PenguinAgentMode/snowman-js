@@ -52,6 +52,9 @@ class PropertyMap {
 
   // The integer-index keys, ascending.
   std::vector<uint32_t> indexKeys() const;
+  // The smallest index key ≥ from / the largest index key ≤ from, if any.
+  std::optional<uint32_t> nextIndex(uint32_t from) const;
+  std::optional<uint32_t> prevIndex(uint32_t from) const;
   // The largest index key + 1 (0 when there is none).
   uint64_t indexEnd() const;
   // Deletes the index properties ≥ from, highest first, stopping at a non-configurable one. Returns the

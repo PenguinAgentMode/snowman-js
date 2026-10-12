@@ -169,6 +169,37 @@ std::vector<uint32_t> PropertyMap::indexKeys() const {
   return out;
 }
 
+std::optional<uint32_t> PropertyMap::nextIndex(uint32_t from) const {
+  std::optional<uint32_t> best;
+  for (size_t i = from; i < dense_.size(); i++) {
+    if (!dense_[i].isEmpty()) {
+      best = uint32_t(i);
+      break;
+    }
+  }
+  auto it = sparse_.lower_bound(from);
+  if (it != sparse_.end() && (!best || it->first < *best)) best = it->first;
+  return best;
+}
+
+std::optional<uint32_t> PropertyMap::prevIndex(uint32_t from) const {
+  std::optional<uint32_t> best;
+  if (!dense_.empty()) {
+    for (size_t i = std::min<size_t>(from, dense_.size() - 1) + 1; i-- > 0;) {
+      if (!dense_[i].isEmpty()) {
+        best = uint32_t(i);
+        break;
+      }
+    }
+  }
+  auto it = sparse_.upper_bound(from);
+  if (it != sparse_.begin()) {
+    --it;
+    if (!best || it->first > *best) best = it->first;
+  }
+  return best;
+}
+
 uint64_t PropertyMap::indexEnd() const {
   uint64_t end = dense_.size();
   if (!sparse_.empty()) end = std::max<uint64_t>(end, uint64_t(sparse_.rbegin()->first) + 1);
