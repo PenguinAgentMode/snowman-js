@@ -3,7 +3,6 @@
 
 #include <pthread.h>
 
-#include <algorithm>
 
 #include "runtime/errors.h"
 #include "runtime/string.h"
@@ -20,7 +19,11 @@ VM* createVM() {
   return v;
 }
 
-// The main thread's stack bounds, for when no one has set vm().stackLimit.
+// CheckStack throws this close to vm().stackLimit.
+constexpr size_t kStackMargin = 64 * 1024;
+
+// The lowest usable address of the main thread's stack, for when no one has set vm().stackLimit (tools,
+// tests). One guard-sized block above the rlimit bound stays unused.
 const char* defaultStackLimit() {
   pthread_attr_t attr;
   void* low = nullptr;
@@ -29,10 +32,8 @@ const char* defaultStackLimit() {
     pthread_attr_getstack(&attr, &low, &size);
     pthread_attr_destroy(&attr);
   }
-  if (!low || size == 0) return nullptr;
-  size_t margin = std::max<size_t>(256 * 1024, size / 8);
-  if (margin >= size) margin = size / 2;
-  return static_cast<const char*>(low) + margin;
+  if (!low || size <= 2 * kStackMargin) return nullptr;
+  return static_cast<const char*>(low) + kStackMargin;
 }
 
 }  // namespace
@@ -76,7 +77,7 @@ Result<void> CheckStack() {
     v.stackLimit = defaultStackLimit();
     if (!v.stackLimit) return {};
   }
-  if (&here < v.stackLimit) return ThrowRangeError("Maximum call stack size exceeded");
+  if (&here < v.stackLimit + kStackMargin) return ThrowRangeError("Maximum call stack size exceeded");
   return {};
 }
 
