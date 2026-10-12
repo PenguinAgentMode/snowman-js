@@ -17,7 +17,9 @@ class Symbol final : public Cell {
 };
 
 #define SNOWMAN_WELL_KNOWN_SYMBOLS(X) \
+  X(asyncDispose)                     \
   X(asyncIterator)                    \
+  X(dispose)                          \
   X(hasInstance)                      \
   X(isConcatSpreadable)               \
   X(iterator)                         \
