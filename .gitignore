@@ -2,3 +2,5 @@
 /build/
 /t262/test262/
 /results/*.jsonl
+/tools/node_modules/
+/tools/package-lock.json

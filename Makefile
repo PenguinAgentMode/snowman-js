@@ -5,6 +5,7 @@
 # make sample           a deterministic ~1% of ES-core (shard 0/100): the pre-merge regression check
 # make shard SHARD=k/N  one shard of the full run, to results/shard-k.jsonl; aggregate per t262/README.md
 CXXFLAGS ?= -std=c++20 -O2 -g -Wall -Wextra
+CPPFLAGS += -Isrc
 JOBS ?= $(shell nproc)
 SOURCES := $(shell find src -name '*.cpp')
 OBJECTS := $(SOURCES:src/%.cpp=build/%.o)
@@ -15,7 +16,7 @@ engine: $(OBJECTS)
 
 build/%.o: src/%.cpp
 	@mkdir -p $(dir $@)
-	$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
+	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -MMD -MP -c -o $@ $<
 
 -include $(OBJECTS:.o=.d)
 

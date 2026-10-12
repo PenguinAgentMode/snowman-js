@@ -1,20 +1,16 @@
-// snowman-js entry point. The CLI contract is in t262/README.md.
+// snowman-js entry point. The CLI contract is in t262/README.md; each mode is implemented behind src/engine.h.
 #include <fstream>
 #include <iostream>
 #include <optional>
 #include <sstream>
 #include <string>
 
+#include "engine.h"
+
 namespace {
 
-struct Options {
-  bool module = false;
-  bool parseOnly = false;
-  std::string file;
-};
-
-std::optional<Options> parseOptions(int argc, char** argv) {
-  Options options;
+std::optional<snowman::CliOptions> parseOptions(int argc, char** argv) {
+  snowman::CliOptions options;
   for (int i = 1; i < argc; i++) {
     std::string arg = argv[i];
     if (arg == "--module") {
@@ -23,6 +19,10 @@ std::optional<Options> parseOptions(int argc, char** argv) {
     }
     if (arg == "--parse-only") {
       options.parseOnly = true;
+      continue;
+    }
+    if (arg == "--dump-ast") {
+      options.dumpAst = true;
       continue;
     }
     if (arg.starts_with("--")) return std::nullopt;
@@ -47,7 +47,7 @@ std::optional<std::string> readFile(const std::string& path) {
 int main(int argc, char** argv) {
   auto options = parseOptions(argc, argv);
   if (!options) {
-    std::cerr << "usage: engine [--module] [--parse-only] file.js\n";
+    std::cerr << "usage: engine [--module] [--parse-only] [--dump-ast] file.js\n";
     return 64;
   }
 
@@ -57,7 +57,7 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  // Nothing runs yet: fail every test honestly rather than pass one by accident.
-  std::cout << "Error: not implemented\n";
-  return 1;
+  if (options->dumpAst) return snowman::dumpAstMain(*options, *source);
+  if (options->parseOnly) return snowman::parseOnlyMain(*options, *source);
+  return snowman::runMain(*options, *source);
 }
