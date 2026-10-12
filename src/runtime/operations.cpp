@@ -305,6 +305,7 @@ Result<bool> SetIntegrityLevel(Object* object, IntegrityLevel level) {
   bool status = TRY(object->PreventExtensions());
   if (!status) return false;
   std::vector<PropertyKey> keys = TRY(object->OwnPropertyKeys());
+  RootedKeys rootedKeys(keys);
   if (level == IntegrityLevel::Sealed) {
     for (const PropertyKey& k : keys) {
       PropertyDescriptor desc;
@@ -330,6 +331,7 @@ Result<bool> TestIntegrityLevel(Object* object, IntegrityLevel level) {
   bool extensible = TRY(IsExtensible(object));
   if (extensible) return false;
   std::vector<PropertyKey> keys = TRY(object->OwnPropertyKeys());
+  RootedKeys rootedKeys(keys);
   for (const PropertyKey& k : keys) {
     auto currentDesc = TRY(object->GetOwnProperty(k));
     if (currentDesc) {
@@ -457,6 +459,7 @@ Result<void> CopyDataProperties(Object* target, Value source, const std::vector<
   if (source.isNullish()) return {};
   Object* from = TRY(ToObject(source));
   std::vector<PropertyKey> keys = TRY(from->OwnPropertyKeys());
+  RootedKeys rootedKeys(keys);
   for (const PropertyKey& nextKey : keys) {
     bool excluded = false;
     for (const PropertyKey& e : excludedKeys) {

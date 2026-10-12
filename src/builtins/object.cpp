@@ -27,6 +27,7 @@ Result<Value> Object_assign(NativeCall& call) {
     if (nextSource.isNullish()) continue;
     Object* from = TRY(ToObject(nextSource));
     std::vector<PropertyKey> keys = TRY(from->OwnPropertyKeys());
+    RootedKeys rootedKeys(keys);
     for (const PropertyKey& key : keys) {
       auto desc = TRY(from->GetOwnProperty(key));
       if (desc && *desc->enumerable) {
@@ -42,12 +43,17 @@ Result<Value> Object_assign(NativeCall& call) {
 Result<Object*> ObjectDefineProperties(Object* object, Value properties) {
   Object* props = TRY(ToObject(properties));
   std::vector<PropertyKey> keys = TRY(props->OwnPropertyKeys());
+  RootedKeys rootedKeys(keys);
   std::vector<std::pair<PropertyKey, PropertyDescriptor>> descriptors;
+  ValueVector descriptorValues;  // keeps the descriptors' values and accessors alive
   for (const PropertyKey& nextKey : keys) {
     auto propDesc = TRY(props->GetOwnProperty(nextKey));
     if (propDesc && *propDesc->enumerable) {
       Value descObj = TRY(Get(props, nextKey));
       PropertyDescriptor desc = TRY(ToPropertyDescriptor(descObj));
+      descriptorValues.push_back(desc.value.value_or(Value()));
+      descriptorValues.push_back(desc.get.value_or(Value()));
+      descriptorValues.push_back(desc.set.value_or(Value()));
       descriptors.emplace_back(nextKey, desc);
     }
   }
@@ -134,6 +140,7 @@ Result<Value> Object_getOwnPropertyDescriptor(NativeCall& call) {
 Result<Value> Object_getOwnPropertyDescriptors(NativeCall& call) {
   Object* obj = TRY(ToObject(call.args[0]));
   std::vector<PropertyKey> ownKeys = TRY(obj->OwnPropertyKeys());
+  RootedKeys rootedKeys(ownKeys);
   Object* descriptors = newPlainObject();
   for (const PropertyKey& key : ownKeys) {
     auto desc = TRY(obj->GetOwnProperty(key));
@@ -170,6 +177,7 @@ Result<Value> Object_groupBy(NativeCall& call) {
   TRY(RequireObjectCoercible(items));
   if (!IsCallable(callback)) return ThrowTypeError("Object.groupBy: callback is not a function");
   std::vector<std::pair<PropertyKey, ValueVector>> groups;
+  ValueVector groupKeys;  // keeps Symbol keys alive
   IteratorRecord record = TRY(GetIterator(items, IteratorKind::Sync));
   double k = 0;
   while (true) {
@@ -186,6 +194,7 @@ Result<Value> Object_groupBy(NativeCall& call) {
       }
     }
     if (!found) {
+      groupKeys.push_back(key.toValue());
       groups.emplace_back(key, ValueVector{});
       groups.back().second.push_back(*next);
     }

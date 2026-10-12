@@ -40,6 +40,7 @@ Result<Value> Map_groupBy(NativeCall& call) {
   IteratorRecord record = TRY(GetIterator(items, IteratorKind::Sync));
   std::vector<ValueVector> groups;
   OrderedTable groupIndex;
+  ValueVector groupKeys;  // groupIndex is not traced
   double k = 0;
   while (true) {
     std::optional<Value> next = TRY(IteratorStepValue(record));
@@ -49,6 +50,7 @@ Result<Value> Map_groupBy(NativeCall& call) {
     long existing = groupIndex.find(key);
     if (existing < 0) {
       groupIndex.set(key, num(double(groups.size())));
+      groupKeys.push_back(key);
       groups.emplace_back();
       groups.back().push_back(*next);
     } else {
