@@ -2,6 +2,7 @@
 // objects derive from FunctionObject in src/interp/. INTERFACES.md sections 5 and 9.
 #pragma once
 
+#include <string_view>
 #include <vector>
 
 #include "runtime/object.h"
@@ -26,6 +27,10 @@ class FunctionObject : public Object {
   Realm* realm() const { return realm_; }
   bool isCallable() const override { return true; }
   void trace(Tracer& tracer) override;
+
+  // The source text Function.prototype.toString returns for an ECMAScript function object (its
+  // [[SourceText]]); nullptr for built-in functions, which print as NativeFunction syntax.
+  virtual String* sourceText() const { return nullptr; }
 
  protected:
   Realm* realm_;
@@ -53,5 +58,12 @@ class BuiltinFunction : public FunctionObject {
   NativeFn fn_;
   bool constructor_;
 };
+
+// 10.2.9 SetFunctionName (prefix e.g. u"get"; Symbol names become "[description]") and 10.2.10
+// SetFunctionLength. Both define the property with DefinePropertyOrThrow semantics on a fresh function.
+void SetFunctionName(Object* function, const PropertyKey& name, std::u16string_view prefix = {});
+void SetFunctionLength(Object* function, double length);
+// The String SetFunctionName would use for `name` (with prefix), for [[InitialName]].
+String* FunctionNameFromKey(const PropertyKey& name, std::u16string_view prefix = {});
 
 }  // namespace snowman
