@@ -221,9 +221,9 @@ void ObjectEnvironment::trace(Tracer& tracer) {
 
 GlobalEnvironment::GlobalEnvironment(Object* globalObject, Object* thisValue)
     : Environment(Kind::Global, nullptr),
-      objectRecord(make<ObjectEnvironment>(globalObject, false, nullptr)),
+      objectRecord(snowman::make<ObjectEnvironment>(globalObject, false, nullptr)),
       globalThisValue(thisValue),
-      declarativeRecord(make<DeclarativeEnvironment>(nullptr)) {}
+      declarativeRecord(snowman::make<DeclarativeEnvironment>(nullptr)) {}
 
 Result<bool> GlobalEnvironment::HasBinding(String* name) {
   if (declarativeRecord->hasBindingDirect(name)) return true;

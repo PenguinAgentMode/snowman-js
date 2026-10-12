@@ -201,6 +201,7 @@ Result<Completion> CatchClauseEvaluation(const CatchClause* handler, Value throw
   if (!handler->param) return evaluateStatement(handler->body);
   LexicalEnvironmentScope scope;
   auto* catchEnv = snowman::make<DeclarativeEnvironment>(scope.saved());
+  catchEnv->isCatchEnvironment = true;
   for (const auto& argName : handler->paramNames) TRY(catchEnv->CreateMutableBinding(atomFor(argName), false));
   setLexicalEnvironment(catchEnv);
   TRY(BindingInitialization(handler->param, thrownValue, catchEnv));

@@ -74,6 +74,9 @@ class DeclarativeEnvironment : public Environment {
   void createInitializedBinding(String* name, Value value, bool mutable_ = true);
   const std::vector<Binding>& bindings() const { return bindings_; }
 
+  // The environment of a catch clause (B.3.4: eval code may redeclare its parameter with var).
+  bool isCatchEnvironment = false;
+
   void trace(Tracer& tracer) override;
 
  protected:

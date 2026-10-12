@@ -29,7 +29,7 @@ void PrepareForOrdinaryCall(ECMAScriptFunction* F, Value newTarget, InterpContex
   calleeContext.realm = F->realm();
   calleeContext.scriptOrModule = F->scriptOrModule;
   calleeContext.strict = F->strict;
-  auto* localEnv = make<FunctionEnvironment>(F, newTarget, F->environment, F->thisMode == ThisMode::Lexical);
+  auto* localEnv = snowman::make<FunctionEnvironment>(F, newTarget, F->environment, F->thisMode == ThisMode::Lexical);
   calleeContext.lexicalEnvironment = localEnv;
   calleeContext.variableEnvironment = localEnv;
   calleeContext.privateEnvironment = F->privateEnvironment;
@@ -177,7 +177,7 @@ Result<Value> OrdinaryCallEvaluateBody(ECMAScriptFunction* F, Args args) {
     TRY(FunctionDeclarationInstantiation(F, args));
     return startGeneratorBody(F, context);
   }
-  if (function->async) return startAsyncFunctionBody(F, context);  // runs FunctionDeclarationInstantiation
+  if (function->async) return startAsyncFunctionBody(F, context, args);  // runs FunctionDeclarationInstantiation
   TRY(FunctionDeclarationInstantiation(F, args));
   return runFunctionBody(F, args);
 }
@@ -198,7 +198,7 @@ Result<Object*> OrdinaryCreateFromConstructorForFunction(Object* constructor, In
 // 10.2.3 OrdinaryFunctionCreate
 ECMAScriptFunction* OrdinaryFunctionCreate(Object* prototype, const ast::Function* function, bool lexicalThis,
                                            Environment* env, PrivateEnvironment* privateEnv) {
-  auto* F = make<ECMAScriptFunction>(prototype, vm().currentRealm());
+  auto* F = snowman::make<ECMAScriptFunction>(prototype, vm().currentRealm());
   F->codeKind = CodeKind::Function;
   F->function = function;
   F->code = function;
@@ -312,7 +312,7 @@ Result<Value> InstantiateFunctionExpression(const ast::Function* function, Value
   String* ownName = nullptr;
   if (!arrow && function->id) {
     ownName = identifierName(function->id);
-    funcEnv = make<DeclarativeEnvironment>(env);
+    funcEnv = snowman::make<DeclarativeEnvironment>(env);
     TRY(funcEnv->CreateImmutableBinding(ownName, false));
     env = funcEnv;
     name = Value(ownName);
@@ -413,7 +413,7 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
   if (strict || !hasParameterExpressions) {
     env = calleeContext->lexicalEnvironment;
   } else {
-    env = make<DeclarativeEnvironment>(calleeContext->lexicalEnvironment);
+    env = snowman::make<DeclarativeEnvironment>(calleeContext->lexicalEnvironment);
     calleeContext->lexicalEnvironment = env;
   }
   auto* declEnv = static_cast<DeclarativeEnvironment*>(env);
@@ -459,7 +459,7 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
     }
     varEnv = env;
   } else {
-    auto* newVarEnv = make<DeclarativeEnvironment>(env);
+    auto* newVarEnv = snowman::make<DeclarativeEnvironment>(env);
     varEnv = newVarEnv;
     calleeContext->variableEnvironment = varEnv;
     for (const auto& varName : code->varNames) {
@@ -489,7 +489,7 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
 
   Environment* lexEnv;
   if (!strict) {
-    lexEnv = make<DeclarativeEnvironment>(varEnv);
+    lexEnv = snowman::make<DeclarativeEnvironment>(varEnv);
   } else {
     lexEnv = varEnv;
   }

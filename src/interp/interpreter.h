@@ -241,8 +241,6 @@ Result<void> PrivateFieldAdd(Object* O, PrivateName* P, Value value);
 Result<void> PrivateMethodOrAccessorAdd(Object* O, const PrivateElement& method);
 Result<Value> PrivateGet(Object* O, PrivateName* P);
 Result<void> PrivateSet(Object* O, PrivateName* P, Value value);
-// The default derived constructor's behaviour and super(...) calls.
-Result<Value> superCall(Args args);
 
 // ---- Declaration instantiation (declarations.cpp) ----
 
@@ -273,7 +271,7 @@ Result<Value> evaluateYieldStar(const ast::YieldExpression* node);
 bool inAsyncGenerator();
 // Starts a generator / async body for F after FunctionDeclarationInstantiation.
 Result<Value> startGeneratorBody(ECMAScriptFunction* F, InterpContext* context);
-Result<Value> startAsyncFunctionBody(ECMAScriptFunction* F, InterpContext* context);
+Result<Value> startAsyncFunctionBody(ECMAScriptFunction* F, InterpContext* context, Args args);
 Result<Value> startAsyncGeneratorBody(ECMAScriptFunction* F, InterpContext* context);
 // The body of a generator-like function, as the completion its coroutine finishes with.
 Result<Value> evaluateGeneratorLikeBody(ECMAScriptFunction* F);
@@ -281,7 +279,6 @@ Result<Value> evaluateGeneratorLikeBody(ECMAScriptFunction* F);
 // AsyncIteratorClose / the async iterators used by for-await and yield* in async generators.
 Result<void> AsyncIteratorClose(const IteratorRecord& record, Result<void> completion);
 Result<IteratorRecord> GetAsyncIterator(Value object);
-Result<Object*> CreateAsyncFromSyncIterator(const IteratorRecord& syncIteratorRecord, IteratorRecord& out);
 
 // ---- Modules (module.cpp) ----
 
