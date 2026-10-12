@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "builtins/normalize.h"
 #include "builtins/string_util.h"
 #include "builtins/util.h"
 #include "runtime/function.h"
@@ -319,11 +320,13 @@ Result<Value> StringPrototype_lastIndexOf(NativeCall& call) {
   return num(-1);
 }
 
-// 22.1.3.12 String.prototype.localeCompare ( that ): code point order.
+// 22.1.3.12 String.prototype.localeCompare ( that ): code point order of the NFD forms, so canonically
+// equivalent strings compare equal.
 Result<Value> StringPrototype_localeCompare(NativeCall& call) {
   String* s = TRY(thisString(call.thisValue));
   String* that = TRY(ToString(call.args[0]));
-  std::u16string_view a = s->view(), b = that->view();
+  std::u16string da = Normalize(s->view(), NormalizationForm::NFD), db = Normalize(that->view(), NormalizationForm::NFD);
+  std::u16string_view a = da, b = db;
   size_t i = 0, j = 0;
   while (i < a.size() && j < b.size()) {
     CodePointRecord x = CodePointAt(a, i), y = CodePointAt(b, j);
@@ -393,8 +396,9 @@ Result<Value> StringPrototype_normalize(NativeCall& call) {
   std::u16string_view fv = f->view();
   if (fv != u"NFC" && fv != u"NFD" && fv != u"NFKC" && fv != u"NFKD")
     return ThrowRangeError("The normalization form should be one of NFC, NFD, NFKC, NFKD.");
-  // Without normalization tables only ASCII-only strings are handled exactly (they are their own forms).
-  return Value(s);
+  NormalizationForm form = fv == u"NFC" ? NormalizationForm::NFC : fv == u"NFD" ? NormalizationForm::NFD
+                           : fv == u"NFKC" ? NormalizationForm::NFKC : NormalizationForm::NFKD;
+  return Value(newString(Normalize(s->view(), form)));
 }
 
 // 22.1.3.17.1 StringPaddingBuiltinsImpl / StringPad
