@@ -144,6 +144,41 @@ int main() {
 
   CHECK(heap().cellCount() > 0);
 
+  // Built-ins, called the way JS would call them.
+  Object* global = realm->globalObject();
+  auto method = [&](const char16_t* object, const char16_t* name) {
+    Object* o = Get(global, PropertyKey(object)).release().asObject();
+    return std::make_pair(o, Get(o, PropertyKey(name)).release());
+  };
+  auto call = [&](std::pair<Object*, Value> m, Value thisValue, Args args) { return Call(m.second, thisValue, args); };
+  Object* data = CreateArrayFromList({Value::number(1), Value(newStringFromUtf8("x")), Value::null()});
+  Object* holder = OrdinaryObjectCreate(realm->intrinsic(Intrinsic::ObjectPrototype));
+  (void)CreateDataProperty(holder, PropertyKey(u"a"), data);
+  auto json = call(method(u"JSON", u"stringify"), Value(), {Value(holder)});
+  CHECK(json.isNormal() && str(json.value().asString()) == R"({"a":[1,"x",null]})");
+  auto parsed = call(method(u"JSON", u"parse"), Value(), {Value(newStringFromUtf8(R"({"b":[true,2.5e1]})"))});
+  CHECK(parsed.isNormal() && parsed.value().isObject());
+  auto objKeys = call(method(u"Object", u"keys"), Value(), {parsed.value()});
+  CHECK(objKeys.isNormal() && LengthOfArrayLike(objKeys.value().asObject()).release() == 1);
+  Value arrayProto = realm->intrinsic(Intrinsic::ArrayPrototype);
+  auto join = Call(Get(arrayProto.asObject(), PropertyKey(u"join")).release(), data, {Value(newStringFromUtf8("-"))});
+  CHECK(join.isNormal() && str(join.value().asString()) == "1-x-");
+  Object* nums = CreateArrayFromList({Value::number(3), Value::number(10), Value::number(2)});
+  (void)Call(Get(arrayProto.asObject(), PropertyKey(u"sort")).release(), nums, {});
+  CHECK(Get(nums, PropertyKey::index(0)).release().asNumber() == 10);
+  auto fixed = Call(Get(realm->intrinsic(Intrinsic::NumberPrototype), PropertyKey(u"toFixed")).release(), Value::number(1.005), {Value::number(2)});
+  CHECK(fixed.isNormal() && str(fixed.value().asString()) == "1.00");
+  auto prec = Call(Get(realm->intrinsic(Intrinsic::NumberPrototype), PropertyKey(u"toPrecision")).release(), Value::number(123.456), {Value::number(4)});
+  CHECK(prec.isNormal() && str(prec.value().asString()) == "123.5");
+  auto upper = Call(Get(realm->intrinsic(Intrinsic::StringPrototype), PropertyKey(u"toUpperCase")).release(), Value(newStringFromUtf8("stra\xc3\x9f""e")), {});
+  CHECK(upper.isNormal() && str(upper.value().asString()) == "STRASSE");
+  auto tag = Call(Get(realm->intrinsic(Intrinsic::ObjectPrototype), PropertyKey(u"toString")).release(), data, {});
+  CHECK(tag.isNormal() && str(tag.value().asString()) == "[object Array]");
+  auto err = Construct(Get(global, PropertyKey(u"TypeError")).release().asObject(), {Value(newStringFromUtf8("boom"))});
+  CHECK(err.isNormal());
+  auto errStr = Call(Get(err.value(), PropertyKey(u"toString")).release(), err.value(), {});
+  CHECK(errStr.isNormal() && str(errStr.value().asString()) == "TypeError: boom");
+
   // The collector: garbage goes, objects reachable from the stack and from realms stay.
   heap().setCollectorEnabled(true);
   Object* kept = OrdinaryObjectCreate(realm->intrinsic(Intrinsic::ObjectPrototype));

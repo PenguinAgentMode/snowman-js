@@ -14,6 +14,7 @@ Object::~Object() = default;
 
 void Object::trace(Tracer& tracer) {
   tracer.visit(reinterpret_cast<Cell*>(prototype_));
+  tracer.visit(privateElements);
   properties_->trace(tracer);
 }
 

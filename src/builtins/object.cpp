@@ -288,7 +288,7 @@ Result<Value> ObjectPrototype_toString(NativeCall& call) {
   bool isArray = TRY(IsArray(o));
   const char16_t* builtinTag;
   if (isArray) builtinTag = u"Array";
-  else if (o->hasParameterMap()) builtinTag = u"Arguments";
+  else if (o->is<ArgumentsObject>() || o->hasParameterMap()) builtinTag = u"Arguments";
   else if (o->isCallable()) builtinTag = u"Function";
   else if (o->is<ErrorObject>()) builtinTag = u"Error";
   else if (o->is<BooleanObject>()) builtinTag = u"Boolean";

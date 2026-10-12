@@ -19,11 +19,11 @@ VM* createVM() {
   return v;
 }
 
-// CheckStack throws this close to vm().stackLimit.
-constexpr size_t kStackMargin = 64 * 1024;
+// The headroom left below vm().stackLimit for throwing the RangeError and unwinding.
+constexpr size_t kStackMargin = 128 * 1024;
 
-// The lowest usable address of the main thread's stack, for when no one has set vm().stackLimit (tools,
-// tests). One guard-sized block above the rlimit bound stays unused.
+// vm().stackLimit for when no one has set it (tools, tests): the main thread's stack bottom plus the
+// headroom. Whoever switches stacks sets it the same way (stack low + headroom).
 const char* defaultStackLimit() {
   pthread_attr_t attr;
   void* low = nullptr;
@@ -77,7 +77,7 @@ Result<void> CheckStack() {
     v.stackLimit = defaultStackLimit();
     if (!v.stackLimit) return {};
   }
-  if (&here < v.stackLimit + kStackMargin) return ThrowRangeError("Maximum call stack size exceeded");
+  if (&here < v.stackLimit) return ThrowRangeError("Maximum call stack size exceeded");
   return {};
 }
 
