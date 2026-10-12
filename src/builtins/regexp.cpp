@@ -45,7 +45,7 @@ Result<Object*> RegExpInitialize(RegExpObject* obj, Value pattern, Value flags) 
   String* f = flags.isUndefined() ? emptyString() : TRY(ToString(flags));
   std::string error;
   std::shared_ptr<const regexp::Program> program = regexp::compile(p->view(), f->view(), &error);
-  if (!program) return ThrowSyntaxError("Invalid regular expression: /" + p->toUtf8() + "/" + f->toUtf8() + ": " + error);
+  if (!program) return ThrowSyntaxError(error);
   obj->originalSource = p;
   obj->originalFlags = f;
   obj->matcher = std::move(program);
@@ -131,8 +131,13 @@ String* EscapeRegExpPattern(String* source) {
   for (size_t i = 0; i < s.size(); i++) {
     char16_t c = s[i];
     if (c == u'\\' && i + 1 < s.size()) {
+      char16_t next = s[++i];
       out.push_back(c);
-      out.push_back(s[++i]);
+      if (next == u'\n') out.push_back(u'n');
+      else if (next == u'\r') out.push_back(u'r');
+      else if (next == 0x2028) out.append(u"u2028");
+      else if (next == 0x2029) out.append(u"u2029");
+      else out.push_back(next);
       continue;
     }
     if (c == u'[') inClass = true;
