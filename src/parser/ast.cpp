@@ -36,7 +36,7 @@ const char* operatorText(LogicalOperator op) {
 
 const char* operatorText(AssignmentOperator op) {
   static const char* const kText[] = {"=",   "+=", "-=", "*=", "/=",  "%=",  "**=", "<<=",
-                                      ">>=", ">>>=", "|=", "^=", "&=", "||=", "&&=", "??="};
+                                      ">>=", ">>>=", "|=", "^=", "&=", "||=", "&&=", "?\?="};
   return kText[static_cast<int>(op)];
 }
 
