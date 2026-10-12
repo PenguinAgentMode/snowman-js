@@ -134,8 +134,14 @@ relative to `src/` (`#include "runtime/value.h"`), no exceptions for JS control 
 
 - `std::optional<std::string> validate(std::u16string_view pattern, std::u16string_view flags)`: early
   errors for literals and the RegExp constructor; nullopt = valid.
-- The matcher API (compile once, exec at an index over UTF-16 input, capture spans, named groups) is added
-  to the same header and described here before the RegExp built-in consumes it.
+- Matcher (approved at ws/regexp 0a442c0): `std::shared_ptr<const Program> compile(pattern, flags, std::string*
+  error)` (RegExpInitialize's parse + early errors; nullptr + SyntaxError message on failure); `flagsOf`,
+  `captureCount` ([[CapturingGroupsCount]]), `groupName(program, i)` (1-based, u"" if unnamed; duplicates
+  repeat), `hasGroupNames`; `ExecStatus exec(program, input, lastIndex, std::vector<Span>* spans)` runs
+  RegExpBuiltinExec's matching loop (steps 12–16, advancing unless sticky). `Span{start, end}` in code units,
+  -1/-1 = did not participate; spans[0] is the Match Record. `ResourceExhausted` → the caller throws a
+  RangeError. The caller does lastIndex conversion/updates and builds the result array, groups and indices.
+  Programs are immutable and shared across RegExp objects and realms; exec never calls back into the runtime.
 
 ## 11. Unicode (`src/unicode/unicode.h`, regexp workstream after the lead's first version)
 
