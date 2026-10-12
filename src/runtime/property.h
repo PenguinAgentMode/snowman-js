@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <optional>
 #include <string_view>
+#include <vector>
 
 #include "runtime/value.h"
 
@@ -55,6 +56,19 @@ class PropertyKey {
     String* string;
     Symbol* symbol;
   } u_{};
+};
+
+// Keeps the Symbol keys of a key list alive while C++ code iterates it across calls into JS (a std::vector
+// outside a cell is not a root). The list must outlive the RootedKeys.
+class RootedKeys : public RootProvider {
+ public:
+  explicit RootedKeys(const std::vector<PropertyKey>& keys) : keys_(keys) {}
+  void traceRoots(Tracer& tracer) override {
+    for (const PropertyKey& key : keys_) key.trace(tracer);
+  }
+
+ private:
+  const std::vector<PropertyKey>& keys_;
 };
 
 struct PropertyKeyHash {
