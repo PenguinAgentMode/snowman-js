@@ -38,6 +38,7 @@ struct ClassItem {
   char32_t lo = 0;
   char32_t hi = 0;
   unicode::Property property{};
+  bool loneGeneralCategory = false;  // \p{Lu} rather than \p{gc=Lu}: CompileToCharSet doesn't case-fold it
   const ClassNode* nested = nullptr;
   std::vector<std::u32string> strings;
 };
@@ -80,7 +81,7 @@ struct Node {
   uint32_t index = 0;
   uint32_t min = 0;
   uint32_t max = 0;
-  uint32_t firstCapture = 0;  // Quantifier: captures inside are [firstCapture, lastCapture)
+  uint32_t firstCapture = 0;  // Quantifier, groups, lookarounds: the captures inside are [firstCapture, lastCapture)
   uint32_t lastCapture = 0;
   const ClassNode* cls = nullptr;
   std::u16string name;
