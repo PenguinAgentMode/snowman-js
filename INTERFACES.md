@@ -4,6 +4,12 @@ Workstreams code against these seams. A change to one goes to the lead first (me
 in its own commit on your branch and say so when you report). Headers named here are the source of truth;
 this file says what they promise.
 
+- `src/runtime/*.h` were written by the lead: heap.h, value.h, result.h, string.h, symbol.h, bigint.h,
+  property.h, object.h, function.h, realm.h, vm.h, errors.h, operations.h, builtins.h. The runtime
+  workstream implements them and may make additive changes (new declarations, new members); renames,
+  removals and signature changes go through the lead. Other workstreams add nothing there.
+- `src/parser/ast.h` and `src/parser/parser.h` follow the same rule with the parser workstream.
+
 Conventions for every workstream: namespace `snowman` (sub-namespaces per area), C++20, `#include` paths
 relative to `src/` (`#include "runtime/value.h"`), no exceptions for JS control flow, `make` warning-free.
 
