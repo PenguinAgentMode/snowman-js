@@ -7,7 +7,7 @@
 
 - Engine commit:
 - ES-core: passing files / 43,305
-- Milestone: (`node runner/milestones.mjs`)
+- Milestone: (`node t262/runner/milestones.mjs results/<sha>.json --parse-only results/<sha>-parse.json`)
 
 ## Waivers
 

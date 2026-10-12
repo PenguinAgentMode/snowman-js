@@ -2,7 +2,7 @@
 
 Fill these in before staffing:
 
-1. **CLI contract:** see README. Results format: the kit's JSONL and JSON.
+1. **CLI contract:** see t262/README.md. Results format: the JSONL and JSON t262/runner writes.
 2. **AST:** ESTree-shaped nodes with source spans, plus `--dump-ast` JSON to diff against acorn.
 3. **Values:** UTF-16 strings that may hold lone surrogates, f64 Number, BigInt, Symbol, Object.
 4. **Object model:** the 11 essential internal methods plus [[Call]] and [[Construct]], so exotic objects
