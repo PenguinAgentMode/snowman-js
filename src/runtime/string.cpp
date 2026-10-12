@@ -23,9 +23,20 @@ struct ViewHash {
   size_t operator()(std::u16string_view v) const { return hashUnits(v); }
 };
 
-std::unordered_map<std::u16string_view, String*, ViewHash>& atomTable() {
-  static auto* table = new std::unordered_map<std::u16string_view, String*, ViewHash>();
-  return *table;
+using AtomTable = std::unordered_map<std::u16string_view, String*, ViewHash>;
+
+// Atoms are immortal: the table is a root.
+class AtomRoots final : public RootProvider {
+ public:
+  AtomTable table;
+  void traceRoots(Tracer& tracer) override {
+    for (auto& [view, string] : table) tracer.visit(string);
+  }
+};
+
+AtomTable& atomTable() {
+  static auto* roots = new AtomRoots();
+  return roots->table;
 }
 
 void appendUtf8(std::string& out, char32_t cp) {

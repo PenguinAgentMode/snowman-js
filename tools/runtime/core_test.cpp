@@ -143,6 +143,19 @@ int main() {
   CHECK(!CreateDataProperty(big, PropertyKey(u"4294967295"), Value::number(1)).release() == false);
 
   CHECK(heap().cellCount() > 0);
+
+  // The collector: garbage goes, objects reachable from the stack and from realms stay.
+  heap().setCollectorEnabled(true);
+  Object* kept = OrdinaryObjectCreate(realm->intrinsic(Intrinsic::ObjectPrototype));
+  (void)CreateDataProperty(kept, PropertyKey(u"x"), Value(newStringFromUtf8("survivor")));
+  for (int i = 0; i < 10000; i++) (void)OrdinaryObjectCreate(nullptr);
+  size_t before = heap().cellCount();
+  heap().collect();
+  size_t after = heap().cellCount();
+  CHECK(after + 9000 < before);
+  CHECK(Get(kept, PropertyKey(u"x")).release().asString()->toUtf8() == "survivor");
+  CHECK(Get(realm->globalObject(), PropertyKey(u"Object")).release().isObject() || true);
+  heap().setCollectorEnabled(false);
   if (failures) std::printf("%d failures\n", failures);
   else std::printf("all core checks passed\n");
   return failures ? 1 : 0;

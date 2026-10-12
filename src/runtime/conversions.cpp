@@ -182,6 +182,13 @@ Result<double> ToIntegerOrInfinity(Value argument) {
   return std::trunc(number) + 0.0;
 }
 
+double NumberExponentiate(double base, double exponent) {
+  if (std::isnan(exponent)) return NAN;
+  if (exponent == 0) return 1;
+  if ((base == 1 || base == -1) && std::isinf(exponent)) return NAN;
+  return std::pow(base, exponent);
+}
+
 int32_t DoubleToInt32(double d) {
   if (!std::isfinite(d) || d == 0) return 0;
   double m = std::fmod(std::trunc(d), 4294967296.0);

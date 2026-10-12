@@ -69,6 +69,11 @@ class Object : public Cell {
   // False for objects whose [[GetPrototypeOf]] is not the ordinary one (Proxy): OrdinarySetPrototypeOf's
   // cycle check stops there.
   virtual bool hasOrdinaryGetPrototypeOf() const { return true; }
+  // True for arguments objects (a [[ParameterMap]] slot, mapped or not): Object.prototype.toString's
+  // "Arguments" tag. Overridden by src/interp/'s arguments objects.
+  virtual bool hasParameterMap() const { return false; }
+  // True for Date objects ([[DateValue]]), for the same tag.
+  virtual bool hasDateValue() const { return false; }
 
   // Internal slots live in subclasses; test and downcast with these.
   template <class T>
@@ -87,12 +92,23 @@ class Object : public Cell {
   bool extensible() const { return extensible_; }
   PropertyMap& properties() { return *properties_; }
 
+  // [[PrivateElements]]: an interp-owned cell (src/interp/), nullptr when the object has none. Traced. Any
+  // object can carry private elements (the class-field return-override trick reaches proxies, arrays, ...).
+  Cell* privateElements = nullptr;
+
   void trace(Tracer& tracer) override;
 
  protected:
   Object* prototype_;
   bool extensible_ = true;
   std::unique_ptr<PropertyMap> properties_;
+};
+
+// An object with a [[ParameterMap]] slot: an arguments exotic object or an unmapped arguments object (10.4.4).
+// The interpreter creates and subclasses them; Object.prototype.toString tests obj->is<ArgumentsObject>().
+class ArgumentsObject : public Object {
+ public:
+  using Object::Object;
 };
 
 }  // namespace snowman
