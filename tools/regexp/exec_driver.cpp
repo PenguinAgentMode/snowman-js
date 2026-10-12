@@ -3,7 +3,8 @@
 // (4 digits per unit). The caller's part of RegExpBuiltinExec is done here: lastIndex is 0 without g or y, and
 // lastIndex > length fails.
 // stdout, one line per case: "E <message>" (SyntaxError), "N" (no match), "X" (resource exhausted) or
-// "M s0 e0 s1 e1 ..." (spans, -1 -1 for a group that did not participate).
+// "M s0 e0 s1 e1 ..." (spans, -1 -1 for a group that did not participate; with EXEC_DRIVER_NAMES set, then " |" and
+// each group's name).
 //   g++ -std=c++20 -O2 -Isrc -o build/exec_driver tools/regexp/exec_driver.cpp src/regexp/*.cpp src/unicode/*.cpp
 #include <chrono>
 #include <cstdlib>
@@ -20,10 +21,20 @@ static std::u16string unhex(const std::string& s) {
   return out;
 }
 
+static std::string hex(const std::u16string& s) {
+  static const char digits[] = "0123456789abcdef";
+  std::string out;
+  for (char16_t c : s) {
+    for (int shift = 12; shift >= 0; shift -= 4) out += digits[(c >> shift) & 0xF];
+  }
+  return out;
+}
+
 int main() {
   std::ios::sync_with_stdio(false);
   std::string line;
   std::vector<snowman::regexp::Span> spans;
+  bool names = std::getenv("EXEC_DRIVER_NAMES") != nullptr;  // group names after the spans
   bool trace = std::getenv("EXEC_DRIVER_TRACE") != nullptr;  // slow cases (line, ms) to stderr
   auto started = std::chrono::steady_clock::now();
   for (size_t n = 0; std::getline(std::cin, line); n++) {
@@ -62,6 +73,14 @@ int main() {
       case snowman::regexp::ExecStatus::Match:
         std::cout << 'M';
         for (const auto& s : spans) std::cout << ' ' << s.start << ' ' << s.end;
+        if (names) {
+          // " | n1 n2 ...": each group's name as hex code units, - for none
+          std::cout << " |";
+          for (uint32_t i = 1; i <= snowman::regexp::captureCount(*program); i++) {
+            const std::u16string& name = snowman::regexp::groupName(*program, i);
+            std::cout << ' ' << (name.empty() ? "-" : hex(name));
+          }
+        }
         std::cout << '\n';
         break;
     }
