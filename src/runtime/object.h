@@ -69,6 +69,11 @@ class Object : public Cell {
   // False for objects whose [[GetPrototypeOf]] is not the ordinary one (Proxy): OrdinarySetPrototypeOf's
   // cycle check stops there.
   virtual bool hasOrdinaryGetPrototypeOf() const { return true; }
+  // True for arguments objects (a [[ParameterMap]] slot, mapped or not): Object.prototype.toString's
+  // "Arguments" tag. Overridden by src/interp/'s arguments objects.
+  virtual bool hasParameterMap() const { return false; }
+  // True for Date objects ([[DateValue]]), for the same tag.
+  virtual bool hasDateValue() const { return false; }
 
   // Internal slots live in subclasses; test and downcast with these.
   template <class T>

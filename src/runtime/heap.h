@@ -83,11 +83,28 @@ class Heap {
 
   size_t cellCount() const { return cells_.size(); }
 
+  // The collector is off until the engine is GC-safe; collect() and maybeCollect() do nothing while it is.
+  void setCollectorEnabled(bool enabled) { enabled_ = enabled; }
+  bool collectorEnabled() const { return enabled_; }
+  // The thread's own stack bounds, scanned only when the current sp lies on it. Defaults to the main
+  // thread's stack (pthread_getattr_np).
+  void setThreadStack(const void* low, const void* high) {
+    threadStackLow_ = low;
+    threadStackHigh_ = high;
+  }
+
  private:
   friend class RootProvider;
   void track(Cell* cell);
+  void scanRange(Tracer& tracer, const void* low, const void* high);
 
   std::vector<Cell*> cells_;
+  bool enabled_ = false;
+  size_t allocatedSinceCollect_ = 0;
+  size_t budget_ = 1 << 20;
+  std::vector<Cell*> sortedCells_;
+  const void* threadStackLow_ = nullptr;
+  const void* threadStackHigh_ = nullptr;
   std::vector<std::pair<const void*, const void*>> stacks_;
   RootProvider* roots_ = nullptr;
 };
