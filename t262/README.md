@@ -1,0 +1,65 @@
+# t262: the measuring stick
+
+Runs test262 against `./engine`, sharded across machines, and says which milestone the engine reached.
+It needs node 22 and nothing else. Every command runs from the repo root.
+
+## The engine's contract
+
+`engine [--module] [--parse-only] file.js`
+- Exit 0 when the script runs to completion.
+- On an uncaught exception, print `Name: message` (for example `TypeError: x is not a function`) and exit
+  non-zero.
+- Provide a global `print(...)` that writes a line to stdout.
+- Drain the job queue (promises) before exiting.
+- Provide a global `$262` with `createRealm`, `evalScript`, `detachArrayBuffer`, `gc` and `global` (see
+  test262's INTERPRETING.md).
+- With `--module`, run the file as a module; imports resolve relative to it.
+- With `--parse-only`, parse (including early errors) and exit 0 or report the SyntaxError; run nothing.
+
+The runner appends `print("Test262:Ran")` after each test. A test passes only if that line is printed, so an
+engine that runs nothing can't pass.
+
+## Running
+
+```
+t262/fetch-test262.sh                                # test262 at the pinned commit
+node t262/runner/run.mjs --engine ./engine --suite es-core --shard 3/8 --jobs 4 --out results/shard-3.jsonl
+node t262/runner/aggregate.mjs --suite es-core --label <engine sha> --out results/<sha>.json results/shard-*.jsonl
+node t262/runner/milestones.mjs results/<sha>.json --parse-only results/<sha>-parse.json
+```
+
+| Suite | Files | Scenarios |
+| --- | --- | --- |
+| `es-core`: language, built-ins, annexB, harness; no Temporal, no proposals | 43,305 | 82,724 |
+| `full` | 53,616 | 102,994 |
+
+- `aggregate.mjs` refuses an incomplete run (exit 2): every scenario of the suite exactly once.
+- A file passes only if all its scenarios pass.
+- `--baseline results/<old>.json` adds newly passing files and regressions.
+- `--filter test/language/literals` runs a slice; use it for an owner's own directories before merging.
+- `--parse-only` runs the M1 measurement: aggregate it separately into `results/<sha>-parse.json`.
+
+`results/node/es-core.json` is node itself through `hosts/node-host.mjs` (97.42% of files). A test node fails
+here usually needs host support, not engine work.
+
+## Milestones
+
+| Rung | Target |
+| --- | --- |
+| M1a | parse-only: ≥ 95% of positive tests parse, ≥ 50% of negative-parse tests rejected |
+| M1b | parse-only: ≥ 99.5% / ≥ 95% |
+| M2 | `test/harness` ≥ 85 of 116 |
+| M3 | language files with no feature tag ≥ 80%, ES-core ≥ 20% |
+| M4 | ES-core ≥ 35% |
+| M5 | ES-core ≥ 55% |
+| M6 | ES-core ≥ 70% |
+| M7 | ES-core ≥ 85% |
+| M8 | ES-core ≥ 95% |
+
+## Measuring across machines
+
+- **After each merge to `main`**, the lead starts N shard agents, one machine each. Each one runs `make shard
+  SHARD=k/N`, then commits its JSONL as `results/<sha>/shard-k.jsonl` to the `results` branch (rebase and
+  retry on a push race).
+- **The lead** aggregates the N files, and commits `results/<sha>.json` and the STATUS.md line to `main`.
+- **Any regression** against the previous result is reverted or waived in STATUS.md.
