@@ -273,8 +273,7 @@ double parseISODate(std::u16string_view s) {
     }
   }
   if (i != n) return NAN;
-  double daysInMonth = monthStart(month, DaysInYear(year) == 366) - monthStart(month - 1, DaysInYear(year) == 366);
-  if (day > daysInMonth) return NAN;
+  if (day > 31) return NAN;
   double date = MakeDate(MakeDay(year, month - 1, day), MakeTime(hour, minute, second, ms));
   if (hasOffset) date -= offset;
   else if (hasTime) date = UTC(date);
