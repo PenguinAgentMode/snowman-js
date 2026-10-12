@@ -2,6 +2,7 @@
 #include <iostream>
 
 #include "engine.h"
+#include "parser/dump.h"
 #include "parser/parser.h"
 
 namespace snowman {
@@ -32,7 +33,7 @@ int dumpAstMain(const CliOptions& options, const std::string& source) {
     std::cout << "SyntaxError: " << result.error->message << "\n";
     return 1;
   }
-  std::cout << "{}\n";
+  std::cout << parser::dumpAstJson(result.program) << "\n";
   return 0;
 }
 

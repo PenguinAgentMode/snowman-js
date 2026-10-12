@@ -116,7 +116,6 @@ FnCtx* Parser::enterFn(FnCtx::Kind kind, bool async, bool generator, VarScope* v
       c->allowSuperProperty = parent->allowSuperProperty;
       c->allowSuperCall = parent->allowSuperCall;
       c->allowArguments = parent->allowArguments;
-      c->inStaticBlock = parent->inStaticBlock;
       break;
     case FnCtx::Kind::FieldInit:
       c->allowNewTarget = true;
