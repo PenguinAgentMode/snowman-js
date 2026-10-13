@@ -43,7 +43,7 @@ fails 138 of them too):
 
 | Files | Cause | Owner / state |
 | ---: | --- | --- |
-| 112 | `$262.agent` (Atomics wait 43, waitAsync 53, notify 16) | unstaffed: per-thread VM, shared SAB blocks, ~800–1,200 lines; first step `agent.sleep`/`monotonicNow` (+3) |
+| 112 | `$262.agent` (Atomics wait 43, waitAsync 53, notify 16) | builtins (design note first): per-thread VM, shared SAB blocks, ~800–1,200 lines; first step `agent.sleep`/`monotonicNow` (+3) |
 | 25 | `$262.IsHTMLDDA` (annexB) | memcap ws/runtime-r 40af25e, gating |
 | 2 | `flags: [CanBlockIsFalse]` | runner: a non-blocking main agent |
 | 2 | Promise.try avoids-wrap | fixed on main (e535e4b) |
@@ -115,7 +115,9 @@ Each line is a known regression, with its reason.
   `if (this.Intl)` / `typeof Intl`: they passed only while Intl was undefined, and now reach the still missing
   Intl.DateTimeFormat. Fixed forward by intl's DateTimeFormat batch (ws/intl-dev ccdf619), not by a revert.
 - Full suite, flaky: staging/sm/Date/dst-offset-caching-{2..8}-of-8.js time out at 7–10 s under 4-job load and
-  pass alone. A Date slowdown since 8a5df0b93 is suspected; builtins is bisecting it.
+  pass alone. Not a regression (builtins bisected: 8.5–9.0 s CPU at every merge since 8a5df0b, ±10% noise).
+  The time goes to the interpreter: identifier resolution (ResolveBinding + DeclarativeEnvironment::find ~14%),
+  evaluation ~15%, GC ~10%; Date is ~1.3%. The fix is interpreter performance (ws/interp2's commits first).
 
 - TypedArray/prototype/copyWithin/coerced-values-{start,end}-detached(-prototype).js (3): passed by accident before
   cf35ee1, now near the 10 s timeout; interp2's speed work (waived until it lands).
