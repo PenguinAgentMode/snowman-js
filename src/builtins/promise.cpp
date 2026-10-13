@@ -590,15 +590,13 @@ Result<Value> promiseResolveStatic(NativeCall& call) {
 }
 
 // 27.2.4.8 Promise.try
+// A normal completion goes through PromiseResolve, so a promise of C is returned as it is (not wrapped).
 Result<Value> promiseTry(NativeCall& call) {
   if (!call.thisValue.isObject()) return ThrowTypeError("Promise.try called on a non-object");
-  PromiseCapability* promiseCapability = TRY(NewPromiseCapability(call.thisValue));
   Result<Value> status = Call(call.args[0], Value::undefined(), call.args.slice(1));
-  if (status.isThrow()) {
-    TRY(Call(promiseCapability->reject, Value::undefined(), {status.thrown()}));
-  } else {
-    TRY(Call(promiseCapability->resolve, Value::undefined(), {status.value()}));
-  }
+  if (status.isNormal()) return PromiseResolve(call.thisValue.asObject(), status.value());
+  PromiseCapability* promiseCapability = TRY(NewPromiseCapability(call.thisValue));
+  TRY(Call(promiseCapability->reject, Value::undefined(), {status.thrown()}));
   return promiseCapability->promise;
 }
 
