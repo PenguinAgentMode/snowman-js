@@ -13,6 +13,7 @@ class TypedArrayObject : public Object {
  public:
   TypedArrayObject(Object* prototype, ElementType type) : Object(prototype), elementType(type) {}
 
+  Result<bool> PreventExtensions() override;
   Result<std::optional<PropertyDescriptor>> GetOwnProperty(const PropertyKey& key) override;
   Result<bool> HasProperty(const PropertyKey& key) override;
   Result<bool> DefineOwnProperty(const PropertyKey& key, const PropertyDescriptor& desc) override;
@@ -34,6 +35,8 @@ Intrinsic TypedArrayConstructorIntrinsic(ElementType type);
 Intrinsic TypedArrayPrototypeIntrinsic(ElementType type);
 const char16_t* TypedArrayName(ElementType type);
 
+// IsTypedArrayFixedLength: false for a length-tracking TypedArray or one over a resizable ArrayBuffer.
+bool IsTypedArrayFixedLength(const TypedArrayObject* o);
 // 10.4.5.10 IsTypedArrayOutOfBounds / 10.4.5.12 TypedArrayLength over the buffer's current length.
 bool IsTypedArrayOutOfBounds(const TypedArrayObject* o);
 double TypedArrayLength(const TypedArrayObject* o);  // 0 when out of bounds
