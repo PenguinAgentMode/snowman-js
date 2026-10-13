@@ -19,21 +19,16 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   IsTypedArrayFixedLength.
 - runtime/realm.h: Intrinsic::ShadowRealm, ShadowRealmPrototype.
 
-## Current (14:30 UTC): Temporal calendar area (owner since memcap's loss) + step 2 wrap-up
+## Current (15:25 UTC): Temporal calendars (I own the whole area)
 
-- Machine rules: TMPDIR=$HOME/tmp, nothing in /tmp (tmpfs counts against 4 GB), --jobs 3, background + monitor for
-  anything long, one checkout (~/repo/snowman-js) + the calendar worktree ~/repo/cal (t262/test262 symlinked; never two
-  runners at once). Logs/JSONL/engines in ~/logs and ~/engines.
-- Step 2 (ws/builtins7 520764a, on main 32179d1): gate clean vs results/3edca9940.json (43,191 / 43,305, 0 regressions).
-  Speed: sum of ms 0.885 of the 40f1c7e gate (not clean A/B: different base/runner); median ratio over 955 scenarios
-  >= 500 ms 0.998. A/B alone-file timing main 32179d1 vs step 2 running (~/logs/ab.log).
-- Calendars: ws/calendars-b 9cce094 on main 46764db = temporal2's 043d68c notes + b7dbec9 framework (CalendarSystem,
-  gregory) + my group 4 (calendar_lunisolar.h, calendar_{chinese,dangi,islamic_umalqura}.cpp + data .inc, registered in
-  GetCalendarSystem; tools/temporal/{gen,check}-calendars.mjs). Next: slices (built-ins/Temporal must stay 4,605,
-  intl402), check-calendars --engine, the 25 DTF + 28 toLocaleString gregory-blocked tests (notes/survey.md on
-  ws/survey-intl), then the full gate vs results/29a14dfdd{,-full}.json; then groups 2 and 3 (notes/temporal2.md Area 4).
-- Tables: chinese/dangi related ISO years -6000..2200 (leap-month tests pin years back to -5738), mean lunations outside;
-  islamic-umalqura AH 1300..1600, islamic-civil outside (edges coincide exactly: -31826 and 74839).
+- Merged: step 2 thread_local (main 7f86ee9); calendars framework + gregory + group 4 (10979b4, main a1a2a5f, +589 full).
+- Group 2 ws/calendars-g2 cb6d5f1 (buddhist, roc, japanese; calendar_isolike.h): slice +358, 0 regressions; full gate
+  running (~/logs/g2gate.sh, vs 29a14dfdd; the lead re-gates the JSONL vs a1a2a5f). Push JSONL to results/cb6d5f1/full.jsonl.
+- Group 3 ws/calendars-g3 0bf1332 (WIP, unbuilt): calendar_arithmetic.h (YearStartCalendar), coptic/ethiopic/ethioaa,
+  indian, persian (ICU 78: 33-year rule + nonLeapYears list from persncal.cpp), islamic-civil/tbla, hebrew. Verified in
+  ~/work/g3/verify.mjs vs Intl (14,808 days each, ISO 1000-2500) and vs extreme-dates.js rows. Next: build, slices,
+  gate vs the newest STATUS.md baseline (results/a1a2a5f{,-full}.json), reword the wip commit before the MR.
+- Scripts: ~/logs/{calslice,calgate,g2slice,g2gate}.sh (copy + sed for g3). Worktree ~/repo/cal (branches g2, g3).
 
 ## Current batch: $262.agent
 
