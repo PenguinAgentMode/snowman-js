@@ -29,7 +29,7 @@ bool parseArrayIndex(std::u16string_view s, uint32_t& out) {
 }
 
 String* indexString(uint32_t index) {
-  static String* small[1024] = {};
+  thread_local String* small[1024] = {};
   if (index < 1024 && small[index]) return small[index];
   char buf[16];
   int n = snprintf(buf, sizeof buf, "%u", index);

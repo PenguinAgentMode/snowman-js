@@ -169,7 +169,7 @@ const std::vector<uint8_t>& transitionBytes() {
 }
 
 const Zone& zoneData(int32_t zoneIndex) {
-  static std::vector<std::unique_ptr<Zone>> cache(kZoneCount);
+  thread_local std::vector<std::unique_ptr<Zone>> cache(kZoneCount);
   std::unique_ptr<Zone>& slot = cache[zoneIndex];
   if (slot) return *slot;
   const TzZone& row = kTzZones[zoneIndex];

@@ -12,7 +12,7 @@ namespace snowman {
 
 namespace {
 const PropertyKey& lengthKey() {
-  static const PropertyKey key(u"length");
+  thread_local const PropertyKey key(u"length");
   return key;
 }
 }  // namespace

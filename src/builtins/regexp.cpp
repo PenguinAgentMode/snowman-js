@@ -31,7 +31,7 @@ class RegExpObject : public Object {
 };
 
 const PropertyKey& lastIndexKey() {
-  static const PropertyKey key(u"lastIndex");
+  thread_local const PropertyKey key(u"lastIndex");
   return key;
 }
 

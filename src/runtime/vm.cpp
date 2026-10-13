@@ -38,9 +38,12 @@ const char* defaultStackLimit() {
 
 }  // namespace
 
+// One VM per thread (agent): every agent has its own heap, atoms and realms ($262.agent, notes/agent-design.md).
+thread_local VM* tVM = nullptr;
+
 VM& vm() {
-  static VM* instance = createVM();
-  return *instance;
+  if (!tVM) tVM = createVM();
+  return *tVM;
 }
 
 Result<void> VM::runJobs() {

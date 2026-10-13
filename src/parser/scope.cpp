@@ -83,7 +83,7 @@ void Parser::semicolon() {
 
 void Parser::raise(uint32_t pos, const std::string& message) { lexer_.fail(pos, message); }
 
-const char* const* stackLimit = nullptr;
+thread_local const char* const* stackLimit = nullptr;
 
 void Parser::checkStack() {
   if (stackLimit && *stackLimit && static_cast<const char*>(__builtin_frame_address(0)) < *stackLimit)

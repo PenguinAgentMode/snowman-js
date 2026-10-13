@@ -34,9 +34,12 @@ class AtomRoots final : public RootProvider {
   }
 };
 
+// Atoms are cells, so the table is per thread (agent), like the heap.
+thread_local AtomRoots* tAtomRoots = nullptr;
+
 AtomTable& atomTable() {
-  static auto* roots = new AtomRoots();
-  return roots->table;
+  if (!tAtomRoots) tAtomRoots = new AtomRoots();
+  return tAtomRoots->table;
 }
 
 void appendUtf8(std::string& out, char32_t cp) {
@@ -67,7 +70,7 @@ size_t String::hash() const {
 std::string String::toUtf8() const { return utf16ToUtf8(units_); }
 
 String* emptyString() {
-  static String* empty = atom(std::u16string_view());
+  thread_local String* empty = atom(std::u16string_view());
   return empty;
 }
 
