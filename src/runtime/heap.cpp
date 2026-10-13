@@ -2,8 +2,15 @@
 // and conservative over the stacks; it stays off (collect() returns at once) until setCollectorEnabled(true).
 // INTERFACES.md section 13.
 #include "runtime/heap.h"
+#include "runtime/vm.h"
 
 #include <atomic>
+#include <cstdio>
+#include <unistd.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <cstdlib>
+#include <malloc.h>
 
 #include <malloc.h>
 #include <pthread.h>
@@ -55,10 +62,71 @@ RootProvider::~RootProvider() {
 std::atomic<size_t> gProcessCells{0};
 constexpr size_t kProcessCellSoftLimit = size_t(3) << 20;
 
+// The soft memory limit: when the process's resident memory (what the runner's watchdog measures: heap, malloc'd
+// buffers, touched stacks) passes it, the engine first gives back what it can (a collection, malloc_trim, the dead
+// part of the running stack below the current frame); still over, the next CheckStack throws a catchable
+// RangeError("out of memory") instead of the watchdog's kill. Checked after each collection and every 64K cells.
+// SNOWMAN_MEM_MB sets it (default 640, under the runner's 700 MB; 0: none). A true malloc failure stays fatal.
+size_t memoryLimitBytes() {
+  static const size_t limit = [] {
+    const char* env = std::getenv("SNOWMAN_MEM_MB");
+    long mb = env ? std::atol(env) : 640;
+    return mb > 0 ? size_t(mb) << 20 : SIZE_MAX;
+  }();
+  return limit;
+}
+std::atomic<bool> gMemoryLimitExceeded{false};
+thread_local size_t tAllocationsSinceCheck = 0;
+
+// Resident bytes, /proc/self/statm's second field (matches VmRSS, gVisor included).
+size_t residentBytes() {
+  int fd = open("/proc/self/statm", O_RDONLY);
+  if (fd < 0) return 0;
+  char buf[128];
+  ssize_t n = read(fd, buf, sizeof buf - 1);
+  close(fd);
+  if (n <= 0) return 0;
+  buf[n] = 0;
+  unsigned long size = 0, resident = 0;
+  if (std::sscanf(buf, "%lu %lu", &size, &resident) != 2) return 0;
+  return size_t(resident) * size_t(sysconf(_SC_PAGESIZE));
+}
+
+// The running stack's pages below the current frame (the stack grows down) hold nothing live: give them back.
+void releaseDeadStackBelow(const void* sp) {
+  const char* low = vm().stackLimit;
+  if (!low) return;
+  uintptr_t page = uintptr_t(sysconf(_SC_PAGESIZE));
+  uintptr_t begin = (reinterpret_cast<uintptr_t>(low) + page - 1) & ~(page - 1);
+  uintptr_t end = (reinterpret_cast<uintptr_t>(sp) - (uintptr_t(256) << 10)) & ~(page - 1);
+  if (end > begin) madvise(reinterpret_cast<void*>(begin), end - begin, MADV_DONTNEED);
+}
+
+void checkMemoryLimit(Heap& heap, bool collected);
+
 void Heap::track(Cell* cell) {
   cells_.push_back(cell);
   allocatedSinceCollect_++;
   gProcessCells.fetch_add(1, std::memory_order_relaxed);
+  // Between collections (far apart with a large live heap) the resident size is looked at every 64K cells.
+  if (++tAllocationsSinceCheck >= (size_t(1) << 16)) {
+    tAllocationsSinceCheck = 0;
+    if (enabled_) checkMemoryLimit(*this, false);
+  }
+}
+
+// Over the limit: give back free malloc memory and the dead stack, then look again. No collection is forced here: a
+// collection at that size allocates its own sorted copy of every cell, which would push the peak further up.
+void checkMemoryLimit(Heap&, bool) {
+  if (memoryLimitBytes() == SIZE_MAX || residentBytes() <= memoryLimitBytes()) return;
+  malloc_trim(0);
+  char here;
+  releaseDeadStackBelow(&here);
+  if (residentBytes() > memoryLimitBytes()) gMemoryLimitExceeded = true;
+}
+
+bool TakeHeapLimitExceeded() {
+  return gMemoryLimitExceeded.load(std::memory_order_relaxed) && gMemoryLimitExceeded.exchange(false);
 }
 
 void Heap::addStack(const void* low, const void* high) { stacks_.emplace_back(low, high); }
@@ -97,6 +165,57 @@ void Heap::maybeCollect() {
   if (allocatedSinceCollect_ >= budget) collect();
 }
 
+namespace {
+
+// The words of the scanned stacks that may point at a cell, as an open-addressing set: a collection checks
+// each cell against it, instead of sorting every cell to look each stack word up.
+class CandidateSet {
+ public:
+  explicit CandidateSet(size_t count) {
+    size_t capacity = 16;
+    while (capacity < count * 2) capacity *= 2;
+    slots_.assign(capacity, 0);
+    mask_ = capacity - 1;
+  }
+  void insert(uintptr_t word) {
+    for (size_t i = hash(word);; i = (i + 1) & mask_) {
+      if (slots_[i] == word) return;
+      if (!slots_[i]) {
+        slots_[i] = word;
+        return;
+      }
+    }
+  }
+  bool contains(uintptr_t word) const {
+    for (size_t i = hash(word);; i = (i + 1) & mask_) {
+      if (slots_[i] == word) return true;
+      if (!slots_[i]) return false;
+    }
+  }
+
+ private:
+  size_t hash(uintptr_t word) const { return size_t((word >> 3) * 0x9E3779B97F4A7C15ull >> 20) & mask_; }
+  std::vector<uintptr_t> slots_;
+  size_t mask_;
+};
+
+using Range = std::pair<const void*, const void*>;
+
+// Calls f on every aligned word of the ranges that lies in [lowest, highest].
+template <class F>
+void forEachStackWord(const std::vector<Range>& ranges, uintptr_t lowest, uintptr_t highest, F&& f) {
+  for (const auto& [low, high] : ranges) {
+    auto begin = reinterpret_cast<uintptr_t>(low) & ~uintptr_t(sizeof(void*) - 1);
+    auto end = reinterpret_cast<uintptr_t>(high);
+    for (uintptr_t p = begin; p + sizeof(void*) <= end; p += sizeof(void*)) {
+      uintptr_t word = *reinterpret_cast<const uintptr_t*>(p);
+      if (word >= lowest && word <= highest) f(word);
+    }
+  }
+}
+
+}  // namespace
+
 void Heap::collect() {
   if (!enabled_) return;
   // Spill callee-saved registers into this frame so the stack scan sees them.
@@ -104,19 +223,18 @@ void Heap::collect() {
   volatile char marker = 0;
   const void* sp = const_cast<const char*>(&marker);
 
-  sortedCells_ = cells_;
-  std::sort(sortedCells_.begin(), sortedCells_.end());
   MarkTracer tracer;
 
   for (RootProvider* r = roots_; r; r = r->next_) r->traceRoots(tracer);
 
+  std::vector<Range> ranges;
   bool onRegisteredStack = false;
   for (const auto& [low, high] : stacks_) {
     if (sp >= low && sp < high) {
       onRegisteredStack = true;
-      scanRange(tracer, sp, high);
+      ranges.emplace_back(sp, high);
     } else {
-      scanRange(tracer, low, high);
+      ranges.emplace_back(low, high);
     }
   }
   if (!onRegisteredStack) {
@@ -131,7 +249,30 @@ void Heap::collect() {
       threadStackLow_ = low;
       threadStackHigh_ = static_cast<const char*>(low) + size;
     }
-    scanRange(tracer, sp, threadStackHigh_);
+    ranges.emplace_back(sp, threadStackHigh_);
+  }
+
+  // The conservative roots: the cells some stack word points at.
+  uintptr_t lowest = UINTPTR_MAX, highest = 0;
+  for (Cell* cell : cells_) {
+    lowest = std::min(lowest, reinterpret_cast<uintptr_t>(cell));
+    highest = std::max(highest, reinterpret_cast<uintptr_t>(cell));
+  }
+  size_t words = 0;
+  forEachStackWord(ranges, lowest, highest, [&](uintptr_t) { words++; });
+  if (words <= cells_.size() / 2) {
+    CandidateSet candidates(words);
+    forEachStackWord(ranges, lowest, highest, [&](uintptr_t word) { candidates.insert(word); });
+    if (words) {
+      for (Cell* cell : cells_) {
+        if (candidates.contains(reinterpret_cast<uintptr_t>(cell))) tracer.visit(cell);
+      }
+    }
+  } else {
+    // Deep stacks: look each word up among the sorted cells.
+    sortedCells_ = cells_;
+    std::sort(sortedCells_.begin(), sortedCells_.end());
+    for (const auto& [low, high] : ranges) scanRange(tracer, low, high);
   }
 
   while (!tracer.worklist.empty()) {
@@ -157,6 +298,8 @@ void Heap::collect() {
   sortedCells_.shrink_to_fit();
   allocatedSinceCollect_ = 0;
   budget_ = std::max<size_t>(1 << 20, kept);
+  checkMemoryLimit(*this, true);
+
 }
 
 }  // namespace snowman
