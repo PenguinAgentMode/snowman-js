@@ -57,6 +57,12 @@ class Dumper {
     key(k);
     str(v);
   }
+  // ESTree's `phase` of an ImportDeclaration / ImportExpression ("defer" / "source"); omitted for the default
+  // ~evaluation~ phase, as acorn (which has no phases) prints those nodes.
+  void phase(ImportPhase p) {
+    if (p == ImportPhase::Defer) text("phase", "defer");
+    if (p == ImportPhase::Source) text("phase", "source");
+  }
   void number(double d) {
     if (!std::isfinite(d)) {
       out += "null";
@@ -376,6 +382,7 @@ void Dumper::node(const Node* n) {
     case NodeType::ImportExpression:
       child("source", n->as<ImportExpression>()->source);
       child("options", n->as<ImportExpression>()->options);
+      phase(n->as<ImportExpression>()->phase);
       break;
     case NodeType::ObjectPattern: list("properties", n->as<ObjectPattern>()->properties); break;
     case NodeType::ArrayPattern: list("elements", n->as<ArrayPattern>()->elements); break;
@@ -407,6 +414,7 @@ void Dumper::node(const Node* n) {
       list("specifiers", n->as<ImportDeclaration>()->specifiers);
       child("source", n->as<ImportDeclaration>()->source);
       list("attributes", n->as<ImportDeclaration>()->attributes);
+      phase(n->as<ImportDeclaration>()->phase);
       break;
     case NodeType::ImportSpecifier:
       child("imported", n->as<ImportSpecifier>()->imported);

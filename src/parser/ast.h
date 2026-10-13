@@ -249,16 +249,22 @@ struct ImportAttributeEntry {
   std::u16string value;
 };
 
+// The [[Phase]] of a ModuleRequest Record (import defer, source phase imports): `import defer * as ns`,
+// `import.defer()`; `import source x`, `import.source()`; everything else is ~evaluation~.
+enum class ImportPhase : uint8_t { Evaluation, Defer, Source };
+
 // ModuleRequest Record.
 struct ModuleRequest {
   std::u16string specifier;
   std::vector<ImportAttributeEntry> attributes;  // in source order; keys are unique
+  ImportPhase phase = ImportPhase::Evaluation;
 };
 
 // ImportEntry Record. moduleRequest indexes Program::requestedModules.
 struct ImportEntry {
   uint32_t moduleRequest = 0;
-  bool isNamespaceObject = false;  // [[ImportName]] is NAMESPACE-OBJECT (`import * as ns`)
+  bool isNamespaceObject = false;  // [[ImportName]] is NAMESPACE-OBJECT (`import * as ns`, `import defer * as ns`)
+  bool isSource = false;           // [[ImportName]] is ~source~ (`import source x`)
   std::u16string importName;       // when !isNamespaceObject
   std::u16string localName;
   Node* node = nullptr;            // the ImportSpecifier / ImportDefaultSpecifier / ImportNamespaceSpecifier
@@ -271,6 +277,7 @@ struct ExportEntry {
     Name,           // importName
     All,            // `export * as ns from` (ALL)
     AllButDefault,  // `export * from` (ALL-BUT-DEFAULT)
+    Source,         // a re-export of a source phase import (`import source x from "m"; export {x}`): ~source~
   };
   std::optional<std::u16string> exportName;
   std::optional<uint32_t> moduleRequest;  // index into Program::requestedModules
@@ -820,6 +827,7 @@ struct ImportExpression : Node {
   SNOWMAN_AST_NODE(ImportExpression)
   Expression* source = nullptr;
   Expression* options = nullptr;  // nullable
+  ImportPhase phase = ImportPhase::Evaluation;  // import.defer(...) / import.source(...)
 };
 
 // ---------------------------------------------------------------------------------------------------
@@ -866,6 +874,7 @@ struct ImportDeclaration : Node {
   std::vector<Node*> specifiers;  // ImportSpecifier, ImportDefaultSpecifier, ImportNamespaceSpecifier
   Literal* source = nullptr;
   std::vector<ImportAttribute*> attributes;
+  ImportPhase phase = ImportPhase::Evaluation;  // `import defer * as ns` / `import source x` (one specifier)
 };
 
 struct ImportSpecifier : Node {

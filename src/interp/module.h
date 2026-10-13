@@ -23,7 +23,9 @@ class ModuleRecord final : public Cell {
   Realm* realm;
   std::string path;                       // the resolved file path (host-defined)
   ModuleEnvironment* environment = nullptr;
-  Object* namespaceObject = nullptr;
+  Object* namespaceObject = nullptr;          // [[Namespace]]
+  Object* deferredNamespaceObject = nullptr;  // [[DeferredNamespace]] (import defer)
+  Object* moduleSource = nullptr;             // [[ModuleSource]] (source phase imports); null for JS and JSON
   ast::Program* code = nullptr;           // Source Text Module Records
   Value syntheticDefault;                 // JSON modules: the parsed value, exported as "default"
   Object* importMeta = nullptr;
@@ -52,5 +54,11 @@ Result<void> runModuleFile(Realm* realm, const std::string& path, std::u16string
 
 // The directory scripts resolve dynamic import() specifiers against (the main script's).
 void setScriptDirectory(const std::string& directory);
+
+// ShadowRealmImportValue step 7: HostLoadImportedModule(realm, specifier, ~empty~, capability), then the dynamic-import
+// continuation (ContinueDynamicImport): load, link and evaluate in `realm`'s module map, with `realm` as the referrer
+// (relative specifiers resolve against the script directory, as for a Script referrer); `capability` is resolved with
+// the module namespace object or rejected with the error. Call it with an execution context for `realm` running.
+void ImportModuleForRealm(Realm* realm, String* specifier, PromiseCapability* capability);
 
 }  // namespace snowman::interp

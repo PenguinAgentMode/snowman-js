@@ -53,6 +53,7 @@ struct Scope {
     Lex kind;
     Node* node;
     uint32_t count;
+    std::vector<Node*> duplicates;  // sloppy mode: further plain function declarations of the name (B.3.2.4)
   };
   std::unordered_map<std::u16string, Entry> lexical;
   std::unordered_set<std::u16string> vars;       // declared here or hoisted through here
@@ -145,6 +146,12 @@ class Parser {
   // --- tokens
   void next();
   Token peek();
+  // The two tokens after the current one.
+  std::pair<Token, Token> peek2();
+  // An unescaped contextual word (`defer`, `source`).
+  bool isContextual(std::u16string_view word) const { return tok_.type == T::Name && !tok_.escaped && tok_.str == word; }
+  // At `source` after `import`: `import source x from` (a source phase import) rather than `import source from`.
+  bool isSourcePhaseImport();
   bool is(T t) const { return tok_.type == t; }
   bool isKw(K k) const { return tok_.type == T::Name && tok_.kw == k && !tok_.escaped; }
   bool isName() const { return tok_.type == T::Name; }
@@ -252,7 +259,7 @@ class Parser {
   bool isUsing(bool forHead);
   bool isAwaitUsing(bool forHead);
   bool isAsyncFunction();
-  uint32_t addModuleRequest(Literal* source, const std::vector<ImportAttribute*>& attributes);
+  uint32_t addModuleRequest(Literal* source, const std::vector<ImportAttribute*>& attributes, ImportPhase phase);
   void finishModule(Program* program);
 
   // --- expressions (expressions.cpp)

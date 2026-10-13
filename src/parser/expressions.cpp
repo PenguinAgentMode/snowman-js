@@ -354,6 +354,17 @@ Node* Parser::parseExprSubscripts(DestructuringErrors* refErrors, bool noIn) {
   Node* expr = parseExprAtom(refErrors, noIn);
   if (expr->is<ArrowFunctionExpression>() && !expr->parenthesized) return expr;
   Node* result = parseSubscripts(expr, start, false, noIn);
+  if (refErrors && result != expr) {
+    // An object or array literal with a property access, call or tagged template after it is an operand, never an
+    // AssignmentPattern, so its CoverInitializedName (`{a = 0}`) and duplicate __proto__ errors stand even inside
+    // a destructuring target: `[{a = 0}.x] = []`.
+    if (refErrors->shorthandAssign >= static_cast<int64_t>(expr->start)) {
+      raise(static_cast<uint32_t>(refErrors->shorthandAssign), "Invalid shorthand property initializer");
+    }
+    if (refErrors->doubleProto >= static_cast<int64_t>(expr->start)) {
+      raise(static_cast<uint32_t>(refErrors->doubleProto), "Duplicate __proto__ fields are not allowed in object literals");
+    }
+  }
   if (refErrors && result->is<MemberExpression>()) {
     if (refErrors->parenthesizedAssign >= static_cast<int64_t>(result->start)) refErrors->parenthesizedAssign = -1;
     if (refErrors->parenthesizedBind >= static_cast<int64_t>(result->start)) refErrors->parenthesizedBind = -1;
@@ -732,9 +743,11 @@ Node* Parser::parseNew() {
 Node* Parser::parseImportExpr(bool forNew) {
   Pos start = here();
   next();  // import
-  if (is(T::LParen) && !forNew) {
+  // ImportCallArguments: ( AssignmentExpression ,? ) or ( AssignmentExpression , AssignmentExpression ,? )
+  auto importCall = [&](ImportPhase phase) {
     auto* node = startNode<ImportExpression>(start);
-    next();
+    node->phase = phase;
+    next();  // (
     node->source = parseMaybeAssign();
     if (eat(T::Comma)) {
       if (!is(T::RParen)) {
@@ -744,6 +757,18 @@ Node* Parser::parseImportExpr(bool forNew) {
     }
     expect(T::RParen);
     return finish(node);
+  };
+  if (is(T::LParen) && !forNew) return importCall(ImportPhase::Evaluation);
+  // import.defer(...) (import defer) and import.source(...) (source phase imports): always called, never after `new`.
+  if (is(T::Dot)) {
+    Token property = peek();
+    if (property.type == T::Name && !property.escaped && (property.str == u"defer" || property.str == u"source")) {
+      ImportPhase phase = property.str == u"defer" ? ImportPhase::Defer : ImportPhase::Source;
+      next();  // .
+      next();  // defer / source
+      if (!is(T::LParen) || forNew) unexpected();
+      return importCall(phase);
+    }
   }
   if (is(T::Dot)) {
     auto* node = startNode<MetaProperty>(start);
