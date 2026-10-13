@@ -15,6 +15,9 @@
     the baseline STATUS.md names. Every `REGRESSION` line (a file that passes on main and fails on your branch)
     is fixed or explained in the merge request (passing by accident; a timeout re-run alone with `--filter` and
     passing). A +20/−20 swap is not a clean gate.
+- **Gates run main's runner**: run the gate with the current main's `t262/` (a main worktree, or
+  `git show origin/main:t262/runner/run.mjs`) against your branch's engine binary, never your branch's own runner;
+  rebase an old-based branch before gating anyway.
 - **Merge only a gated sha**: the lead merges exactly the commit whose full ES-core gate is clean (every
   REGRESSION line fixed or explained). A fix for a gate regression needs its own full gate before it merges; a
   slice check is for development, never for merging.
