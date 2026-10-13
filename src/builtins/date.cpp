@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <ctime>
 
+#include "builtins/temporal/temporal.h"
 #include "builtins/util.h"
 #include "runtime/function.h"
 
@@ -612,6 +613,15 @@ Result<Value> DatePrototype_valueOf(NativeCall& call) {
   return num(d->dateValue);
 }
 
+// Date.prototype.toTemporalInstant ( ) (proposal-temporal)
+Result<Value> DatePrototype_toTemporalInstant(NativeCall& call) {
+  DateObject* d = TRY(thisDate(call.thisValue));
+  double t = d->dateValue;
+  if (!std::isfinite(t)) return ThrowRangeError("Invalid Date cannot be converted to a Temporal.Instant");
+  temporal::EpochNanoseconds ns = temporal::EpochNanoseconds(int64_t(t)) * 1000000;
+  return Value(TRY(temporal::CreateTemporalInstant(ns)));
+}
+
 // 21.4.4.45 Date.prototype [ @@toPrimitive ] ( hint )
 Result<Value> DatePrototype_toPrimitive(NativeCall& call) {
   Value o = call.thisValue;
@@ -683,6 +693,7 @@ void installDate(Realm& realm) {
       {u"toLocaleString", 0, formatter<Format::Full>},
       {u"toLocaleTimeString", 0, formatter<Format::TimeOnly>},
       {u"toString", 0, formatter<Format::Full>},
+      {u"toTemporalInstant", 0, DatePrototype_toTemporalInstant},
       {u"toTimeString", 0, formatter<Format::TimeOnly>},
       {u"valueOf", 0, DatePrototype_valueOf},
   };
