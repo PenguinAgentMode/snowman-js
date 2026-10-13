@@ -15,5 +15,11 @@
     the baseline STATUS.md names. Every `REGRESSION` line (a file that passes on main and fails on your branch)
     is fixed or explained in the merge request (passing by accident; a timeout re-run alone with `--filter` and
     passing). A +20/−20 swap is not a clean gate.
+- **Report every ~30 minutes**, even mid-task: one line to the lead (agent_send to="parent"): the branch sha
+  pushed, the pass count on your directories, the next step, blockers. Silence reads as a problem.
+- **Merge per feature**: when one feature (a built-in, a constructor, a class) reaches a stable pass count,
+  gate it and ask to merge. Don't hold it for the rest of your area; later batches get their own gate.
+- **Machines**: 4 GB enforced, shared by the build and the run: `make -j4`, `--jobs 4`. Push after every
+  meaningful step; a killed machine loses everything unpushed.
 - **Never** edit `t262/` or test262 to make a test pass, and never special-case a test file.
 - **Report numbers, not impressions:** "test/language/literals 812 → 1,003 of 1,041 (`make slice`)".
