@@ -73,6 +73,10 @@ class DeclarativeEnvironment : public Environment {
   // A new binding initialized to `value` (CreateMutableBinding + InitializeBinding).
   void createInitializedBinding(String* name, Value value, bool mutable_ = true);
   const std::vector<Binding>& bindings() const { return bindings_; }
+  // Every binding back to uninitialized (a reused loop iteration environment).
+  void resetBindings() {
+    for (Binding& binding : bindings_) binding.value = Value::empty();
+  }
 
   // The environment of a catch clause (B.3.4: eval code may redeclare its parameter with var).
   bool isCatchEnvironment = false;

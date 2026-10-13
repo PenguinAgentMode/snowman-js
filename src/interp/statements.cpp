@@ -298,7 +298,8 @@ Result<Completion> evaluateFor(const ForStatement* node, const LabelSet* labels)
     }
     setLexicalEnvironment(loopEnv);
     TRY(evaluateVariableDeclaration(declaration));
-    if (isConst) boundNames.clear();
+    // Per-iteration copies are unobservable when nothing in the loop can capture an iteration's environment.
+    if (isConst || !loopMayCaptureEnvironment(node)) boundNames.clear();
     return ForBodyEvaluation(node, boundNames, labels);
   }
   if (init) {
@@ -390,7 +391,6 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
                                    const LabelSet* labels) {
   InterpContext* context = runningContext();
   Environment* oldEnv = context->lexicalEnvironment;
-  (void)node;
 
   LhsKind lhsKind = LhsKind::Assignment;
   const Node* lhs = left;
@@ -443,6 +443,7 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
 
   // ForIn/OfBodyEvaluation
   Value V = Value::undefined();
+  DeclarativeEnvironment* reusableEnv = nullptr;
   bool destructuring = isDestructuring(lhs);
   while (true) {
     Value nextValue;
@@ -461,8 +462,14 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
 
     Result<void> status;
     DeclarativeEnvironment* iterationEnv = nullptr;
-    if (lhsKind == LhsKind::LexicalBinding) {
+    if (lhsKind == LhsKind::LexicalBinding && reusableEnv) {
+      // Nothing can capture an iteration's environment: reuse one, back in its TDZ state.
+      iterationEnv = reusableEnv;
+      iterationEnv->resetBindings();
+      context->lexicalEnvironment = iterationEnv;
+    } else if (lhsKind == LhsKind::LexicalBinding) {
       iterationEnv = snowman::make<DeclarativeEnvironment>(oldEnv);
+      if (!loopMayCaptureEnvironment(node)) reusableEnv = iterationEnv;
       for (const auto& d : declarations) {
         for (const auto& dn : d.boundNames) {
           if (isConst) {

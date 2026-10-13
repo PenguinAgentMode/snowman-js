@@ -280,6 +280,14 @@ Result<Value> evaluateGeneratorLikeBody(ECMAScriptFunction* F);
 Result<void> AsyncIteratorClose(const IteratorRecord& record, Result<void> completion);
 Result<IteratorRecord> GetAsyncIterator(Value object);
 
+// ---- Static analysis (analysis.cpp) ----
+
+// Whether evaluating `node` may capture the running environment: a function, class or arrow, or a direct
+// eval candidate. Conservative: true for any node kind it does not know.
+bool mayCaptureEnvironment(const ast::Node* node);
+// mayCaptureEnvironment(loop), cached on the loop node.
+bool loopMayCaptureEnvironment(const ast::Node* loop);
+
 // ---- Modules (module.cpp) ----
 
 Result<Value> evaluateImportCall(const ast::ImportExpression* node);
