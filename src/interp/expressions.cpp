@@ -630,7 +630,8 @@ Value typeofValue(Value value) {
       name = u"bigint";
       break;
     case ValueType::Object:
-      name = value.asObject()->isCallable() ? u"function" : u"object";
+      if (value.asObject()->isHTMLDDA()) name = u"undefined";  // B.3.6.3
+      else name = value.asObject()->isCallable() ? u"function" : u"object";
       break;
   }
   return Value(atom(name));

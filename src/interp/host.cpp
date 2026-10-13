@@ -7,6 +7,7 @@
 #include "runtime/errors.h"
 #include "runtime/heap.h"
 #include "runtime/operations.h"
+#include "runtime/wrappers.h"
 
 namespace snowman::interp {
 
@@ -69,6 +70,9 @@ void installHostBindings(Realm* realm) {
   defineFunction(r, host, PropertyKey(u"gc"), 0, hostGc);
   defineValue(host, PropertyKey(u"global"), Value(realm->globalObject()));
   defineValue(host, PropertyKey(u"AbstractModuleSource"), Value(realm->intrinsic(Intrinsic::AbstractModuleSource)));
+  // $262.IsHTMLDDA (INTERPRETING.md): an [[IsHTMLDDA]] object; calling it returns null.
+  defineValue(host, PropertyKey(u"IsHTMLDDA"),
+              Value(make<HTMLDDAObject>(realm->intrinsic(Intrinsic::ObjectPrototype))));
   realmState(realm)->host262 = host;
   defineGlobal(r, PropertyKey(u"$262"), Value(host));
 }
