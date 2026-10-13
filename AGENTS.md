@@ -21,7 +21,9 @@
 - **Merging from an older base** (the lead's rule): a branch gated on an older main may merge only if no file
   it changes was changed on main since its base. After every merge, or batch of merges, the lead has the full
   suite run on the new main (`tools/lead/measure.sh suite <baseline>`) and `gate.mjs` against the previous
-  baseline. Any regression reverts the offending merge at once; it comes back re-gated on current main.
+  baseline. An ES-core regression reverts the offending merge at once; it comes back re-gated on current main.
+  A full-suite-only regression reverts too, unless it is explained (it passed by accident, e.g. vacuously
+  before a feature existed; or a timeout that passes alone) and STATUS.md waives it with an owner and a fix.
   Every published number names the main commit it was measured on.
 - **Background runs get a completion monitor.** Before ending a turn with a long run going (gate, suite run,
   build) in the background, attach a `monitor` that fires when it finishes, e.g. a command source that waits
