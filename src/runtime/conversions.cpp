@@ -64,7 +64,7 @@ bool ToBoolean(Value argument) {
     case ValueType::BigInt:
       return !argument.asBigInt()->isZero();
     case ValueType::Object:
-      return true;  // [[IsHTMLDDA]] is not supported
+      return !argument.asObject()->isHTMLDDA();  // B.3.6.1
   }
   return false;
 }
@@ -190,6 +190,10 @@ double NumberExponentiate(double base, double exponent) {
 }
 
 int32_t DoubleToInt32(double d) {
+  if (d >= -2147483648.0 && d <= 2147483647.0) {
+    int32_t i = int32_t(d);
+    if (double(i) == d) return i;
+  }
   if (!std::isfinite(d) || d == 0) return 0;
   double m = std::fmod(std::trunc(d), 4294967296.0);
   if (m < 0) m += 4294967296.0;
