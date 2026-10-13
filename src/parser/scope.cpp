@@ -182,9 +182,15 @@ void Parser::markArguments() {
 // Scopes and declarations
 
 Scope* Parser::enterScope(Scope::Kind kind, std::vector<LexicalDeclaration>* annotation) {
-  auto owned = std::make_unique<Scope>();
-  Scope* s = owned.get();
-  scopePool_.push_back(std::move(owned));
+  Scope* s;
+  if (kind != Scope::Kind::Root && !freeScopes_.empty()) {
+    s = freeScopes_.back();
+    freeScopes_.pop_back();
+  } else {
+    auto owned = std::make_unique<Scope>();
+    s = owned.get();
+    scopePool_.push_back(std::move(owned));
+  }
   s->kind = kind;
   s->parent = scope_;
   s->annotation = annotation;
@@ -216,6 +222,11 @@ void Parser::exitScope() {
     }
   }
   scope_ = s->parent;
+  // Nothing refers to an exited block, catch, for or switch scope: reuse it (2^21 sibling blocks need one).
+  if (s->kind != Scope::Kind::Root) {
+    *s = Scope();
+    freeScopes_.push_back(s);
+  }
 }
 
 void Parser::declareVarName(const std::u16string& name, uint32_t pos) {

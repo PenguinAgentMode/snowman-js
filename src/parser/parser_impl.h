@@ -133,6 +133,7 @@ class Parser {
   bool potentialArrowInForAwait_ = false;
   std::vector<std::unique_ptr<FnCtx>> ctxPool_;
   std::vector<std::unique_ptr<Scope>> scopePool_;
+  std::vector<Scope*> freeScopes_;  // exited non-root scopes, reused by enterScope (a root outlives its exit)
   std::vector<std::unique_ptr<PrivateScope>> privatePool_;
   // Names collected by the current checkLVal* pass (BoundNames).
   std::vector<std::u16string>* collect_ = nullptr;
