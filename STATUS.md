@@ -59,6 +59,9 @@ Not in 317949e37's run:
 - 6203fc5 ws/agent3 d995052 ($262.agent step 3: SharedBlock + std::atomic_ref Atomics; arraybuffer.h additive).
   Gate vs 317949e37: ES-core 0, full 0 regressions (neutral with one agent).
 - b84715f ws/staging-date 8d8a20932 (Date.parse legacy grammar; date.cpp). Gate vs 317949e37: 0 / 0; +2 staging.
+- 1a9f084 ws/intlfmt ac942bf2d (Intl.DateTimeFormat in every CLDR calendar through CalendarISOToDate; per-calendar
+  CLDR data generated reproducibly). Gate vs 317949e37: 0 / 0; intl402 +23 (17 DTF + 6 Ramadan). Behaviour change:
+  locales whose default calendar isn't Gregorian (th, fa, …) now format in it, as ICU does.
 - 1c12abb ws/chinese e55fdaf28 (Chinese/Dangi 1900–2100 from astronomy in tools/temporal/gen-calendars.mjs +
   astro.mjs, ICU outside; regenerated .inc). Gate vs 317949e37: 0 / 0; +9 intl402/Temporal (the ICU data gap).
 

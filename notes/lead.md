@@ -32,7 +32,7 @@ How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort
 | perf | started 17:35 | interpreter speed (binding caches, env slots, GC roots); flaky DST timeouts | ws/perf; notes/perf.md |
 | decorators2 | started 16:46 | decorators (22 + 2 staging), from ws/decorators fb2d287 | ws/decorators2; notes/decorators2.md |
 | staging | LIVE 16:45 | staging: Date merged; regexp + caller gating; then the approved runner change ws/runner-strict (13 sm/strict) | ws/staging*; notes/staging.md |
-| intlfmt | LIVE 16:45 | non-Gregorian DTF output (~17 intl402), Ramadan (6), tz link (1) | ws/intlfmt; notes/intlfmt.md |
+| intlfmt | done, closed (merged 1a9f084) | — | ws/intlfmt ac942bf2d |
 | memcap, temporal2, survey, temporal, intl | machines stopped 16:33 | — | all their commits are on origin (see STATUS) |
 | calendars, calendars2, calendars3, decorators | never started ("no hosts") | — | — |
 
