@@ -649,7 +649,7 @@ PluralRuleSet buildRuleSet(std::string_view locale, bool ordinal) {
 }  // namespace
 
 const PluralRuleSet& pluralRulesFor(std::string_view locale, bool ordinal) {
-  static std::vector<std::pair<std::string, PluralRuleSet>> cache[2];
+  thread_local std::vector<std::pair<std::string, PluralRuleSet>> cache[2];
   auto& c = cache[ordinal ? 1 : 0];
   for (const auto& [l, set] : c)
     if (l == locale) return set;

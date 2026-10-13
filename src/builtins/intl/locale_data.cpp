@@ -40,7 +40,7 @@ std::string parentLocale(std::string_view locale) {
 }
 
 std::string dataKey(std::string_view locale) {
-  static std::vector<std::pair<std::string, std::string>> cache;
+  thread_local std::vector<std::pair<std::string, std::string>> cache;
   for (const auto& [l, k] : cache)
     if (l == locale) return k;
   std::string key(locale);
