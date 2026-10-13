@@ -43,7 +43,7 @@ ES-core reached M8 (97.99%). The goal now is the full suite's pass rate without 
 | Memory safety (gate for everything) | — | memcap | watchdog merged 8e39780; stack budgets + `ulimit -v` next |
 | test/built-ins/Temporal | 4,605 | temporal | ISO calendar, UTC/offset zones; new `src/builtins/temporal/` |
 | test/intl402/Temporal | 2,029 | later | needs IANA tz data + non-ISO calendars: after Temporal + Intl |
-| test/intl402 (other) | ~1,330 | after survey | Intl constructors, option processing, minimal locale data |
+| test/intl402 (other) | ~1,330 | intl | Intl constructors, option processing, minimal locale data |
 | test/staging | ~1,480 | after survey | mostly staging/sm (SpiderMonkey's non262 imports) |
 | Proposal-tagged files in language/, built-ins/, annexB | ~800 | after survey | language/expressions 399, language/import 113, Promise 89, ShadowRealm 64, Error 35, ArrayBuffer 29 |
 | ES-core long tail | ~870 | later | 35 tail-call tests pass only via the 1 GB main stack (proper tail calls needed to shrink it) |

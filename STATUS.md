@@ -4,6 +4,7 @@
 | --- | --- | --- | --- | --- |
 | memcap | memcap | `ws/memcap` | `src/interp/coroutine.{h,cpp}`, stack-size users; `t262/runner/run.mjs` (authorized) | watchdog merged (8e39780); engine stack budgets + `ulimit -v` in progress |
 | temporal | temporal | `ws/temporal` | `src/builtins/temporal/`; additive Intrinsics in realm.h; Date.prototype.toTemporalInstant | started: foundation + Duration first |
+| intl | intl | `ws/intl` | `src/builtins/intl/`, `tools/intl/`; additive Intrinsics in realm.h | started: plumbing for all constructors first |
 | survey | survey | `ws/survey` | `tools/lead/survey-full.md` (analysis only) | running the 10,311 non-ES-core files of the full suite; failure clusters |
 | parser, regexp, interp, modules | (closed) | | | merged before M8 |
 | runtime, interp2 | (closed; previous team) | `ws/runtime` (+1), `ws/interp2` (+4) | | unmerged perf/IsHTMLDDA commits; to gate on ES-core before merging |
