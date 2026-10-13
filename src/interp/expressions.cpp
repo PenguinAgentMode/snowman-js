@@ -293,6 +293,30 @@ Result<Reference> evaluateMember(const MemberExpression* node, bool* shortCircui
   return ref;
 }
 
+// Evaluation + GetValue of `base.name` / `base[expression]` without materializing the Reference.
+Result<Value> evaluatePropertyValue(const MemberExpression* node) {
+  Value baseValue = TRY(evaluate(node->object));
+  Value propertyName;
+  std::optional<PropertyKey> key;
+  if (!node->computed) {
+    key = PropertyKey(identifierName(node->property->as<Identifier>()));
+  } else {
+    propertyName = TRY(evaluate(node->property));
+  }
+  if (baseValue.isNullish()) {
+    Reference ref;
+    ref.kind = Reference::Kind::Property;
+    ref.base = baseValue;
+    ref.propertyName = propertyName;
+    ref.key = key;
+    return throwNullishBase(baseValue, ref, "read");
+  }
+  if (!key) key = TRY(ToPropertyKey(propertyName));
+  if (baseValue.isObject()) return baseValue.asObject()->Get(*key, baseValue);
+  Object* baseObj = TRY(ToObject(baseValue));
+  return baseObj->Get(*key, baseValue);
+}
+
 Value thisValueForCall(const Reference& ref) {
   if (ref.isPropertyReference()) return GetThisValue(ref);
   if (ref.kind == Reference::Kind::Environment) return ref.env->WithBaseObject();
@@ -813,7 +837,16 @@ Result<Value> evaluate(const Node* node) {
       Value test = TRY(evaluate(conditional->test));
       return evaluate(ToBoolean(test) ? conditional->consequent : conditional->alternate);
     }
-    case NodeType::MemberExpression:
+    case NodeType::MemberExpression: {
+      TRY(CheckStack());
+      auto* member = node->as<MemberExpression>();
+      if (member->object->type != NodeType::Super && member->property->type != NodeType::PrivateIdentifier &&
+          !member->optional) {
+        return evaluatePropertyValue(member);
+      }
+      Reference ref = TRY(evaluateReference(node));
+      return GetValue(ref);
+    }
     case NodeType::CallExpression:
     case NodeType::ChainExpression: {
       TRY(CheckStack());
