@@ -16,4 +16,7 @@ Branch `ws/stability` from main 19dc921 (label 19dc92105). Measurement only, no 
 - 4 full runs of 19dc92105 (lead's suite.jsonl + rep-1..3, results branch results/19dc92105/): 102,698 / 102,994
   scenarios passing in every run, 0 scenarios differ (timeout 0, crash 0, memory 0, other 0). tools/lead/flaky.md.
 - Near the timeout (same status, >= 8 s once): staging/sm/Date/dst-offset-caching-8-of-8.js (6.3-8.5 s, passes).
-- Parse-only ES-core: running on $HOME/engine-19dc92105 (copy of ./engine, same sha256), done-file parse.done.
+- Parse-only ES-core on $HOME/engine-19dc92105 (copy of ./engine, same sha256): 82,724 / 82,724 scenarios,
+  results/19dc92105-parse.json. `milestones.mjs results/19dc92105.json --parse-only results/19dc92105-parse.json`:
+  REACHED M1a (100.0% / 100.0%), REACHED M1b (100.0% / 100.0%).
+- Next (ws/runner-strict): gate chain $HOME/logs/gate-chain.sh, same binary: new-runner full, old/new parse-only full.
