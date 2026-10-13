@@ -1,6 +1,7 @@
 // %IteratorPrototype%, %AsyncIteratorPrototype%, the Iterator constructor and the iterator helpers (27.1).
 #include <cmath>
 
+#include "builtins/iterator_closure_helper.h"
 #include "builtins/util.h"
 #include "runtime/function.h"
 
@@ -74,14 +75,22 @@ Result<Value> WrapForValid_return(NativeCall& call) {
 
 // An iterator helper (27.1.2.1): the generator-like state machine behind map/filter/take/drop/flatMap.
 enum class HelperKind { Map, Filter, Take, Drop, FlatMap, Concat };
-enum class HelperState { SuspendedStart, SuspendedYield, Executing, Completed };
+Result<std::optional<Value>> helperStep(class IteratorHelper* h);
+Result<void> closeHelperIterators(class IteratorHelper* h);
 
-class IteratorHelper : public Object {
+// The helpers whose closures live here; ClosureIteratorHelper (iterator_closure_helper.h) holds the
+// generator state that %IteratorHelperPrototype%.next/return drive for every helper.
+class IteratorHelper : public ClosureIteratorHelper {
  public:
-  IteratorHelper(Object* prototype, HelperKind kind, IteratorRecord underlying, Value fn, double limit)
-      : Object(prototype), kind(kind), underlying(underlying), fn(fn), remaining(limit) {}
+  IteratorHelper(HelperKind kind, IteratorRecord underlying, Value fn, double limit)
+      : kind(kind), underlying(underlying), fn(fn), remaining(limit) {}
+  Result<std::optional<Value>> resume() override { return helperStep(this); }
+  Result<void> resumeWithReturn() override { return closeHelperIterators(this); }
+  Result<void> closeUnderlyingIterators() override {
+    if (kind == HelperKind::Concat) return {};
+    return IteratorClose(underlying, Result<void>());
+  }
   HelperKind kind;
-  HelperState state = HelperState::SuspendedStart;
   IteratorRecord underlying;
   Value fn;
   double counter = 0;
@@ -182,30 +191,11 @@ Result<std::optional<Value>> helperStep(IteratorHelper* h) {
   return std::optional<Value>();
 }
 
-Result<IteratorHelper*> thisHelper(Value v) {
+Result<ClosureIteratorHelper*> thisHelper(Value v) {
   if (v.isObject()) {
-    if (auto* h = v.asObject()->as<IteratorHelper>()) return h;
+    if (auto* h = v.asObject()->as<ClosureIteratorHelper>()) return h;
   }
   return ThrowTypeError("not an Iterator Helper");
-}
-
-// 27.1.2.1.1 %IteratorHelperPrototype%.next ( )
-Result<Value> IteratorHelper_next(NativeCall& call) {
-  IteratorHelper* h = TRY(thisHelper(call.thisValue));
-  if (h->state == HelperState::Executing) return ThrowTypeError("Iterator Helper is already running");
-  if (h->state == HelperState::Completed) return Value(CreateIteratorResultObject(Value::undefined(), true));
-  h->state = HelperState::Executing;
-  Result<std::optional<Value>> r = helperStep(h);
-  if (r.isThrow()) {
-    h->state = HelperState::Completed;
-    return Throw{r.thrown()};
-  }
-  if (!r.value()) {
-    h->state = HelperState::Completed;
-    return Value(CreateIteratorResultObject(Value::undefined(), true));
-  }
-  h->state = HelperState::SuspendedYield;
-  return Value(CreateIteratorResultObject(*r.value(), false));
 }
 
 // The closure's response to a return completion at its Yield: close what it is iterating.
@@ -221,20 +211,45 @@ Result<void> closeHelperIterators(IteratorHelper* h) {
   return IteratorClose(h->underlying, Result<void>());
 }
 
-// 27.1.2.1.2 %IteratorHelperPrototype%.return ( )
-Result<Value> IteratorHelper_return(NativeCall& call) {
-  IteratorHelper* h = TRY(thisHelper(call.thisValue));
-  if (h->state == HelperState::SuspendedStart) {
-    h->state = HelperState::Completed;
-    if (h->kind != HelperKind::Concat) TRY(IteratorClose(h->underlying, Result<void>()));
+using State = ClosureIteratorHelper::State;
+
+// 27.1.2.1.1 %IteratorHelperPrototype%.next ( ): GeneratorValidate + GeneratorResume.
+Result<Value> IteratorHelper_next(NativeCall& call) {
+  ClosureIteratorHelper* h = TRY(thisHelper(call.thisValue));
+  if (h->state == State::Executing) return ThrowTypeError("Iterator Helper is already running");
+  if (h->state == State::Completed) return Value(CreateIteratorResultObject(Value::undefined(), true));
+  h->state = State::Executing;
+  Result<std::optional<Value>> r = h->resume();
+  if (r.isThrow()) {
+    h->state = State::Completed;
+    return Throw{r.thrown()};
+  }
+  if (!r.value()) {
+    h->state = State::Completed;
     return Value(CreateIteratorResultObject(Value::undefined(), true));
   }
-  if (h->state == HelperState::Completed) return Value(CreateIteratorResultObject(Value::undefined(), true));
-  if (h->state == HelperState::Executing) return ThrowTypeError("Iterator Helper is already running");
-  // GeneratorResumeAbrupt: the closure runs (closing its iterators) in the executing state.
-  h->state = HelperState::Executing;
-  Result<void> closed = closeHelperIterators(h);
-  h->state = HelperState::Completed;
+  h->state = State::SuspendedYield;
+  return Value(CreateIteratorResultObject(*r.value(), false));
+}
+
+// 27.1.2.1.2 %IteratorHelperPrototype%.return ( ): GeneratorResumeAbrupt with a return completion.
+Result<Value> IteratorHelper_return(NativeCall& call) {
+  ClosureIteratorHelper* h = TRY(thisHelper(call.thisValue));
+  switch (h->state) {
+    case State::SuspendedStart:
+      h->state = State::Completed;
+      TRY(h->closeUnderlyingIterators());
+      return Value(CreateIteratorResultObject(Value::undefined(), true));
+    case State::Completed:
+      return Value(CreateIteratorResultObject(Value::undefined(), true));
+    case State::Executing:
+      return ThrowTypeError("Iterator Helper is already running");
+    case State::SuspendedYield:
+      break;
+  }
+  h->state = State::Executing;
+  Result<void> closed = h->resumeWithReturn();
+  h->state = State::Completed;
   if (closed.isThrow()) return Throw{closed.thrown()};
   return Value(CreateIteratorResultObject(Value::undefined(), true));
 }
@@ -257,7 +272,7 @@ Result<Value> makeHelper(NativeCall& call, HelperKind kind) {
     if (!IsCallable(fn)) return closeIteratorWithThrow(iterated, ThrowTypeError("callback is not a function").value);
   }
   iterated = TRY(GetIteratorDirect(o.asObject()));
-  return Value(make<IteratorHelper>(intrinsic(Intrinsic::IteratorHelperPrototype), kind, iterated, fn, limit));
+  return Value(make<IteratorHelper>(kind, iterated, fn, limit));
 }
 
 Result<Value> IteratorPrototype_map(NativeCall& call) { return makeHelper(call, HelperKind::Map); }
@@ -287,8 +302,7 @@ Result<Value> Iterator_concat(NativeCall& call) {
     iterables.push_back(item);
     rooted.push_back(method);
   }
-  IteratorHelper* gen = make<IteratorHelper>(intrinsic(Intrinsic::IteratorHelperPrototype), HelperKind::Concat,
-                                             IteratorRecord{}, Value::undefined(), 0);
+  IteratorHelper* gen = make<IteratorHelper>(HelperKind::Concat, IteratorRecord{}, Value::undefined(), 0);
   gen->iterables = std::move(iterables);
   return Value(gen);
 }
