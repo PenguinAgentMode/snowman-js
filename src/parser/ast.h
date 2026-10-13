@@ -84,7 +84,9 @@ namespace snowman::ast {
   X(ClassBody)                    \
   X(MethodDefinition)             \
   X(PropertyDefinition)           \
+  X(AccessorProperty)             \
   X(StaticBlock)                  \
+  X(Decorator)                    \
   X(ImportDeclaration)            \
   X(ImportSpecifier)              \
   X(ImportDefaultSpecifier)       \
@@ -556,10 +558,19 @@ struct VariableDeclarator : Node {
 // Classes
 
 // ClassDeclaration and ClassExpression; `node->is<Class>()` matches both.
+// `@expression` (decorators): a DecoratorMemberExpression (`@a.b.#c`), DecoratorCallExpression (`@a.b(x)`) or
+// DecoratorParenthesizedExpression (`@(e)`).
+struct Decorator : Node {
+  using Base = Node;
+  SNOWMAN_AST_NODE(Decorator)
+  Expression* expression = nullptr;
+};
+
 struct Class : Node {
   Identifier* id = nullptr;            // nullable
   Expression* superClass = nullptr;    // nullable
   ClassBody* body = nullptr;
+  std::vector<Decorator*> decorators;  // in source order
 
   // Static semantics.
   MethodDefinition* constructor = nullptr;  // the explicit `constructor(...) {}`, or null
@@ -586,7 +597,7 @@ struct ClassExpression : Class {
 struct ClassBody : Node {
   using Base = Node;
   SNOWMAN_AST_NODE(ClassBody)
-  std::vector<Node*> body;  // MethodDefinition, PropertyDefinition, StaticBlock
+  std::vector<Node*> body;  // MethodDefinition, PropertyDefinition, AccessorProperty, StaticBlock
 };
 
 enum class MethodKind : uint8_t { Constructor, Method, Get, Set };
@@ -599,6 +610,7 @@ struct MethodDefinition : Node {
   MethodKind kind = MethodKind::Method;
   bool computed = false;
   bool isStatic = false;  // ESTree `static`
+  std::vector<Decorator*> decorators;
 };
 
 // A class field. Its initializer runs as a method of its own (ClassFieldDefinition): `this` is the
@@ -612,6 +624,20 @@ struct PropertyDefinition : Node {
   bool isStatic = false;  // ESTree `static`
   // Static semantics: the initializer contains a direct eval (incl. nested arrows).
   bool hasDirectEval = false;
+  std::vector<Decorator*> decorators;
+};
+
+// `accessor x = v;` (decorators: an auto-accessor): a getter/setter pair over a private storage field the
+// initializer fills, like a field.
+struct AccessorProperty : Node {
+  using Base = Node;
+  SNOWMAN_AST_NODE(AccessorProperty)
+  Expression* key = nullptr;
+  Expression* value = nullptr;  // nullable
+  bool computed = false;
+  bool isStatic = false;
+  bool hasDirectEval = false;
+  std::vector<Decorator*> decorators;
 };
 
 // `static { ... }`: runs as a method with a var scope of its own (ClassStaticBlockDefinition).
