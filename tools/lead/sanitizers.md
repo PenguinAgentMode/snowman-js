@@ -26,6 +26,7 @@ Owner: hardening. The full suite under an ASan+UBSan engine, triaged by top fram
 
 | Top frame | Kind | Tests (example) | Status |
 | --- | --- | --- | --- |
+| builtins/typedarray.cpp:90 InitializeTypedArrayFromTypedArray | UBSan nonnull-attribute: memcpy with a null pointer (a zero-length buffer's data()), size 0 | UBSan sweep shard 0 (4 reports) | real (UB; GCC may drop later null checks); fix: skip the copy when empty. Open |
 
 ## Runs
 
