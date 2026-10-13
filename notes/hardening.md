@@ -33,24 +33,22 @@ Owner: hardening (sanitizer sweep: ASan + UBSan over the full suite). Lead: the 
   %TypedArray%.prototype.set x2; arraybuffer.cpp slice, transfer): guarded.
 - ASan + SNOWMAN_GC_STRESS=1: class.cpp ClassElements collected mid-ClassDefinitionEvaluation: Rooted (lead approved).
 
-## Pipeline now (lead's order, 22:30): fixes first, widened GC-stress pass after
+## State at 23:50 UTC
 
-- run-gate.sh: normal build at the tree (= 8d966b9 code) -> $HOME/engine-gate, waits for the UBSan driver
-  (ubsan-all.done), then the full suite --jobs 4 -> gate-8d966b9.jsonl, marker gate.done/.fail. Then
-  `node tools/lead/gate.mjs results/5f3218f30.json $HOME/logs/gate-8d966b9.jsonl` (and -full), statics.mjs, JSONL to the
-  results branch, MR.
-- run-verify.sh (on $HOME/t262-b): the 16 class files under ASan+GC_STRESS=1 with engine-asan2 (gcsv.done), then the
-  UBSan rebuild at 8d966b9 (engine-ubsan2) and TypedArray/TypedArrayConstructors/ArrayBuffer under the old vs the new
-  UBSan engine (ubv.done: report-file counts).
-- UBSan shard 3/4 is DEFERRED ($HOME/engine-ubsan is a wrapper that fails fast once ub-2.done exists): rerun it later
-  with engine-ubsan2: `SHARDS=3`-style, `node t262/runner/run.mjs --engine $HOME/engine-ubsan2 --suite full --shard 3/4
-  --jobs 4` with UBSAN_OPTIONS=log_path=$HOME/logs/ubsan2/u:print_stacktrace=1.
-- AFTER the MR: the widened GC_STRESS=1 pass, $HOME/logs/run-gcs2.sh (edit it: engine-asan2 exists; drop the verify
-  block, it is done), over --shard 0/2 of class x2, generators, async-generators, for-await-of, Proxy, Reflect, Array
-  sort/splice/flat/flatMap, RegExp, Temporal (~17k scenarios, ~70 min at --jobs 3). New finds: second small merge,
-  or a written report + patch here.
-- Killing a background run from a later tool call doesn't work (separate PID namespaces): stop a queued script
-  through its own marker guards, or swap the engine path for a fail-fast wrapper.
+- MERGE REQUEST sent: exact sha 8d966b9 (on main c2fcc37). Gate vs results/5f3218f30{,-full}.json: 0 / 0 regressions,
+  0 new statics; full run 53,599 / 53,616 files; JSONL results/8d966b9/full.jsonl (results branch 17a9aea).
+  Evidence: the 16 class files 32/32, 0 ASan reports at GC_STRESS=1 (before: 16); UBSan TypedArray*/ArrayBuffer
+  30 report files before, 0 after.
+- RUNNING (left for a successor if this agent stops):
+  - UBSan shard 3/4 with engine-ubsan2 (fixed): $HOME/logs/run-ub3.sh -> ub3.done/.fail, reports $HOME/logs/ubsan3
+    (`DIRS=$HOME/logs/ubsan3 node $HOME/logs/triage.js`). Shards 0-2 found only the memcpy cluster (fixed).
+  - Widened GC_STRESS=1 pass: $HOME/logs/run-gcs2.sh (engine-asan2 = 8d966b9, --jobs 2, private copy $HOME/t262-b),
+    --shard 0/2 of each listed directory; per-directory lines in $HOME/logs/gcs2-progress.txt, reports in
+    $HOME/logs/gcs2 (`DIRS=$HOME/logs/gcs2 node $HOME/logs/triage.js`), marker gcs2.done/.fail. ~17k scenarios,
+    ~1.5-2 h at 2 jobs. Not yet covered: --shard 1/2 of the same directories.
+- A new find: root it like class.cpp (Rooted<T> across safepoints), rebuild the ASan engine, rerun the reporting
+  files at GC_STRESS=1, one normal gate, a small merge; or write the report + patch here.
+- Removed sanitizer engines/worktrees when done: $HOME/wt-asan, $HOME/wt-ubsan, $HOME/t262-b, $HOME/engine-*.
 
 ## Next steps
 
