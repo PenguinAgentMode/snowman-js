@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/normalize.h"
 #include "builtins/string_util.h"
 #include "builtins/util.h"
@@ -320,23 +321,12 @@ Result<Value> StringPrototype_lastIndexOf(NativeCall& call) {
   return num(-1);
 }
 
-// 22.1.3.12 String.prototype.localeCompare ( that ): code point order of the NFD forms, so canonically
-// equivalent strings compare equal.
+// ECMA-402 19.1.1 String.prototype.localeCompare ( that [ , locales [ , options ] ] ): an Intl.Collator's
+// CompareStrings (canonically equivalent strings compare equal).
 Result<Value> StringPrototype_localeCompare(NativeCall& call) {
   String* s = TRY(thisString(call.thisValue));
   String* that = TRY(ToString(call.args[0]));
-  std::u16string da = Normalize(s->view(), NormalizationForm::NFD), db = Normalize(that->view(), NormalizationForm::NFD);
-  std::u16string_view a = da, b = db;
-  size_t i = 0, j = 0;
-  while (i < a.size() && j < b.size()) {
-    CodePointRecord x = CodePointAt(a, i), y = CodePointAt(b, j);
-    if (x.codePoint != y.codePoint) return num(x.codePoint < y.codePoint ? -1 : 1);
-    i += size_t(x.codeUnitCount);
-    j += size_t(y.codeUnitCount);
-  }
-  if (i < a.size()) return num(1);
-  if (j < b.size()) return num(-1);
-  return num(0);
+  return intl::localeCompare(s, that, call.args[1], call.args[2]);
 }
 
 Result<Object*> createRegExp(Value pattern, Value flags) {
@@ -664,6 +654,14 @@ Result<Value> StringPrototype_toUpperCase(NativeCall& call) {
   return Value(transformCase(s, true));
 }
 
+// ECMA-402 19.1.2/19.1.3 String.prototype.toLocaleLowerCase / toLocaleUpperCase ( [ locales ] )
+template <bool upper>
+Result<Value> StringPrototype_toLocaleCase(NativeCall& call) {
+  String* s = TRY(thisString(call.thisValue));
+  std::string language = TRY(intl::transformCaseLanguage(call.args[0]));
+  return Value(intl::transformCase(s, language, upper, transformCase));
+}
+
 // 22.1.3.31 String.prototype.toWellFormed ( )
 Result<Value> StringPrototype_toWellFormed(NativeCall& call) {
   String* s = TRY(thisString(call.thisValue));
@@ -823,8 +821,8 @@ void installString(Realm& realm) {
       {u"split", 2, StringPrototype_split},
       {u"startsWith", 1, StringPrototype_startsWith},
       {u"substring", 2, StringPrototype_substring},
-      {u"toLocaleLowerCase", 0, StringPrototype_toLowerCase},
-      {u"toLocaleUpperCase", 0, StringPrototype_toUpperCase},
+      {u"toLocaleLowerCase", 0, StringPrototype_toLocaleCase<false>},
+      {u"toLocaleUpperCase", 0, StringPrototype_toLocaleCase<true>},
       {u"toLowerCase", 0, StringPrototype_toLowerCase},
       {u"toString", 0, StringPrototype_toString},
       {u"toUpperCase", 0, StringPrototype_toUpperCase},

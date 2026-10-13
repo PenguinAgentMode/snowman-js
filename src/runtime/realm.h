@@ -24,6 +24,12 @@ namespace snowman {
   X(ForInIteratorPrototype) X(Function) X(FunctionPrototype) X(GeneratorFunction) X(GeneratorFunctionPrototype) \
   X(GeneratorPrototype) X(Int8Array) X(Int8ArrayPrototype) X(Int16Array) X(Int16ArrayPrototype) X(Int32Array)   \
   X(Int32ArrayPrototype) X(isFinite) X(isNaN) X(Iterator) X(IteratorPrototype) X(IteratorHelperPrototype)       \
+  X(Intl) X(IntlCollator) X(IntlCollatorPrototype) X(IntlDateTimeFormat) X(IntlDateTimeFormatPrototype)       \
+  X(IntlDisplayNames) X(IntlDisplayNamesPrototype) X(IntlDurationFormat) X(IntlDurationFormatPrototype)         \
+  X(IntlListFormat) X(IntlListFormatPrototype) X(IntlLocale) X(IntlLocalePrototype) X(IntlNumberFormat)          \
+  X(IntlNumberFormatPrototype) X(IntlPluralRules) X(IntlPluralRulesPrototype) X(IntlRelativeTimeFormat)          \
+  X(IntlRelativeTimeFormatPrototype) X(IntlSegmenter) X(IntlSegmenterPrototype) X(IntlSegmentsPrototype)         \
+  X(IntlSegmentIteratorPrototype)                                                                                \
   X(JSON) X(Map) X(MapPrototype) X(MapIteratorPrototype) X(Math) X(Number) X(NumberPrototype) X(Object)         \
   X(ObjectPrototype) X(parseFloat) X(parseInt) X(Promise) X(PromisePrototype) X(Proxy) X(RangeError)            \
   X(RangeErrorPrototype) X(ReferenceError) X(ReferenceErrorPrototype) X(Reflect) X(RegExp) X(RegExpPrototype)   \
