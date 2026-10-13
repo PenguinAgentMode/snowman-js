@@ -3,7 +3,7 @@
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
 | parser | (closed) | `ws/parser` | `src/parser/`, `tools/parser/` | M1a + M1b reached (a43fced; main 2551c6978); agent closed |
-| regexp | regexp | `ws/regexp` | `src/regexp/`, `src/unicode/`, `tools/unicode/`, iterator_zip/iterator_chunking/atomics_wait_async built-ins | matcher + Iterator.zip/chunks merged (69c2ac0); Atomics.waitAsync |
+| regexp | (closed) | `ws/regexp` | `src/regexp/`, `src/unicode/`, iterator_zip/iterator_chunking/atomics_wait_async built-ins | done: validator, matcher, Iterator.zip/chunks, Atomics.waitAsync (48950e8, main c0eea11) |
 | runtime | runtime | `ws/runtime` | `src/runtime/`, `src/builtins/` except others' files | RegExp built-in merged (7a69924); built-in failures, perf |
 | interp | (closed; work recovered at e639ee9 and merged) | `ws/interp` | — | merged |
 | interp2 | interp2 | `ws/interp2` | `src/interp/` except modules; interp's built-in files; disposable_stack, async_disposable_stack, suppressed_error, array_from_async | detachArrayBuffer merged (cf35ee1); speed + GC on, explicit resource management (incl. module-level `using`), Array.fromAsync, language failures, perf |
