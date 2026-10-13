@@ -44,6 +44,9 @@ First measured full-suite run: **main 8a5df0b93** (`tools/lead/measure.sh suite 
 Not in 8a5df0b93's run; the next `measure.sh suite` on main covers them:
 - 5b81747 ws/builtins a87b211 (allKeyed, Error.stack, Iterator.join), gated on 6d73e90.
 - 00dc9d9 ws/temporal 7526397 (Temporal core + Duration + Plain*), gated on 8a5df0b.
+- 8e85e96 ws/builtins d0423a1 (legacy RegExp statics 26/26 + Function.prototype.toString fix in
+  builtins/function_prototype.cpp), gated on cfb908c (cf26874 alone: 1 regression, fixed by d0423a1; Function
+  893/893 on the fix).
 
 ## Decisions
 
