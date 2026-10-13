@@ -233,7 +233,7 @@ Result<Completion> evaluateDoWhile(const DoWhileStatement* node, const LabelSet*
     if (!LoopContinues(stmtResult, labels)) return UpdateEmpty(stmtResult, V);
     if (!stmtResult.value.isEmpty()) V = stmtResult.value;
     if (!ToBoolean(TRY(evaluate(node->test)))) return Completion::normal(V);
-    heap().maybeCollect();
+    safepoint();
   }
 }
 
@@ -244,7 +244,7 @@ Result<Completion> evaluateWhile(const WhileStatement* node, const LabelSet* lab
     Completion stmtResult = TRY(evaluateStatement(node->body));
     if (!LoopContinues(stmtResult, labels)) return UpdateEmpty(stmtResult, V);
     if (!stmtResult.value.isEmpty()) V = stmtResult.value;
-    heap().maybeCollect();
+    safepoint();
   }
 }
 
@@ -276,7 +276,7 @@ Result<Completion> ForBodyEvaluation(const ForStatement* node, const std::vector
     if (!result.value.isEmpty()) V = result.value;
     TRY(CreatePerIterationEnvironment(perIterationBindings));
     if (node->update) TRY(evaluate(node->update));
-    heap().maybeCollect();
+    safepoint();
   }
 }
 
@@ -527,7 +527,7 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
       return closeIterator(iteratorRecord, kind, std::move(result));
     }
     if (!result.value().value.isEmpty()) V = result.value().value;
-    heap().maybeCollect();
+    safepoint();
   }
 }
 

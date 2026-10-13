@@ -11,6 +11,7 @@
 #include "interp/function.h"
 #include "parser/ast.h"
 #include "parser/parser.h"
+#include "runtime/heap.h"
 #include "runtime/object.h"
 #include "runtime/operations.h"
 #include "runtime/result.h"
@@ -72,6 +73,17 @@ struct SuspendState {
 // back into a return completion of SuspendState::returnValue.
 inline Throw returnMarker() { return Throw{Value::empty()}; }
 inline bool isReturnMarker(Value thrown) { return thrown.isEmpty(); }
+
+// ---- Safepoints ----
+
+// A safepoint (function entry, loop back-edge): collects when the heap's budget is spent, or every
+// gcStressInterval safepoints when set (SNOWMAN_GC_STRESS=N, for finding unrooted cells).
+extern unsigned gcStressInterval;
+void stressCollect();
+inline void safepoint() {
+  if (gcStressInterval) return stressCollect();
+  heap().maybeCollect();
+}
 
 // ---- Execution contexts ----
 
@@ -157,6 +169,7 @@ Object* GetGlobalObject();
 
 // The atom for an identifier node's name (cached on the node).
 String* identifierName(const ast::Identifier* id);
+// The atom for a name held by the AST (cached by address: never pass a string that does not live forever).
 String* atomFor(const std::u16string& name);
 
 // Evaluation followed by GetValue.

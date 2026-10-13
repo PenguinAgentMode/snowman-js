@@ -1,5 +1,7 @@
 // Evaluation of expressions (ECMA-262 13), Reference Records (6.2.5) and identifier resolution (9.4).
 #include <cmath>
+#include <typeinfo>
+#include <unordered_map>
 
 #include "interp/interpreter.h"
 #include "runtime/bigint.h"
@@ -16,11 +18,20 @@ using namespace ast;
 
 // ---- Contexts ----
 
-InterpContext* runningContext() { return dynamic_cast<InterpContext*>(vm().running); }
+namespace {
+
+// InterpContext is the only subclass of ExecutionContext: an exact type check is a cheap downcast.
+InterpContext* asInterpContext(ExecutionContext* context) {
+  return context && typeid(*context) == typeid(InterpContext) ? static_cast<InterpContext*>(context) : nullptr;
+}
+
+}  // namespace
+
+InterpContext* runningContext() { return asInterpContext(vm().running); }
 
 Cell* GetActiveScriptOrModule() {
   for (ExecutionContext* context = vm().running; context; context = context->previous) {
-    if (auto* interp = dynamic_cast<InterpContext*>(context)) {
+    if (auto* interp = asInterpContext(context)) {
       if (interp->scriptOrModule) return interp->scriptOrModule;
     }
   }
@@ -32,7 +43,13 @@ String* identifierName(const Identifier* id) {
   return static_cast<String*>(id->interpCache);
 }
 
-String* atomFor(const std::u16string& name) { return atom(name); }
+// AST strings are never freed and atoms live forever, so the atom can be cached by the string's address.
+String* atomFor(const std::u16string& name) {
+  static std::unordered_map<const std::u16string*, String*> cache;
+  auto [it, inserted] = cache.try_emplace(&name, nullptr);
+  if (inserted) it->second = atom(name);
+  return it->second;
+}
 
 Object* GetGlobalObject() { return vm().currentRealm()->globalObject(); }
 
@@ -274,6 +291,30 @@ Result<Reference> evaluateMember(const MemberExpression* node, bool* shortCircui
     ref.propertyName = TRY(evaluate(node->property));
   }
   return ref;
+}
+
+// Evaluation + GetValue of `base.name` / `base[expression]` without materializing the Reference.
+Result<Value> evaluatePropertyValue(const MemberExpression* node) {
+  Value baseValue = TRY(evaluate(node->object));
+  Value propertyName;
+  std::optional<PropertyKey> key;
+  if (!node->computed) {
+    key = PropertyKey(identifierName(node->property->as<Identifier>()));
+  } else {
+    propertyName = TRY(evaluate(node->property));
+  }
+  if (baseValue.isNullish()) {
+    Reference ref;
+    ref.kind = Reference::Kind::Property;
+    ref.base = baseValue;
+    ref.propertyName = propertyName;
+    ref.key = key;
+    return throwNullishBase(baseValue, ref, "read");
+  }
+  if (!key) key = TRY(ToPropertyKey(propertyName));
+  if (baseValue.isObject()) return baseValue.asObject()->Get(*key, baseValue);
+  Object* baseObj = TRY(ToObject(baseValue));
+  return baseObj->Get(*key, baseValue);
 }
 
 Value thisValueForCall(const Reference& ref) {
@@ -796,7 +837,16 @@ Result<Value> evaluate(const Node* node) {
       Value test = TRY(evaluate(conditional->test));
       return evaluate(ToBoolean(test) ? conditional->consequent : conditional->alternate);
     }
-    case NodeType::MemberExpression:
+    case NodeType::MemberExpression: {
+      TRY(CheckStack());
+      auto* member = node->as<MemberExpression>();
+      if (member->object->type != NodeType::Super && member->property->type != NodeType::PrivateIdentifier &&
+          !member->optional) {
+        return evaluatePropertyValue(member);
+      }
+      Reference ref = TRY(evaluateReference(node));
+      return GetValue(ref);
+    }
     case NodeType::CallExpression:
     case NodeType::ChainExpression: {
       TRY(CheckStack());
