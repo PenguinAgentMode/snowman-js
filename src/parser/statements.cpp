@@ -550,6 +550,14 @@ Node* Parser::parseLabeled(Pos start, Identifier* label, const char* context) {
   auto* node = startNode<LabeledStatement>(start);
   node->label = label;
   node->body = parseStatement(bodyContext.c_str(), false);
+  // Annex B.3.2: a labelled sloppy plain function declaration in a block (`{ l: function f() {} }`) is a
+  // var-hoisting candidate like an unlabelled one (nested labels: the innermost LabeledStatement adds it).
+  if (node->body->is<FunctionDeclaration>()) {
+    auto* fn = node->body->as<FunctionDeclaration>();
+    if (fn->id && !ctx_->strict && !fn->async && !fn->generator && scope_->kind != Scope::Kind::Root) {
+      scope_->annexB.push_back(fn);
+    }
+  }
   ctx_->labels.pop_back();
   return finish(node);
 }

@@ -206,8 +206,11 @@ void Parser::exitScope() {
     for (FunctionDeclaration* f : s->annexB) {
       auto it = s->lexical.find(f->id->name);
       if (it != s->lexical.end()) {
-        bool own = it->second.node == f && it->second.count == 1;
-        if (!own && it->second.kind != Lex::CatchSimple) continue;
+        // f's own block binding (alone, or with other plain function declarations of the name, whose last one
+        // gives the binding its value) does not block hoisting; any other lexical declaration does.
+        const Scope::Entry& e = it->second;
+        bool own = e.node == f || std::find(e.duplicates.begin(), e.duplicates.end(), f) != e.duplicates.end();
+        if (!own && e.kind != Lex::CatchSimple) continue;
       }
       s->parent->annexB.push_back(f);
     }
@@ -233,12 +236,13 @@ void Parser::declareLexicalName(const std::u16string& name, Lex kind, Node* node
     bool annexBDuplicate = !ctx_->strict && kind == Lex::PlainFunction && it->second.kind == Lex::PlainFunction;
     if (!annexBDuplicate) raise(pos, "Identifier '" + utf8(name) + "' has already been declared");
     it->second.count++;
+    it->second.duplicates.push_back(node);
     return;
   }
   if (s->vars.count(name) || (s->kind == Scope::Kind::Root && s->functions.count(name)) ||
       (s->functionRoot && s->params.count(name)))
     raise(pos, "Identifier '" + utf8(name) + "' has already been declared");
-  s->lexical.emplace(name, Scope::Entry{kind, node, 1});
+  s->lexical.emplace(name, Scope::Entry{kind, node, 1, {}});
 }
 
 void Parser::declareFunction(FunctionDeclaration* fn, uint32_t pos) {

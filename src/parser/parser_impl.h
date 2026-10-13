@@ -53,6 +53,7 @@ struct Scope {
     Lex kind;
     Node* node;
     uint32_t count;
+    std::vector<Node*> duplicates;  // sloppy mode: further plain function declarations of the name (B.3.2.4)
   };
   std::unordered_map<std::u16string, Entry> lexical;
   std::unordered_set<std::u16string> vars;       // declared here or hoisted through here
