@@ -8,12 +8,20 @@ perf's work in two merge requests, each gated on its own:
   global env lookups once per op.
 
 ## State
-- 2026-10-13 ~19:50 UTC: MR 1 rebased (49e206c + notes); only conflict was heap.cpp includes (<atomic> from step
-  4, <malloc.h> from batch 1; both kept). expressions.cpp auto-merged: step 4 made identifierName's atom cache
-  thread_local, batch 1 doesn't touch it. 13154f3: make 0 warnings; SNOWMAN_VERIFY_IC=1 over language/, annexB/,
-  built-ins/{Function,eval,Atomics} (main's runner): 46,588 / 46,588 scenarios pass, 0 cache mismatches.
-- Rebased onto main 9c2ead8 (results only; src identical to 13154f3). Gate baseline: results/5f3218f30{,-full}.json
-  (ES-core 43,305 / 43,305). Next: full-suite gate, GC_STRESS slices, timings.
+- MR 1 = ws/perf2 757a0f6 (batch 1 + the C-stack fix, base 892c20a): full gate (main's runner) vs results/5f3218f30
+  es-core and full: 0 regressions, 0 new statics, 53,587 / 53,616; GC_STRESS=10 GeneratorPrototype/Proxy/
+  for-await-of 1,606 files 0 newly failing; JSONL results/757a0f6/suite.jsonl (results b0c46ca). The lead
+  re-integrated it with f.caller as int/perf c1214e2 (function.cpp include conflict) and merges that after its gate.
+- MR 2 = ws/perf2b (batch 2 = perf's 98a5e21 + 42ff096) on c1214e2, b8617b9: one conflict, AddLegacyFunctionProperties
+  (caller's accessors kept, with batch 2's cached keys().arguments / keys().caller). make 0 warnings.
+  stackdepth vs c1214e2: every probe's depth identical (0.0%); peak RSS at the overflow +18..30 MB on plain/method/
+  getter/callback/construct (the 4 inline 32-byte bindings in every environment, ~128 B per call even when empty),
+  lower on args-8/9/spread. tco-{const,let}-body 467/469 -> 477 MB, lhs/var 452 unchanged (main before batch 1: 519).
+  Running: GC_STRESS slices, then VERIFY_IC slice. Then: rebase onto main once c1214e2 is merged, full gate,
+  timings (alone), same-machine A/B for summed ms.
+- Summed ms: compare on one machine (ab.sh: main, branch, main over a 1/20 shard). The machine's speed varies by
+  +-40% between runs (757a0f6's gate ran 2,372 s vs 1,594 s for 9ff07fb), so a gate JSONL vs another machine's
+  baseline JSONL doesn't measure the engine.
 
 ## C stack per JS call (the margin)
 The 4 test/language/statements/for/tco-{const,let,lhs,var}-body.js [strict] need 100,000 nested calls: more than

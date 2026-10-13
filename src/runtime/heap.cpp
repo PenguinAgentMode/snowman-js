@@ -96,6 +96,57 @@ void Heap::maybeCollect() {
   if (allocatedSinceCollect_ >= budget) collect();
 }
 
+namespace {
+
+// The words of the scanned stacks that may point at a cell, as an open-addressing set: a collection checks
+// each cell against it, instead of sorting every cell to look each stack word up.
+class CandidateSet {
+ public:
+  explicit CandidateSet(size_t count) {
+    size_t capacity = 16;
+    while (capacity < count * 2) capacity *= 2;
+    slots_.assign(capacity, 0);
+    mask_ = capacity - 1;
+  }
+  void insert(uintptr_t word) {
+    for (size_t i = hash(word);; i = (i + 1) & mask_) {
+      if (slots_[i] == word) return;
+      if (!slots_[i]) {
+        slots_[i] = word;
+        return;
+      }
+    }
+  }
+  bool contains(uintptr_t word) const {
+    for (size_t i = hash(word);; i = (i + 1) & mask_) {
+      if (slots_[i] == word) return true;
+      if (!slots_[i]) return false;
+    }
+  }
+
+ private:
+  size_t hash(uintptr_t word) const { return size_t((word >> 3) * 0x9E3779B97F4A7C15ull >> 20) & mask_; }
+  std::vector<uintptr_t> slots_;
+  size_t mask_;
+};
+
+using Range = std::pair<const void*, const void*>;
+
+// Calls f on every aligned word of the ranges that lies in [lowest, highest].
+template <class F>
+void forEachStackWord(const std::vector<Range>& ranges, uintptr_t lowest, uintptr_t highest, F&& f) {
+  for (const auto& [low, high] : ranges) {
+    auto begin = reinterpret_cast<uintptr_t>(low) & ~uintptr_t(sizeof(void*) - 1);
+    auto end = reinterpret_cast<uintptr_t>(high);
+    for (uintptr_t p = begin; p + sizeof(void*) <= end; p += sizeof(void*)) {
+      uintptr_t word = *reinterpret_cast<const uintptr_t*>(p);
+      if (word >= lowest && word <= highest) f(word);
+    }
+  }
+}
+
+}  // namespace
+
 void Heap::collect() {
   if (!enabled_) return;
   // Spill callee-saved registers into this frame so the stack scan sees them.
@@ -103,19 +154,18 @@ void Heap::collect() {
   volatile char marker = 0;
   const void* sp = const_cast<const char*>(&marker);
 
-  sortedCells_ = cells_;
-  std::sort(sortedCells_.begin(), sortedCells_.end());
   MarkTracer tracer;
 
   for (RootProvider* r = roots_; r; r = r->next_) r->traceRoots(tracer);
 
+  std::vector<Range> ranges;
   bool onRegisteredStack = false;
   for (const auto& [low, high] : stacks_) {
     if (sp >= low && sp < high) {
       onRegisteredStack = true;
-      scanRange(tracer, sp, high);
+      ranges.emplace_back(sp, high);
     } else {
-      scanRange(tracer, low, high);
+      ranges.emplace_back(low, high);
     }
   }
   if (!onRegisteredStack) {
@@ -130,7 +180,30 @@ void Heap::collect() {
       threadStackLow_ = low;
       threadStackHigh_ = static_cast<const char*>(low) + size;
     }
-    scanRange(tracer, sp, threadStackHigh_);
+    ranges.emplace_back(sp, threadStackHigh_);
+  }
+
+  // The conservative roots: the cells some stack word points at.
+  uintptr_t lowest = UINTPTR_MAX, highest = 0;
+  for (Cell* cell : cells_) {
+    lowest = std::min(lowest, reinterpret_cast<uintptr_t>(cell));
+    highest = std::max(highest, reinterpret_cast<uintptr_t>(cell));
+  }
+  size_t words = 0;
+  forEachStackWord(ranges, lowest, highest, [&](uintptr_t) { words++; });
+  if (words <= cells_.size() / 2) {
+    CandidateSet candidates(words);
+    forEachStackWord(ranges, lowest, highest, [&](uintptr_t word) { candidates.insert(word); });
+    if (words) {
+      for (Cell* cell : cells_) {
+        if (candidates.contains(reinterpret_cast<uintptr_t>(cell))) tracer.visit(cell);
+      }
+    }
+  } else {
+    // Deep stacks: look each word up among the sorted cells.
+    sortedCells_ = cells_;
+    std::sort(sortedCells_.begin(), sortedCells_.end());
+    for (const auto& [low, high] : ranges) scanRange(tracer, low, high);
   }
 
   while (!tracer.worklist.empty()) {
