@@ -157,6 +157,8 @@ class Parser {
   [[noreturn]] void unexpected();
   [[noreturn]] void unexpectedAt(const Token& t);
   [[noreturn]] void raise(uint32_t pos, const std::string& message);
+  // At each point the recursion passes through: a SyntaxError when the stack runs out (parser.h).
+  void checkStack();
   Pos here() const { return {tok_.start, tok_.line, tok_.col}; }
   template <class N>
   N* startNode(Pos p) {

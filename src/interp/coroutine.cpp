@@ -12,7 +12,6 @@
 #include <unistd.h>
 
 #include <cstdint>
-#include <cstdio>
 #include <cstdlib>
 #include <vector>
 
@@ -66,6 +65,15 @@ Coroutine* gCurrent = nullptr;
 // Finished default-sized stacks, kept for reuse: async code makes and finishes coroutines constantly.
 std::vector<char*> gStackPool;
 constexpr size_t kMaxPooledStacks = 64;
+// The bytes of the stacks started and not yet released (pooled ones aside), against kStackBytesBudget.
+size_t gStackBytes = 0;
+
+// CheckStack() throws below a stack's limit: leave room under it for the error path and for code between checks.
+size_t stackMargin(size_t stackSize) { return stackSize >= (size_t(64) << 20) ? size_t(1) << 20 : size_t(64) << 10; }
+// The main stack's usable part: the budget for the running coroutines together.
+constexpr size_t kNestedBudget = Coroutine::kMainStackSize - (size_t(1) << 20);
+// Less room than this left for a coroutine and it is not resumed.
+constexpr size_t kMinRoom = size_t(16) << 10;
 
 size_t pageSize() {
   static const size_t size = size_t(sysconf(_SC_PAGESIZE));
@@ -104,10 +112,30 @@ Coroutine::~Coroutine() {
 
 Coroutine* Coroutine::current() { return gCurrent; }
 
+bool Coroutine::mapStack() {
+  if (gStackBytes + stackSize_ > kStackBytesBudget) return false;
+  size_t guard = pageSize();
+  if (stackSize_ == kDefaultStackSize && !gStackPool.empty()) {
+    mapping_ = gStackPool.back();
+    gStackPool.pop_back();
+  } else {
+    void* mapping = mmap(nullptr, stackSize_ + guard, PROT_READ | PROT_WRITE,
+                         MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_STACK, -1, 0);
+    if (mapping == MAP_FAILED) return false;
+    mapping_ = static_cast<char*>(mapping);
+    mprotect(mapping_, guard, PROT_NONE);
+  }
+  gStackBytes += stackSize_;
+  stackLow_ = mapping_ + guard;
+  stackHigh_ = stackLow_ + stackSize_;
+  return true;
+}
+
 void Coroutine::releaseStack() {
   if (!mapping_) return;
   if (registeredLow_) heap().removeStack(registeredLow_);
   registeredLow_ = nullptr;
+  gStackBytes -= stackSize_;
   if (stackSize_ == kDefaultStackSize && gStackPool.size() < kMaxPooledStacks) {
     gStackPool.push_back(mapping_);
   } else {
@@ -125,25 +153,17 @@ void Coroutine::trampoline(Coroutine* self) {
   std::abort();  // never resumed
 }
 
-void Coroutine::resume() {
+bool Coroutine::resume() {
   if (running_ || finished_) std::abort();
+  Coroutine* resumer = gCurrent;
+  // Below the registers the switch pushes on the resumer's stack.
+  const void* resumerSp = static_cast<const char*>(approximateStackPointer()) - 128;
+  // The running coroutines below this one, and this one's own suspended frames, against the nested budget.
+  size_t below = resumer ? resumer->usedBelow_ + size_t(resumer->stackHigh_ - static_cast<const char*>(resumerSp)) : 0;
+  size_t own = started_ ? size_t(stackHigh_ - static_cast<const char*>(selfSp_)) : 0;
+  if (resumer && below + own + kMinRoom > kNestedBudget) return false;
   if (!started_) {
-    size_t guard = pageSize();
-    if (stackSize_ == kDefaultStackSize && !gStackPool.empty()) {
-      mapping_ = gStackPool.back();
-      gStackPool.pop_back();
-    } else {
-      void* mapping = mmap(nullptr, stackSize_ + guard, PROT_READ | PROT_WRITE,
-                           MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_STACK, -1, 0);
-      if (mapping == MAP_FAILED) {
-        std::fputs("fatal: cannot map a coroutine stack\n", stdout);
-        std::exit(70);
-      }
-      mapping_ = static_cast<char*>(mapping);
-      mprotect(mapping_, guard, PROT_NONE);
-    }
-    stackLow_ = mapping_ + guard;
-    stackHigh_ = stackLow_ + stackSize_;
+    if (!mapStack()) return false;
     // The frame snowman_coroutine_switch pops: r15 r14 r13 r12 rbx(this) rbp, then the return address.
     // snowman_coroutine_start's call then runs with a 16-byte aligned stack.
     auto** frame = reinterpret_cast<void**>(stackHigh_ - 72);
@@ -155,9 +175,6 @@ void Coroutine::resume() {
   }
 
   // The resumer's stack stays live from here up while the coroutine runs.
-  Coroutine* resumer = gCurrent;
-  // Below the registers the switch pushes on the resumer's stack.
-  const void* resumerSp = static_cast<const char*>(approximateStackPointer()) - 128;
   if (resumer) {
     heap().removeStack(resumer->registeredLow_);
     resumer->registeredLow_ = resumerSp;
@@ -171,8 +188,11 @@ void Coroutine::resume() {
 
   resumerCoroutine_ = resumer;
   resumerStackLimit_ = vm().stackLimit;
-  // CheckStack() throws below the limit: leave room for the error path and for code between checks.
-  vm().stackLimit = stackLow_ + (stackSize_ >= (size_t(64) << 20) ? (size_t(1) << 20) : (size_t(128) << 10));
+  usedBelow_ = below;
+  const char* limit = stackLow_ + stackMargin(stackSize_);
+  // A nested coroutine may use what the ones below it leave of the budget, if that is less than its stack.
+  if (resumer && size_t(stackHigh_ - limit) > kNestedBudget - below) limit = stackHigh_ - (kNestedBudget - below);
+  vm().stackLimit = limit;
   gCurrent = this;
   running_ = true;
 
@@ -187,6 +207,7 @@ void Coroutine::resume() {
     heap().addStack(resumer->stackLow_, resumer->stackHigh_);
   }
   if (finished_) releaseStack();
+  return true;
 }
 
 void Coroutine::suspend() {

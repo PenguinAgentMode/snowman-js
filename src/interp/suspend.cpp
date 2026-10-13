@@ -112,7 +112,7 @@ void AsyncState::trace(Tracer& tracer) {
   tracer.visit(capability);
 }
 
-void SuspendableObject::resumeBody(ResumeKind resumeKind, Value value) {
+Result<void> SuspendableObject::resumeBody(ResumeKind resumeKind, Value value) {
   suspend.resumeKind = resumeKind;
   suspend.resumeValue = value;
   if (!coroutine) {
@@ -123,8 +123,10 @@ void SuspendableObject::resumeBody(ResumeKind resumeKind, Value value) {
   }
   ExecutionContext* saved = vm().running;
   vm().pushContext(&context);
-  coroutine->resume();
+  bool resumed = coroutine->resume();
   vm().running = saved;
+  if (!resumed) return ThrowRangeError("Maximum call stack size exceeded");
+  return {};
 }
 
 void SuspendableObject::suspendBody() { coroutine->suspend(); }
@@ -159,14 +161,14 @@ namespace {
 
 Result<Value> awaitFulfilled(NativeCall& call) {
   auto* owner = static_cast<SuspendableObject*>(call.callee->slots[0].asObject());
-  owner->resumeBody(ResumeKind::Normal, call.args[0]);
+  TRY(owner->resumeBody(ResumeKind::Normal, call.args[0]));
   afterBodyStep(owner);
   return Value::undefined();
 }
 
 Result<Value> awaitRejected(NativeCall& call) {
   auto* owner = static_cast<SuspendableObject*>(call.callee->slots[0].asObject());
-  owner->resumeBody(ResumeKind::Throw, call.args[0]);
+  TRY(owner->resumeBody(ResumeKind::Throw, call.args[0]));
   afterBodyStep(owner);
   return Value::undefined();
 }
@@ -226,8 +228,13 @@ Resumption generatorYield(GeneratorObject* G, Value iteratorResult) {
 Result<Value> GeneratorResume(Value generator, Value value, Value brand) {
   GeneratorObject* G = TRY(GeneratorValidate(generator, brand));
   if (G->state == GeneratorObject::State::Completed) return Value(CreateIteratorResultObject(Value::undefined(), true));
+  GeneratorObject::State state = G->state;
   G->state = GeneratorObject::State::Executing;
-  G->resumeBody(ResumeKind::Normal, value);
+  Result<void> resumed = G->resumeBody(ResumeKind::Normal, value);
+  if (resumed.isThrow()) {
+    G->state = state;  // nothing ran
+    return Throw{resumed.thrown()};
+  }
   return generatorStepResult(G);
 }
 
@@ -239,7 +246,11 @@ Result<Value> GeneratorResumeAbrupt(Value generator, ResumeKind kind, Value valu
     return Throw{value};
   }
   G->state = GeneratorObject::State::Executing;
-  G->resumeBody(kind, value);
+  Result<void> resumed = G->resumeBody(kind, value);
+  if (resumed.isThrow()) {
+    G->state = GeneratorObject::State::SuspendedYield;  // nothing ran
+    return Throw{resumed.thrown()};
+  }
   return generatorStepResult(G);
 }
 
@@ -257,7 +268,11 @@ Result<Value> startAsyncFunctionBody(ECMAScriptFunction* F, InterpContext* conte
   copyContext(state->context, *context);
   state->function = F;
   state->capability = promiseCapability;
-  state->resumeBody(ResumeKind::Normal, Value::undefined());
+  Result<void> resumed = state->resumeBody(ResumeKind::Normal, Value::undefined());
+  if (resumed.isThrow()) {
+    (void)rejectCapability(promiseCapability, resumed.thrown());
+    return promiseCapability->promise;
+  }
   afterBodyStep(state);
   return promiseCapability->promise;
 }
@@ -269,7 +284,11 @@ void AsyncNativeBlockStart(PromiseCapability* capability, SuspendableObject::Nat
   state->nativeBody = body;
   state->nativeData = data;
   state->capability = capability;
-  state->resumeBody(ResumeKind::Normal, Value::undefined());
+  Result<void> resumed = state->resumeBody(ResumeKind::Normal, Value::undefined());
+  if (resumed.isThrow()) {
+    (void)rejectCapability(capability, resumed.thrown());
+    return;
+  }
   afterBodyStep(state);
 }
 
@@ -362,8 +381,15 @@ void AsyncGeneratorDrainQueue(AsyncGeneratorObject* generator) {
 
 // AsyncGeneratorResume
 void AsyncGeneratorResume(AsyncGeneratorObject* generator, ResumeKind kind, Value value) {
+  AGState state = generator->state;
   generator->state = AGState::Executing;
-  generator->resumeBody(kind, value);
+  Result<void> resumed = generator->resumeBody(kind, value);
+  if (resumed.isThrow()) {
+    // Nothing ran: the request (the only one queued while suspended) fails, and the generator stays as it was.
+    generator->state = state;
+    AsyncGeneratorCompleteStep(generator, true, resumed.thrown(), true);
+    return;
+  }
   afterBodyStep(generator);
 }
 

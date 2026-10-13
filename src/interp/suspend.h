@@ -20,8 +20,9 @@ class SuspendableObject : public Object {
   SuspendableObject(Object* prototype, Kind kind) : Object(prototype), kind(kind) {}
   void trace(Tracer& tracer) override;
 
-  // Starts or resumes the body with a completion. Returns when the body suspends or finishes (finished).
-  void resumeBody(ResumeKind resumeKind, Value value);
+  // Starts or resumes the body with a completion. Returns when the body suspends or finishes (finished); a
+  // RangeError, with nothing run, when there is no stack left for it (coroutine.h).
+  Result<void> resumeBody(ResumeKind resumeKind, Value value);
   // Inside the body: switch back to the resumer. The completion the body is resumed with is in suspend.
   void suspendBody();
 

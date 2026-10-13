@@ -74,6 +74,13 @@ void Parser::semicolon() {
 
 void Parser::raise(uint32_t pos, const std::string& message) { lexer_.fail(pos, message); }
 
+const char* const* stackLimit = nullptr;
+
+void Parser::checkStack() {
+  if (stackLimit && *stackLimit && static_cast<const char*>(__builtin_frame_address(0)) < *stackLimit)
+    raise(tok_.start, "Nesting too deep (out of stack)");
+}
+
 void Parser::unexpectedAt(const Token& t) {
   if (t.type == T::EOS) raise(t.start, "Unexpected end of input");
   std::u16string_view text = std::u16string_view(source_).substr(t.start, std::min<uint32_t>(t.end - t.start, 40));
