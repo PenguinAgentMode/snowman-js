@@ -23,7 +23,9 @@ class ModuleRecord final : public Cell {
   Realm* realm;
   std::string path;                       // the resolved file path (host-defined)
   ModuleEnvironment* environment = nullptr;
-  Object* namespaceObject = nullptr;
+  Object* namespaceObject = nullptr;          // [[Namespace]]
+  Object* deferredNamespaceObject = nullptr;  // [[DeferredNamespace]] (import defer)
+  Object* moduleSource = nullptr;             // [[ModuleSource]] (source phase imports); null for JS and JSON
   ast::Program* code = nullptr;           // Source Text Module Records
   Value syntheticDefault;                 // JSON modules: the parsed value, exported as "default"
   Object* importMeta = nullptr;
