@@ -37,6 +37,7 @@ Result<ArrayBufferObject*> AllocateArrayBuffer(Object* constructor, double byteL
 
 Result<void> DetachArrayBuffer(ArrayBufferObject* arrayBuffer, Value key) {
   if (arrayBuffer->isShared()) return ThrowTypeError("Cannot detach a SharedArrayBuffer");
+  if (arrayBuffer->isImmutable()) return ThrowTypeError("Cannot detach an immutable ArrayBuffer");
   if (!SameValue(arrayBuffer->detachKey, key)) return ThrowTypeError("ArrayBuffer detach key mismatch");
   arrayBuffer->detach();
   return {};

@@ -19,9 +19,10 @@ bool isUnclampedInteger(ElementType t) {
          t == ElementType::Int32 || t == ElementType::Uint32;
 }
 
-// 25.4.3.1 ValidateIntegerTypedArray ( typedArray, waitable )
-Result<TypedArrayObject*> ValidateIntegerTypedArray(Value typedArray, bool waitable) {
-  TypedArrayObject* ta = TRY(ValidateTypedArray(typedArray));
+// 25.4.3.1 ValidateIntegerTypedArray ( typedArray, waitable [ , accessMode ] )
+Result<TypedArrayObject*> ValidateIntegerTypedArray(Value typedArray, bool waitable,
+                                                    AccessMode accessMode = AccessMode::Read) {
+  TypedArrayObject* ta = TRY(ValidateTypedArray(typedArray, accessMode));
   if (waitable) {
     if (ta->elementType != ElementType::Int32 && ta->elementType != ElementType::BigInt64)
       return ThrowTypeError("Atomics: typed array must be an Int32Array or BigInt64Array");
@@ -73,7 +74,7 @@ enum class Op { Add, And, Exchange, Or, Sub, Xor };
 // 25.4.3.17 AtomicReadModifyWrite ( typedArray, index, value, op )
 template <Op O>
 Result<Value> readModifyWrite(NativeCall& call) {
-  TypedArrayObject* ta = TRY(ValidateIntegerTypedArray(call.args[0], false));
+  TypedArrayObject* ta = TRY(ValidateIntegerTypedArray(call.args[0], false, AccessMode::Write));
   size_t byteIndex = TRY(ValidateAtomicAccess(ta, call.args[1]));
   Value v = TRY(toIntegerValue(ta, call.args[2]));
   TRY(RevalidateAtomicAccess(ta, byteIndex));
@@ -94,7 +95,7 @@ Result<Value> readModifyWrite(NativeCall& call) {
 
 // 25.4.7 Atomics.compareExchange ( typedArray, index, expectedValue, replacementValue )
 Result<Value> Atomics_compareExchange(NativeCall& call) {
-  TypedArrayObject* ta = TRY(ValidateIntegerTypedArray(call.args[0], false));
+  TypedArrayObject* ta = TRY(ValidateIntegerTypedArray(call.args[0], false, AccessMode::Write));
   size_t byteIndex = TRY(ValidateAtomicAccess(ta, call.args[1]));
   Value expected = TRY(toIntegerValue(ta, call.args[2]));
   Value replacement = TRY(toIntegerValue(ta, call.args[3]));
@@ -123,7 +124,7 @@ Result<Value> Atomics_load(NativeCall& call) {
 
 // 25.4.12 Atomics.store ( typedArray, index, value )
 Result<Value> Atomics_store(NativeCall& call) {
-  TypedArrayObject* ta = TRY(ValidateIntegerTypedArray(call.args[0], false));
+  TypedArrayObject* ta = TRY(ValidateIntegerTypedArray(call.args[0], false, AccessMode::Write));
   size_t byteIndex = TRY(ValidateAtomicAccess(ta, call.args[1]));
   Value v = TRY(toIntegerValue(ta, call.args[2]));
   TRY(RevalidateAtomicAccess(ta, byteIndex));

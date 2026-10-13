@@ -51,10 +51,11 @@ Result<TypedArrayObject*> AllocateTypedArray(ElementType type, Object* newTarget
   return obj;
 }
 
-// 23.2.4.2 TypedArrayCreateFromConstructor ( constructor, argumentList )
-Result<TypedArrayObject*> TypedArrayCreateFromConstructor(Object* constructor, Args argumentList) {
+// 23.2.4.2 TypedArrayCreateFromConstructor ( constructor, argumentList [ , accessMode ] )
+Result<TypedArrayObject*> TypedArrayCreateFromConstructor(Object* constructor, Args argumentList,
+                                                          AccessMode accessMode = AccessMode::Read) {
   Object* newObject = TRY(Construct(constructor, argumentList));
-  TypedArrayObject* ta = TRY(ValidateTypedArray(newObject));
+  TypedArrayObject* ta = TRY(ValidateTypedArray(newObject, accessMode));
   if (argumentList.size() == 1 && argumentList[0].isNumber()) {
     if (TypedArrayLength(ta) < argumentList[0].asNumber()) return ThrowTypeError("TypedArray species created a too short array");
   }
@@ -66,11 +67,12 @@ Result<TypedArrayObject*> TypedArrayCreateSameType(TypedArrayObject* exemplar, A
   return TypedArrayCreateFromConstructor(intrinsic(TypedArrayConstructorIntrinsic(exemplar->elementType)), argumentList);
 }
 
-// 23.2.4.1 TypedArraySpeciesCreate ( exemplar, argumentList )
-Result<TypedArrayObject*> TypedArraySpeciesCreate(TypedArrayObject* exemplar, Args argumentList) {
+// 23.2.4.1 TypedArraySpeciesCreate ( exemplar, argumentList [ , accessMode ] )
+Result<TypedArrayObject*> TypedArraySpeciesCreate(TypedArrayObject* exemplar, Args argumentList,
+                                                  AccessMode accessMode = AccessMode::Read) {
   Object* defaultConstructor = intrinsic(TypedArrayConstructorIntrinsic(exemplar->elementType));
   Object* constructor = TRY(SpeciesConstructor(exemplar, defaultConstructor));
-  TypedArrayObject* result = TRY(TypedArrayCreateFromConstructor(constructor, argumentList));
+  TypedArrayObject* result = TRY(TypedArrayCreateFromConstructor(constructor, argumentList, accessMode));
   if (!sameContentType(result->elementType, exemplar->elementType))
     return ThrowTypeError("TypedArray species created an array of a different content type");
   return result;
@@ -183,7 +185,7 @@ Result<Value> TypedArray_from(NativeCall& call) {
     IteratorRecord record = TRY(GetIteratorFromMethod(source, usingIterator));
     ValueVector values = TRY(IteratorToList(record));
     double len = double(values.size());
-    TypedArrayObject* target = TRY(TypedArrayCreateFromConstructor(c.asObject(), {num(len)}));
+    TypedArrayObject* target = TRY(TypedArrayCreateFromConstructor(c.asObject(), {num(len)}, AccessMode::Write));
     for (size_t k = 0; k < values.size(); k++) {
       Value mappedValue = mapping ? TRY(Call(mapfn, thisArg, {values[k], num(double(k))})) : values[k];
       TRY(Set(target, PropertyKey::index(uint32_t(k)), mappedValue, true));
@@ -192,7 +194,7 @@ Result<Value> TypedArray_from(NativeCall& call) {
   }
   Object* arrayLike = TRY(ToObject(source));
   double len = TRY(LengthOfArrayLike(arrayLike));
-  TypedArrayObject* target = TRY(TypedArrayCreateFromConstructor(c.asObject(), {num(len)}));
+  TypedArrayObject* target = TRY(TypedArrayCreateFromConstructor(c.asObject(), {num(len)}, AccessMode::Write));
   for (double k = 0; k < len; k++) {
     Value kValue = TRY(Get(arrayLike, indexKey(k)));
     Value mappedValue = mapping ? TRY(Call(mapfn, thisArg, {kValue, num(k)})) : kValue;
@@ -205,7 +207,8 @@ Result<Value> TypedArray_from(NativeCall& call) {
 Result<Value> TypedArray_of(NativeCall& call) {
   Value c = call.thisValue;
   if (!IsConstructor(c)) return ThrowTypeError("TypedArray.of: this is not a constructor");
-  TypedArrayObject* newObj = TRY(TypedArrayCreateFromConstructor(c.asObject(), {num(double(call.args.size()))}));
+  TypedArrayObject* newObj =
+      TRY(TypedArrayCreateFromConstructor(c.asObject(), {num(double(call.args.size()))}, AccessMode::Write));
   for (size_t k = 0; k < call.args.size(); k++) TRY(Set(newObj, PropertyKey::index(uint32_t(k)), call.args[k], true));
   return Value(newObj);
 }
@@ -253,8 +256,8 @@ struct Validated {
   double len;
 };
 
-Result<Validated> validate(Value thisValue) {
-  TypedArrayObject* o = TRY(ValidateTypedArray(thisValue));
+Result<Validated> validate(Value thisValue, AccessMode accessMode = AccessMode::Read) {
+  TypedArrayObject* o = TRY(ValidateTypedArray(thisValue, accessMode));
   return Validated{o, TypedArrayLength(o)};
 }
 
@@ -269,7 +272,7 @@ Result<Value> TypedArrayPrototype_at(NativeCall& call) {
 
 // 23.2.3.6 %TypedArray%.prototype.copyWithin ( target, start [ , end ] )
 Result<Value> TypedArrayPrototype_copyWithin(NativeCall& call) {
-  auto [o, len] = TRY(validate(call.thisValue));
+  auto [o, len] = TRY(validate(call.thisValue, AccessMode::Write));
   double targetIndex = relativeIndex(TRY(ToIntegerOrInfinity(call.args[0])), len);
   double startIndex = relativeIndex(TRY(ToIntegerOrInfinity(call.args[1])), len);
   double relativeEnd = call.args[2].isUndefined() ? len : TRY(ToIntegerOrInfinity(call.args[2]));
@@ -324,7 +327,7 @@ Result<Value> each(NativeCall& call) {
 
 // 23.2.3.9 %TypedArray%.prototype.fill ( value [ , start [ , end ] ] )
 Result<Value> TypedArrayPrototype_fill(NativeCall& call) {
-  auto [o, len] = TRY(validate(call.thisValue));
+  auto [o, len] = TRY(validate(call.thisValue, AccessMode::Write));
   Value value = TRY(ToElementValue(o->elementType, call.args[0]));
   double k = relativeIndex(TRY(ToIntegerOrInfinity(call.args[1])), len);
   double relativeEnd = call.args[2].isUndefined() ? len : TRY(ToIntegerOrInfinity(call.args[2]));
@@ -346,7 +349,7 @@ Result<Value> TypedArrayPrototype_filter(NativeCall& call) {
     Value selected = TRY(Call(fn, call.args[1], {kValue, num(k), Value(o)}));
     if (ToBoolean(selected)) kept.push_back(kValue);
   }
-  TypedArrayObject* a = TRY(TypedArraySpeciesCreate(o, {num(double(kept.size()))}));
+  TypedArrayObject* a = TRY(TypedArraySpeciesCreate(o, {num(double(kept.size()))}, AccessMode::Write));
   for (size_t n = 0; n < kept.size(); n++) TRY(Set(a, PropertyKey::index(uint32_t(n)), kept[n], true));
   return Value(a);
 }
@@ -356,7 +359,7 @@ Result<Value> TypedArrayPrototype_map(NativeCall& call) {
   auto [o, len] = TRY(validate(call.thisValue));
   Value fn = call.args[0];
   if (!IsCallable(fn)) return ThrowTypeError("callback is not a function");
-  TypedArrayObject* a = TRY(TypedArraySpeciesCreate(o, {num(len)}));
+  TypedArrayObject* a = TRY(TypedArraySpeciesCreate(o, {num(len)}, AccessMode::Write));
   for (double k = 0; k < len; k++) {
     Value kValue = TRY(Get(o, indexKey(k)));
     Value mappedValue = TRY(Call(fn, call.args[1], {kValue, num(k), Value(o)}));
@@ -433,7 +436,7 @@ Result<Value> TypedArrayPrototype_join(NativeCall& call) {
 
 // 23.2.3.25 %TypedArray%.prototype.reverse ( )
 Result<Value> TypedArrayPrototype_reverse(NativeCall& call) {
-  auto [o, len] = TRY(validate(call.thisValue));
+  auto [o, len] = TRY(validate(call.thisValue, AccessMode::Write));
   double middle = std::floor(len / 2);
   for (double lower = 0; lower != middle; lower++) {
     double upper = len - lower - 1;
@@ -474,6 +477,7 @@ Result<void> SetTypedArrayFromTypedArray(TypedArrayObject* target, double target
 // 23.2.3.26 %TypedArray%.prototype.set ( source [ , offset ] )
 Result<Value> TypedArrayPrototype_set(NativeCall& call) {
   TypedArrayObject* target = TRY(requireTypedArray(call.thisValue));
+  if (IsImmutableBuffer(target->buffer)) return ThrowTypeError("typed array is backed by an immutable ArrayBuffer");
   double targetOffset = TRY(ToIntegerOrInfinity(call.args[1]));
   if (targetOffset < 0) return ThrowRangeError("offset must be >= 0");
   Value source = call.args[0];
@@ -502,7 +506,7 @@ Result<Value> TypedArrayPrototype_slice(NativeCall& call) {
   double relativeEnd = call.args[1].isUndefined() ? srcArrayLength : TRY(ToIntegerOrInfinity(call.args[1]));
   double endIndex = relativeIndex(relativeEnd, srcArrayLength);
   double countBytes = std::max(endIndex - startIndex, 0.0);
-  TypedArrayObject* a = TRY(TypedArraySpeciesCreate(o, {num(countBytes)}));
+  TypedArrayObject* a = TRY(TypedArraySpeciesCreate(o, {num(countBytes)}, AccessMode::Write));
   if (countBytes > 0) {
     if (IsTypedArrayOutOfBounds(o)) return ThrowTypeError("typed array is detached or out of bounds");
     endIndex = std::min(endIndex, TypedArrayLength(o));
@@ -579,7 +583,7 @@ Result<ValueVector> sortedElements(TypedArrayObject* o, double len, Value compar
 Result<Value> TypedArrayPrototype_sort(NativeCall& call) {
   Value comparator = call.args[0];
   if (!comparator.isUndefined() && !IsCallable(comparator)) return ThrowTypeError("The comparison function must be either a function or undefined");
-  auto [o, len] = TRY(validate(call.thisValue));
+  auto [o, len] = TRY(validate(call.thisValue, AccessMode::Write));
   ValueVector sorted = TRY(sortedElements(o, len, comparator));
   for (size_t j = 0; j < sorted.size(); j++) TRY(TypedArraySetElement(o, double(j), sorted[j]));
   return Value(o);

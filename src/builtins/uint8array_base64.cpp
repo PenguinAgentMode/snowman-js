@@ -169,9 +169,11 @@ Result<LastChunk> lastChunkOption(Object* opts) {
   return ThrowTypeError("lastChunkHandling must be \"loose\", \"strict\" or \"stop-before-partial\"");
 }
 
-Result<TypedArrayObject*> ValidateUint8Array(Value v) {
+Result<TypedArrayObject*> ValidateUint8Array(Value v, AccessMode accessMode = AccessMode::Read) {
   TypedArrayObject* ta = v.isObject() ? v.asObject()->as<TypedArrayObject>() : nullptr;
   if (!ta || ta->elementType != ElementType::Uint8) return ThrowTypeError("this is not a Uint8Array");
+  if (accessMode == AccessMode::Write && IsImmutableBuffer(ta->buffer))
+    return ThrowTypeError("Uint8Array is backed by an immutable ArrayBuffer");
   return ta;
 }
 
@@ -213,7 +215,7 @@ Result<Value> setFromResult(TypedArrayObject* into, const DecodeResult& r, const
 
 // Uint8Array.prototype.setFromBase64 ( string [ , options ] )
 Result<Value> Uint8ArrayPrototype_setFromBase64(NativeCall& call) {
-  TypedArrayObject* into = TRY(ValidateUint8Array(call.thisValue));
+  TypedArrayObject* into = TRY(ValidateUint8Array(call.thisValue, AccessMode::Write));
   if (!call.args[0].isString()) return ThrowTypeError("setFromBase64 requires a string");
   Object* opts = TRY(GetOptionsObject(call.args[1]));
   bool url = TRY(alphabetOption(opts));
@@ -225,7 +227,7 @@ Result<Value> Uint8ArrayPrototype_setFromBase64(NativeCall& call) {
 
 // Uint8Array.prototype.setFromHex ( string )
 Result<Value> Uint8ArrayPrototype_setFromHex(NativeCall& call) {
-  TypedArrayObject* into = TRY(ValidateUint8Array(call.thisValue));
+  TypedArrayObject* into = TRY(ValidateUint8Array(call.thisValue, AccessMode::Write));
   if (!call.args[0].isString()) return ThrowTypeError("setFromHex requires a string");
   if (IsTypedArrayOutOfBounds(into)) return ThrowTypeError("typed array is detached or out of bounds");
   DecodeResult r = FromHex(call.args[0].asString()->view(), TypedArrayLength(into));

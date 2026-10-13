@@ -130,7 +130,8 @@ Result<std::optional<PropertyDescriptor>> TypedArrayObject::GetOwnProperty(const
   if (auto index = numericIndex(key)) {
     Value value = TypedArrayGetElement(this, *index);
     if (value.isUndefined()) return std::optional<PropertyDescriptor>();
-    return std::optional<PropertyDescriptor>(PropertyDescriptor::data(value, Attr::All));
+    Attr attrs = IsImmutableBuffer(buffer) ? Attr::Enumerable : Attr::All;
+    return std::optional<PropertyDescriptor>(PropertyDescriptor::data(value, attrs));
   }
   return Object::GetOwnProperty(key);
 }
@@ -145,6 +146,15 @@ Result<bool> TypedArrayObject::HasProperty(const PropertyKey& key) {
 Result<bool> TypedArrayObject::DefineOwnProperty(const PropertyKey& key, const PropertyDescriptor& desc) {
   if (auto index = numericIndex(key)) {
     if (!IsValidIntegerIndex(this, *index)) return false;
+    if (IsImmutableBuffer(buffer)) {
+      // ValidateAndApplyPropertyDescriptor against the element's { [[Writable]]: false, [[Enumerable]]: true,
+      // [[Configurable]]: false } data property: only a compatible redefinition succeeds (and changes nothing).
+      if (desc.configurable && *desc.configurable) return false;
+      if (desc.enumerable && !*desc.enumerable) return false;
+      if (desc.isAccessorDescriptor()) return false;
+      if (desc.writable && *desc.writable) return false;
+      return !desc.value || SameValue(*desc.value, TypedArrayGetElement(this, *index));
+    }
     if (desc.configurable && !*desc.configurable) return false;
     if (desc.enumerable && !*desc.enumerable) return false;
     if (desc.isAccessorDescriptor()) return false;
@@ -164,6 +174,7 @@ Result<Value> TypedArrayObject::Get(const PropertyKey& key, Value receiver) {
 // 10.4.5.5 [[Set]]
 Result<bool> TypedArrayObject::Set(const PropertyKey& key, Value value, Value receiver) {
   if (auto index = numericIndex(key)) {
+    if (IsImmutableBuffer(buffer)) return false;
     if (receiver.isObject() && receiver.asObject() == this) {
       TRY(TypedArraySetElement(this, *index, value));
       return true;

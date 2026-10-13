@@ -63,6 +63,12 @@ Result<Value> ArrayBufferPrototype_detached(NativeCall& call) {
   return boolean(b->isDetached());
 }
 
+// get ArrayBuffer.prototype.immutable (immutable-arraybuffer)
+Result<Value> ArrayBufferPrototype_immutable(NativeCall& call) {
+  ArrayBufferObject* b = TRY(thisArrayBuffer(call.thisValue, "immutable"));
+  return boolean(IsImmutableBuffer(b));
+}
+
 // 25.1.6.6 ArrayBuffer.prototype.resize ( newLength )
 Result<Value> ArrayBufferPrototype_resize(NativeCall& call) {
   ArrayBufferObject* b = TRY(thisArrayBuffer(call.thisValue, "resize"));
@@ -74,20 +80,30 @@ Result<Value> ArrayBufferPrototype_resize(NativeCall& call) {
   return Value::undefined();
 }
 
+struct Bounds {
+  double from, to;
+};
+
+// ResolveBounds ( len, start, end )
+Result<Bounds> ResolveBounds(double len, Value start, Value end) {
+  double from = relativeIndex(TRY(ToIntegerOrInfinity(start)), len);
+  double relativeEnd = end.isUndefined() ? len : TRY(ToIntegerOrInfinity(end));
+  return Bounds{from, relativeIndex(relativeEnd, len)};
+}
+
 // 25.1.6.7 ArrayBuffer.prototype.slice ( start, end )
 Result<Value> ArrayBufferPrototype_slice(NativeCall& call) {
   ArrayBufferObject* o = TRY(thisArrayBuffer(call.thisValue, "slice"));
   if (o->isDetached()) return ThrowTypeError("ArrayBuffer.prototype.slice: buffer is detached");
   double len = double(o->byteLength());
-  double first = relativeIndex(TRY(ToIntegerOrInfinity(call.args[0])), len);
-  double relativeEnd = call.args[1].isUndefined() ? len : TRY(ToIntegerOrInfinity(call.args[1]));
-  double final = relativeIndex(relativeEnd, len);
+  auto [first, final] = TRY(ResolveBounds(len, call.args[0], call.args[1]));
   double newLen = std::max(final - first, 0.0);
   Object* ctor = TRY(SpeciesConstructor(o, intrinsic(Intrinsic::ArrayBuffer)));
   Object* created = TRY(Construct(ctor, {num(newLen)}));
   ArrayBufferObject* target = created->as<ArrayBufferObject>();
   if (!target || target->isShared()) return ThrowTypeError("ArrayBuffer species did not create an ArrayBuffer");
   if (target->isDetached()) return ThrowTypeError("ArrayBuffer species created a detached buffer");
+  if (IsImmutableBuffer(target)) return ThrowTypeError("ArrayBuffer species created an immutable buffer");
   if (target == o) return ThrowTypeError("ArrayBuffer species returned the same buffer");
   if (double(target->byteLength()) < newLen) return ThrowTypeError("ArrayBuffer species created a too small buffer");
   if (o->isDetached()) return ThrowTypeError("ArrayBuffer.prototype.slice: buffer is detached");
@@ -99,24 +115,51 @@ Result<Value> ArrayBufferPrototype_slice(NativeCall& call) {
   return Value(target);
 }
 
+// ArrayBuffer.prototype.sliceToImmutable ( start, end ) (immutable-arraybuffer)
+Result<Value> ArrayBufferPrototype_sliceToImmutable(NativeCall& call) {
+  ArrayBufferObject* o = TRY(thisArrayBuffer(call.thisValue, "sliceToImmutable"));
+  if (o->isDetached()) return ThrowTypeError("ArrayBuffer.prototype.sliceToImmutable: buffer is detached");
+  double len = double(o->byteLength());
+  auto [first, final] = TRY(ResolveBounds(len, call.args[0], call.args[1]));
+  double newLen = std::max(final - first, 0.0);
+  if (o->isDetached()) return ThrowTypeError("ArrayBuffer.prototype.sliceToImmutable: buffer is detached");
+  double currentLen = double(o->byteLength());
+  if (currentLen < final) return ThrowRangeError("ArrayBuffer.prototype.sliceToImmutable: buffer shrank below the end");
+  return Value(TRY(AllocateImmutableArrayBuffer(intrinsic(Intrinsic::ArrayBuffer), newLen, o->data(), size_t(first),
+                                                size_t(newLen))));
+}
+
+enum class CopyMode { PreserveResizability, FixedLength, Immutable };
+
 // 25.1.3.3 ArrayBufferCopyAndDetach ( arrayBuffer, newLength, preserveResizability )
-Result<Value> ArrayBufferCopyAndDetach(NativeCall& call, bool preserveResizability, const char* method) {
+Result<Value> ArrayBufferCopyAndDetach(NativeCall& call, CopyMode mode, const char* method) {
   ArrayBufferObject* o = TRY(thisArrayBuffer(call.thisValue, method));
   double newByteLength = call.args[0].isUndefined() ? double(o->byteLength()) : TRY(ToIndex(call.args[0]));
   if (o->isDetached()) return ThrowTypeError(std::string("ArrayBuffer.prototype.") + method + ": buffer is detached");
-  std::optional<double> newMaxByteLength;
-  if (preserveResizability && o->isResizable()) newMaxByteLength = double(o->maxByteLength());
+  if (IsImmutableBuffer(o)) return ThrowTypeError(std::string("ArrayBuffer.prototype.") + method + ": buffer is immutable");
   if (!o->detachKey.isUndefined()) return ThrowTypeError("ArrayBuffer cannot be detached");
-  ArrayBufferObject* newBuffer = TRY(AllocateArrayBuffer(intrinsic(Intrinsic::ArrayBuffer), newByteLength, newMaxByteLength));
-  size_t copyLength = std::min(size_t(newByteLength), o->byteLength());
-  std::memcpy(newBuffer->data(), o->data(), copyLength);
+  size_t copyLength = size_t(std::min(newByteLength, double(o->byteLength())));
+  ArrayBufferObject* newBuffer;
+  if (mode == CopyMode::Immutable) {
+    newBuffer = TRY(AllocateImmutableArrayBuffer(intrinsic(Intrinsic::ArrayBuffer), newByteLength, o->data(), 0, copyLength));
+  } else {
+    std::optional<double> newMaxByteLength;
+    if (mode == CopyMode::PreserveResizability && o->isResizable()) newMaxByteLength = double(o->maxByteLength());
+    newBuffer = TRY(AllocateArrayBuffer(intrinsic(Intrinsic::ArrayBuffer), newByteLength, newMaxByteLength));
+    std::memcpy(newBuffer->data(), o->data(), copyLength);
+  }
   TRY(DetachArrayBuffer(o));
   return Value(newBuffer);
 }
 
-Result<Value> ArrayBufferPrototype_transfer(NativeCall& call) { return ArrayBufferCopyAndDetach(call, true, "transfer"); }
+Result<Value> ArrayBufferPrototype_transfer(NativeCall& call) {
+  return ArrayBufferCopyAndDetach(call, CopyMode::PreserveResizability, "transfer");
+}
 Result<Value> ArrayBufferPrototype_transferToFixedLength(NativeCall& call) {
-  return ArrayBufferCopyAndDetach(call, false, "transferToFixedLength");
+  return ArrayBufferCopyAndDetach(call, CopyMode::FixedLength, "transferToFixedLength");
+}
+Result<Value> ArrayBufferPrototype_transferToImmutable(NativeCall& call) {
+  return ArrayBufferCopyAndDetach(call, CopyMode::Immutable, "transferToImmutable");
 }
 
 void installArrayBuffer(Realm& realm) {
@@ -127,12 +170,15 @@ void installArrayBuffer(Realm& realm) {
   defineAccessor(realm, ctor, PropertyKey(symbols().species), ArrayBuffer_species, nullptr);
   defineAccessor(realm, proto, PropertyKey(u"byteLength"), ArrayBufferPrototype_byteLength, nullptr);
   defineAccessor(realm, proto, PropertyKey(u"detached"), ArrayBufferPrototype_detached, nullptr);
+  defineAccessor(realm, proto, PropertyKey(u"immutable"), ArrayBufferPrototype_immutable, nullptr);
   defineAccessor(realm, proto, PropertyKey(u"maxByteLength"), ArrayBufferPrototype_maxByteLength, nullptr);
   defineAccessor(realm, proto, PropertyKey(u"resizable"), ArrayBufferPrototype_resizable, nullptr);
   defineFunction(realm, proto, PropertyKey(u"resize"), 1, ArrayBufferPrototype_resize);
   defineFunction(realm, proto, PropertyKey(u"slice"), 2, ArrayBufferPrototype_slice);
+  defineFunction(realm, proto, PropertyKey(u"sliceToImmutable"), 2, ArrayBufferPrototype_sliceToImmutable);
   defineFunction(realm, proto, PropertyKey(u"transfer"), 0, ArrayBufferPrototype_transfer);
   defineFunction(realm, proto, PropertyKey(u"transferToFixedLength"), 0, ArrayBufferPrototype_transferToFixedLength);
+  defineFunction(realm, proto, PropertyKey(u"transferToImmutable"), 0, ArrayBufferPrototype_transferToImmutable);
   defineValue(proto, PropertyKey(symbols().toStringTag), str(u"ArrayBuffer"), Attr::Configurable);
 }
 

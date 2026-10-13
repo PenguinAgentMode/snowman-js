@@ -89,6 +89,7 @@ Result<Value> getViewValue(NativeCall& call) {
 template <ElementType T>
 Result<Value> setViewValue(NativeCall& call) {
   DataViewObject* view = TRY(thisView(call.thisValue));
+  if (IsImmutableBuffer(view->buffer)) return ThrowTypeError("DataView is backed by an immutable ArrayBuffer");
   double getIndex = TRY(ToIndex(call.args[0]));
   Value numberValue = TRY(ToElementValue(T, call.args[1]));
   bool isLittleEndian = ToBoolean(call.args[2]);
