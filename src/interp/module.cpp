@@ -490,8 +490,9 @@ void AsyncModuleExecutionRejected(ModuleRecord* module, Value error) {
   module->evaluationError = error;
   module->status = ModuleRecord::Status::Evaluated;
   module->asyncEvaluation = false;
-  for (ModuleRecord* m : module->asyncParentModules) AsyncModuleExecutionRejected(m, error);
+  // Leaf to root: the module's own top-level promise rejects before its ancestors'.
   if (module->topLevelCapability) (void)rejectCapability(module->topLevelCapability, error);
+  for (ModuleRecord* m : module->asyncParentModules) AsyncModuleExecutionRejected(m, error);
 }
 
 // 16.2.1.5.3.4 AsyncModuleExecutionFulfilled

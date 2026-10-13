@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 import { runExecDriver } from './driver.mjs';
-import { KNOWN_SYNTAX, execPatterns, grammarFuzz, rng } from './gen.mjs';
+import { KNOWN_SYNTAX, casePatterns, execPatterns, grammarFuzz, rng } from './gen.mjs';
 
 const NODE_FLAGS = ['--js-regexp-modifiers', '--js-regexp-duplicate-named-groups'];
 try {
@@ -72,6 +72,8 @@ const nGrammar = Number(opt('grammar', 0));
 if (nGrammar) patterns = patterns.concat(grammarFuzz(nGrammar, Number(opt('seed', 1)) + 11, { mutate: false }));
 const nGen = Number(opt('patterns', caseFile || nGrammar ? 0 : 20000));
 if (nGen) patterns = patterns.concat(execPatterns(nGen, Number(opt('seed', 1)) + 13));
+const nCase = Number(opt('case', 0));
+if (nCase) patterns = patterns.concat(casePatterns(nCase, Number(opt('seed', 1)) + 17));
 const seen = new Set();
 patterns = patterns.filter((p) => {
   const k = `${p.flags}/${p.pattern}`;
@@ -88,6 +90,13 @@ const K = Number(opt('inputs', 8));
 const cases = [];
 for (const p of patterns) {
   const abc = alphabet(p.pattern);
+  if (p.kind === 'case') {
+    for (const c of [p.lo - 1, p.lo, p.lo + 1, p.hi - 1, p.hi, p.hi + 1, Math.floor((p.lo + p.hi) / 2)]) {
+      if (c < 0 || c > 0x10ffff) continue;
+      const ch = String.fromCodePoint(c);
+      abc.push(ch, ch.toLowerCase(), ch.toUpperCase());
+    }
+  }
   for (let k = 0; k < K; k++) {
     let input = '';
     const len = Math.floor(r() * 10);

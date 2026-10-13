@@ -288,3 +288,26 @@ export function execPatterns(n, seed) {
   }
   return out;
 }
+
+// Case-insensitive classes for exec-oracle.mjs --case: random ranges and characters (with and without negation)
+// under i and iu, where Canonicalize's closure is computed.
+export function casePatterns(n, seed) {
+  const r = rng(seed);
+  const pick = (a) => a[Math.floor(r() * a.length)];
+  const esc = (c) => (c > 0xffff ? `\\u{${c.toString(16)}}` : `\\u${c.toString(16).padStart(4, '0')}`);
+  const hot = [0x41, 0x61, 0x4b, 0x6b, 0x53, 0x73, 0xb5, 0xc0, 0xdf, 0xff, 0x130, 0x131, 0x149, 0x17f, 0x1c4, 0x1c5, 0x1c6,
+    0x345, 0x390, 0x3a3, 0x3c2, 0x3c3, 0x3f4, 0x1e9e, 0x1fbe, 0x2126, 0x212a, 0x212b, 0x2c2f, 0xa7ae, 0xab70, 0xfb00, 0x10400,
+    0x10428, 0x1e900, 0x1e922, 0x13a0, 0x13f8, 0xff21, 0xff41];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const unicode = r() < 0.5;
+    const a = r() < 0.6 ? pick(hot) + Math.floor(r() * 40) - 20 : Math.floor(r() * (unicode ? 0x20000 : 0x10000));
+    const b = a + Math.floor(r() * (r() < 0.5 ? 3 : 300));
+    const lo = Math.max(0, a);
+    const hi = Math.min(b, unicode ? 0x10ffff : 0xffff);
+    const body = r() < 0.5 ? `${esc(lo)}-${esc(hi)}` : esc(lo);
+    const neg = r() < 0.3 ? '^' : '';
+    out.push({ pattern: r() < 0.3 && !neg ? esc(lo) : `[${neg}${body}]`, flags: unicode ? 'iu' : 'i', kind: 'case', lo, hi });
+  }
+  return out;
+}

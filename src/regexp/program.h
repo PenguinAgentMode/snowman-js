@@ -7,6 +7,7 @@
 #pragma once
 
 #include <cstdint>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -36,13 +37,14 @@ enum class Op : uint8_t {
   GroupStart,
   GroupEnd,
   ClearCaptures,  // captures [a, b) to undefined (RepeatMatcher step 4)
-  // RepeatMatcher. Registers a (iterations done) and a + 1 (where this iteration began).
+  // RepeatMatcher. Registers a (iterations begun) and a + 1 (where the current one began).
   LoopInit,  // register a = 0
   Loop,      // b = min, c = max, d = the exit; kGreedy
-  LoopIter,  // register a + 1 = position
-  LoopNext,  // b = min, c = the Loop: the empty check, then one more iteration done
+  LoopIter,  // begins an iteration: register a + 1, register a + 1 = position
+  LoopNext,  // b = min, c = the Loop: the empty check
   // A quantified single-character matcher (the instruction after) with no captures: b = min, c = max; kGreedy.
-  // Continues at pc + 2.
+  // Continues at pc + 2. kFollow: the instruction there is Char d (a BMP non-surrogate, forward), so only
+  // positions where the input has d can continue.
   Star,
   // Lookarounds: registers a (backtrack stack height at the start) and a + 1 (the position). LookStart: b = the
   // LookEnd, captures [c, d) are the body's; kNegative.
@@ -58,6 +60,19 @@ enum InstFlag : uint8_t {
   kInstIgnoreCase = 8,
   kInstMultiline = 16,
   kUnicodeWords = 32,
+  kFollow = 64,
+};
+
+// A Set's characters, with a bitmap for ASCII.
+struct MatchSet {
+  explicit MatchSet(CharSet s) : set(std::move(s)) {
+    for (const auto& r : set.ranges()) {
+      for (char32_t c = r.first; c <= r.last && c < 128; c++) ascii[c >> 6] |= uint64_t{1} << (c & 63);
+    }
+  }
+  bool contains(char32_t c) const { return c < 128 ? (ascii[c >> 6] >> (c & 63)) & 1 : set.contains(c); }
+  uint64_t ascii[2] = {0, 0};
+  CharSet set;
 };
 
 struct Inst {
@@ -80,7 +95,10 @@ class Program {
   bool anchoredStart = false;
   uint32_t registerCount = 0;
   std::vector<Inst> code;
-  std::vector<CharSet> sets;
+  std::vector<MatchSet> sets;
+  // Every match that consumes anything starts with one of these characters (none: no such filter). The search
+  // skips other start positions. Only when no match can be empty.
+  std::optional<MatchSet> firstChars;
   std::vector<uint32_t> backrefGroups;
 };
 
