@@ -7,7 +7,7 @@
 | temporal2 | temporal2 | `ws/temporal2` | `src/builtins/temporal/{instant,zoned_date_time,now,time_zone}.cpp`, `time_zone.h`, `tz*`, `tools/temporal/` (1,434 files + tz data for intl402/Temporal) | started: time_zone.h first |
 | intl | intl | `ws/intl` | `src/builtins/intl/`, `tools/intl/`; additive Intrinsics in realm.h | started: plumbing for all constructors first |
 | builtins | builtins | `ws/builtins` | promise/error/iterator/regexp/arraybuffer/typedarray/dataview/atomics/uint8array_base64 built-ins; additive `runtime/arraybuffer.h` | started: allKeyed, Error.stack, Iterator.join, legacy RegExp statics, immutable ArrayBuffer (228 files) |
-| survey | (closed) | `ws/survey` | | report merged d44aba3: `tools/lead/survey-full.md` |
+| survey | survey (IDLE; closes but stays listed: agent-system fault, reported) | `ws/survey` | | report merged d44aba3. Holds a machine: reopen it with agent_send for the next area instead of spawning; first wait for its orphaned node run (2 × 768 MB heap) to finish |
 | parser, regexp, interp, modules | (closed) | | | merged before M8 |
 | runtime, interp2 | (closed; previous team) | `ws/runtime` (+1), `ws/interp2` (+4) | | unmerged perf/IsHTMLDDA commits; to gate on ES-core before merging |
 
