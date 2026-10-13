@@ -30,3 +30,21 @@
 - Not done (needs interp/function.cpp, not mine): staging block functions named `arguments`
   (block-scoped-functions-annex-b-arguments.js, regress-602621.js): B.3.2.1 must still assign the var binding when
   F is "arguments" (2d134b3 skips the candidate). Queue item (d): staging/sm/regress/regress-610026 (AST node size).
+
+## Area 4 (current): Temporal non-ISO calendars (branch ws/calendars, from main 258ff44)
+
+- Ownership: src/builtins/temporal/calendar*.{h,cpp} + the calendar parts of temporal.h (plus my tz files);
+  plain_*.cpp/duration.cpp/parse.cpp/options.cpp only in small separate commits listed in the MR.
+- Design: calendar_systems.{h,cpp}: one CalendarSystem per calendar (epoch days <-> year/ordinal month/day,
+  months per year, month codes incl. leap months like M05L, eras). temporal.h: struct CalendarDate {era, eraYear,
+  year, month, monthCode, day} + CalendarISOToDate(CalendarId, ISODate) (intl's DTF uses it; chinese/dangi: year =
+  related ISO year, no era). calendar.cpp generic non-ISO paths: aliases (islamicc, ethiopic-amete-alem),
+  CalendarExtraFields, CalendarFieldKeysToIgnore, CalendarResolveFields (TypeErrors before RangeErrors, era -> year),
+  date -> ISO with overflow, PlainMonthDay reference date, NonISODateAdd/Until, ISODateToFields, getters
+  (weekOfYear/yearOfWeek undefined for non-ISO). japanese: Meiji is an era only from 1873-01-01.
+  tools/temporal/check-calendars.mjs vs node. Spec: /tmp/eramonth.txt from tc39/proposal-intl-era-monthcode.
+- Order (each its own gated merge): (1) CalendarDate/CalendarISOToDate + gregory; (2) buddhist, roc, japanese;
+  (3) coptic, ethiopic, ethioaa, indian, persian, hebrew, islamic-civil, islamic-tbla; (4) chinese, dangi,
+  islamic-umalqura from tools/temporal/gen-calendars.mjs tables.
+- Watch: survey's toLocaleString batch (ws/survey-intl 5aba3f349) lands soon: rebase onto it. builtins7's
+  thread_local conversion touches temporal/time_zone.cpp (one cache).
