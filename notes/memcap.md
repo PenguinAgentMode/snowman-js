@@ -1,6 +1,6 @@
 # memcap handoff (agent "memcap": measurer + memory/runner work)
 
-Updated: 2026-10-13, after the c21bcd8 measurement.
+Updated: 2026-10-13, (c) canblock gate running.
 
 ## Done (merged)
 - ws/memcap (main 5ff85e8): 480 MB main stack, 256 KB coroutine stacks + budgets, parser nesting guard,
@@ -15,22 +15,20 @@ Updated: 2026-10-13, after the c21bcd8 measurement.
   staging/sm/{Proxy/revoked-get-function-realm-typeerror,String/internalUsage,extensions/
   quote-string-for-nul-character}.js) + flaky staging/sm/Date/dst-offset-caching-* timeouts (7-10 s each).
 
-## In progress (lead's queue, in order)
-- DONE/handed off: interp2-r -> main 23c2b86; runtime-r 44d3159 gated clean (43,191, 0 regressions), the lead
-  merges it after survey 5aba3f349 and the lead's own post-merge measurement (the lead now runs measurements).
-- (a) ws/stacktrim 6b67bbf: coroutine budget main + 128 MB, madvise(DONTNEED) of the dead main stack before
-  mapping a fresh coroutine stack; recursion.js 929 -> 657 MB, passes. ES-core gate vs results/c21bcd82e.json
-  running (/tmp/stacktrim-core.jsonl); then merge request.
-- (b) DONE: memory root causes in tools/lead/es-core-residue.md (ws/measure).
-- (c) ws/canblock f2a0138 WIP (approved): vm().canBlock, CLI --can-block=false (INTERFACES.md §1), run.mjs
-  passes it for flags: [CanBlockIsFalse], 1-line AgentCanSuspend check in builtins/atomics.cpp. Gate: old vs
-  new runner, same binary, over the 9 CanBlockIs{True,False} files of the full suite (/tmp/canblock.txt),
-  plus the ES-core gate. Squash the wip commit before the merge request.
+## In progress
+- Merges queued by the lead: runtime-r 44d3159 and stacktrim 6b67bbf (both gated clean vs c21bcd82e).
+- (c) ws/canblock ff86a5f (squashed): --can-block=false. Runner gate over the 9 CanBlockIs{True,False}
+  files (old runner vs new, same binary): 7 -> 9, +2 CanBlockIsFalse, 0 newly failing. ES-core gate running:
+  $HOME/tmp/canblock-core.jsonl vs results/c21bcd82e.json; then merge request.
+- Done: memory root causes in tools/lead/es-core-residue.md (ws/measure).
 
 ## Machine / gotchas
 - Worktrees: ~/repo/snowman-js (measuring checkout: keep clean, detach at the exact main sha so the label
   matches), ~/repo/main-wt, ~/repo/runner-wt, ~/repo/interp2-wt, ~/repo/runtime-wt, ~/repo/results-wt.
-- /tmp/t262-b: private test262 copy for runs outside the measuring checkout (--test262 /tmp/t262-b).
+- /tmp is a tmpfs INSIDE the sandbox: files there count against the 4 GB. Use TMPDIR=$HOME/tmp and write
+  JSONL/logs under $HOME/tmp. Private test262 copy: $HOME/t262-b (--test262 $HOME/t262-b).
+- Helper scripts in $HOME/tmp: cmp.js (per-file before/after of two JSONLs), run-gate-new.mjs (runner copy
+  filtered by T262_FILES), canblock.txt, modules-full.txt, htmldda.txt.
 - Tool calls time out around 10 min: sleep <= 295 s per call. Background runs: run_in_background + monitor.
 - Background processes live in another PID namespace: kill/pkill can't stop them. Don't start a run you
   may need to cancel.
