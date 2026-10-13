@@ -13,6 +13,9 @@ Lessons from this project's own incidents. t262/ is the measuring stick and stay
   25 minutes on 16 jobs. Use `make slice FILTER=...` for loops, and run full runs with run_in_background.
 - **`cmd &` inside a tool call dies when the call returns.** Use run_in_background, never a trailing `&`.
 - **Don't rebuild `./engine` while a run uses it.** Build in a worktree, or wait.
+- **Memory is the machine's limit, not the test's.** Machines have 4 GB, enforced by killing the whole machine;
+  run.mjs runs 4 jobs and kills an engine above 700 MB resident (`MemoryLimit` in the JSONL). Run a probe that
+  can grow (recursive generators, huge strings) outside the runner only under `ulimit -v` in the same shell.
 
 ## Baselines
 

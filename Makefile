@@ -6,7 +6,7 @@
 # make shard SHARD=k/N  one shard of the full run, to results/shard-k.jsonl; aggregate per t262/README.md
 CXXFLAGS ?= -std=c++20 -O2 -g -Wall -Wextra
 CPPFLAGS += -Isrc
-JOBS ?= $(shell nproc)
+JOBS ?= 4
 SOURCES := $(shell find src -name '*.cpp')
 OBJECTS := $(SOURCES:src/%.cpp=build/%.o)
 RUN := node t262/runner/run.mjs --engine ./engine --jobs $(JOBS) $(if $(PARSE),--parse-only)

@@ -1,10 +1,14 @@
 // run.mjs: run one shard of a test262 suite against an engine, one process per scenario, and write
 // a JSONL line per scenario. Tests run in place, so module specifiers resolve as INTERPRETING.md says.
 //
-//   node runner/run.mjs --engine "<command>" [--suite es-core|full] [--shard k/N] [--jobs J]
+//   node runner/run.mjs --engine "<command>" [--suite es-core|full] [--shard k/N] [--jobs J (4)]
 //                       [--parse-only] [--filter <path prefix>] [--out results/shard.jsonl]
+//                       [--mem-mb M (env T262_MEM_MB, 700)]
+//
+// Memory: a watchdog polls each engine's VmRSS and SIGKILLs one above --mem-mb; the scenario fails with
+// error_name MemoryLimit. A runaway test then fails alone instead of taking the machine down (4 jobs x the cap
+// has to fit the machine).
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -12,12 +16,20 @@ import { listScenarios, metadataOf, shardOf } from './scenarios.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TIMEOUT_MS = 10_000;
+const MEM_POLL_MS = 20;
 const DONOTEVALUATE = 'Test262: This statement should not be evaluated.';
 // RAN is printed after a test's body, so an engine that runs nothing and exits 0 can't pass it.
 const RAN = 'Test262:Ran';
 
 function parseArgs(argv) {
-  const args = { suite: 'es-core', shard: '0/1', jobs: os.cpus().length, parseOnly: false, test262: path.join(KIT, 'test262') };
+  const args = {
+    suite: 'es-core',
+    shard: '0/1',
+    jobs: 4,
+    parseOnly: false,
+    test262: path.join(KIT, 'test262'),
+    memMb: process.env.T262_MEM_MB || 700,
+  };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
     if (key === '--parse-only') {
@@ -48,8 +60,9 @@ function compose(test262, source, metadata, mode) {
 }
 
 // verdict decides a scenario from the engine's exit code and output.
-function verdict({ code, output, timedOut }, metadata, parseOnly) {
+function verdict({ code, output, timedOut, memoryExceeded }, metadata, parseOnly) {
   if (timedOut) return 'timeout';
+  if (memoryExceeded) return 'fail';
   const negative = metadata.negative;
   const expectsParseError = negative && (negative.phase === 'parse' || negative.phase === 'resolution');
 
@@ -76,25 +89,77 @@ function lastError(output) {
   return match ? { error_name: match[1], message: match[2].slice(0, 300) } : {};
 }
 
-function execute(command, args, timeoutMs) {
+// /proc can belong to an outer PID namespace (gVisor sandboxes): there a child's pid names some other process,
+// and the child's entry is the one whose parent is this process's entry and whose command line has `marker`.
+const SELF_PROC = (() => {
+  try {
+    return fs.readlinkSync('/proc/self');
+  } catch {
+    return String(process.pid);
+  }
+})();
+
+function procEntryOf(child, marker) {
+  if (SELF_PROC === String(process.pid)) return String(child.pid);
+  for (const entry of fs.readdirSync('/proc')) {
+    if (!/^\d+$/.test(entry)) continue;
+    try {
+      const stat = fs.readFileSync(`/proc/${entry}/stat`, 'utf8');
+      const ppid = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1];
+      if (ppid === SELF_PROC && fs.readFileSync(`/proc/${entry}/cmdline`, 'utf8').includes(marker)) return entry;
+    } catch {
+      // gone meanwhile
+    }
+  }
+  return null;
+}
+
+// A process's resident set in KB (0 once it has exited).
+function rssKb(entry) {
+  try {
+    const match = /^VmRSS:\s+(\d+) kB/m.exec(fs.readFileSync(`/proc/${entry}/status`, 'utf8'));
+    return match ? Number(match[1]) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Runs the command; SIGKILLs it after timeoutMs, or once its resident set exceeds memLimitKb. marker is an
+// argument unique to this run among concurrent ones (the composed test's path).
+function execute(command, args, timeoutMs, memLimitKb, marker) {
   return new Promise((resolve) => {
     const started = performance.now();
     const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     let timedOut = false;
+    let memoryExceeded = false;
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill('SIGKILL');
     }, timeoutMs);
+    let entry = null;
+    const watchdog = setInterval(() => {
+      if (child.exitCode !== null || child.signalCode !== null) return;
+      entry ??= procEntryOf(child, marker);
+      if (entry && rssKb(entry) > memLimitKb) {
+        memoryExceeded = true;
+        child.kill('SIGKILL');
+      }
+    }, MEM_POLL_MS);
+    const stop = () => {
+      clearTimeout(timer);
+      clearInterval(watchdog);
+    };
     child.stdout.on('data', (d) => (output += d));
     child.stderr.on('data', (d) => (output += d));
+    child.on('exit', stop);
     child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({ code: code ?? 1, output, timedOut, ms: Math.round(performance.now() - started) });
+      stop();
+      resolve({ code: code ?? 1, output, timedOut, memoryExceeded, ms: Math.round(performance.now() - started) });
     });
     child.on('error', (error) => {
-      clearTimeout(timer);
-      resolve({ code: 127, output: String(error), timedOut: false, ms: 0 });
+      stop();
+      resolve({ code: 127, output: String(error), timedOut: false, memoryExceeded: false, ms: 0 });
     });
   });
 }
@@ -112,11 +177,15 @@ async function runScenario(args, engine, scenario, slot) {
   if (args.parseOnly) engineArgs.push('--parse-only');
   if (isModule) engineArgs.push('--module');
   engineArgs.push(composed);
-  const result = await execute(engine[0], engineArgs, TIMEOUT_MS);
+  const result = await execute(engine[0], engineArgs, TIMEOUT_MS, Number(args.memMb) * 1024, composed);
   fs.rmSync(composed, { force: true });
 
   const status = verdict(result, metadata, args.parseOnly);
-  const failure = status === 'pass' ? {} : lastError(result.output);
+  const failure = result.memoryExceeded
+    ? { error_name: 'MemoryLimit', message: `killed: resident memory above ${args.memMb} MB` }
+    : status === 'pass'
+      ? {}
+      : lastError(result.output);
   return { file: scenario.file, mode: scenario.mode, status, ms: result.ms, ...failure };
 }
 

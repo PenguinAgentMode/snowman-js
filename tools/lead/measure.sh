@@ -29,7 +29,7 @@ if [ "$mode" = parse ]; then
 else
   jsonl="results/$sha/full.jsonl"; out="results/$sha.json"; flag=
 fi
-node t262/runner/run.mjs --engine ./engine $flag --jobs "$(nproc)" --out "$jsonl"
+node t262/runner/run.mjs --engine ./engine $flag --jobs 4 --out "$jsonl"
 if [ "$(git rev-parse --short=9 HEAD)" != "$sha" ]; then
   echo "measure.sh: HEAD moved during the run; the results are not for one commit, discarding" >&2
   exit 4
