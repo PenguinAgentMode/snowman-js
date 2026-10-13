@@ -266,6 +266,12 @@ Result<void> DefineMethodProperty(Object* homeObject, Value key, Object* closure
   return DefinePropertyOrThrow(homeObject, propertyKey, PropertyDescriptor::data(Value(closure), attrs));
 }
 
+void AddLegacyFunctionProperties(ECMAScriptFunction* F) {
+  if (F->strict) return;
+  defineValue(F, PropertyKey(u"arguments"), Value::undefined(), Attr::None);
+  defineValue(F, PropertyKey(u"caller"), Value::undefined(), Attr::None);
+}
+
 Object* functionPrototypeFor(Realm* realm, const ast::Function* function) {
   if (function->async && function->generator) return realm->intrinsic(Intrinsic::AsyncGeneratorFunctionPrototype);
   if (function->generator) return realm->intrinsic(Intrinsic::GeneratorFunctionPrototype);
@@ -287,6 +293,7 @@ void finishFunctionObject(ECMAScriptFunction* F, const ast::Function* function) 
     return;
   }
   if (function->async || function->isArrow() || function->kind != ast::FunctionKind::Normal) return;
+  AddLegacyFunctionProperties(F);
   MakeConstructor(F);
 }
 

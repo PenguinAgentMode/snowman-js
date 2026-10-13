@@ -216,6 +216,9 @@ Result<Value> InstantiateFunctionExpression(const ast::Function* function, Value
 // MethodDefinition / object literal methods: DefineMethod and its generator / async variants.
 Result<ECMAScriptFunction*> DefineMethod(const ast::Function* function, Object* object,
                                          Object* functionPrototype = nullptr);
+// Sloppy plain functions' own "arguments" and "caller" (undefined, non-writable, non-configurable): an extension
+// 17.1 allows, so legacy `f.caller` reads don't hit %ThrowTypeError%.
+void AddLegacyFunctionProperties(ECMAScriptFunction* F);
 // The %XFunction.prototype% intrinsic and instance prototype for a function's kind.
 Object* functionPrototypeFor(Realm* realm, const ast::Function* function);
 
