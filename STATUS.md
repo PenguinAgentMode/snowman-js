@@ -25,6 +25,17 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 - Known ceiling: ~104 module tests import their own file and can't pass under the current runner
   (src/interp/module_test_exclusions.txt; decision with the supervisor).
 
+## Decisions
+
+- 2026-10-13, supervisor: no ICU. Locale data (intl) and tz data (temporal2) are generated from node by checked-in
+  scripts. Each .inc records the script, the command and node's versions, and regenerating it is byte-identical.
+- 2026-10-13, supervisor: module tests run in place (INTERFACES.md §1, preludes/epilogues), so the 104
+  self-importing module tests can pass. Recorded as a runner change, with a per-test before/after on every module
+  test in the full suite. A prelude/epilogue error never satisfies a negative test.
+- Expected flips: when `import defer` / `import source` land, most of the 242 proposal negative-syntax tests that
+  pass today only because the parser rejects all of `import.defer`/`import.source` may change status. That
+  branch's gate lists them separately as expected, with each one checked against its specific early error.
+
 ## Gate baseline
 
 - Until memcap's gated ES-core run lands: `git show origin/results:results/7e957a05a/es-core-estimated.json >

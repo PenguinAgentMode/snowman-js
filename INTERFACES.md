@@ -20,6 +20,20 @@ relative to `src/` (`#include "runtime/value.h"`), no exceptions for JS control 
 - Errors go to stdout as `Name: message` (`SyntaxError: ...`, `TypeError: ...`, `Test262Error: ...`), exit 1.
   An uncaught non-Error value prints `Uncaught: <ToString(value)>` style text but still exits 1.
 - Results format: the JSONL t262/runner/run.mjs writes and the JSON aggregate.mjs writes.
+- **Preludes and epilogues** (approved 2026-10-13; module tests run in place, so a test that imports itself gets
+  the same module record): `engine [--prelude h.js]... [--epilogue e.js]... [--module] file`.
+  - Each `--prelude` file is evaluated, in order, as a global Script in the main realm before the entry (real
+    ScriptEvaluation: global var/function declarations, `this` = the global object).
+  - The entry (`file`, a Script, or a Module with `--module`) runs at its own path; imports resolve relative to it.
+  - The job queue is drained. Then, if the entry completed normally (for a module: its evaluation promise is
+    fulfilled), each `--epilogue` file is evaluated as a global Script and the queue is drained again. If the
+    module's promise is rejected, the reason is reported as an uncaught exception; if it is still pending, print
+    `Error: module evaluation did not complete`. Both exit 1, and no epilogue runs.
+  - An error thrown by a prelude or an epilogue (parse or runtime) prints `Test262:HostScriptError <file>` on its
+    own line before the usual `Name: message`, and exits 1. The runner fails such a scenario whatever the
+    test expects, so a negative test can't be satisfied by the harness's own error.
+  - run.mjs uses this for `flags: [module]` tests: the composed harness and the `print("Test262:Ran")` epilogue
+    are temp files outside the test tree (os.tmpdir()), and the test file runs unmodified at its real path.
 
 ## 2. AST (`src/parser/ast.h`, owned by the parser workstream)
 
