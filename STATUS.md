@@ -70,6 +70,10 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Decisions
 
+- 2026-10-13 ~18:10, supervisor: approved runner change for script tests: harness as --prelude, RAN as
+  --epilogue, the strict prefix on the test source only (INTERPRETING.md). Delegated to staging (ws/runner-strict)
+  under the lead's review; gate = old vs new runner on the same binary over the whole full suite (both
+  directions) + parse-only unchanged; recorded as a RUNNER gain. Target: the 13 staging/sm/strict/* files.
 - 2026-10-13 16:33: the stack stopped the dead agents' machines (memcap, survey, temporal, intl, temporal2); every
   commit from them was already on origin. New workers (fresh contexts): chinese (astronomical Chinese/Dangi
   tables, 9 files), decorators2 (decorators, 22 + 2 staging), staging (staging triage, 34), intlfmt (non-Gregorian
