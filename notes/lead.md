@@ -17,6 +17,7 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~15:45 UTC, main a1a2a5f 
 ## Merge queue
 
 1. Merged cb6d5f1 (calendar group 2); not yet measured. Measure main after group 3 merges.
+   builtins' queue after group 3: ws/calendars-ref e27ba47 (reference-year table, 4 files), then $262.agent step 3.
 2. builtins: calendar group 3, ws/calendars-g3 f21aed9 (arithmetic calendars, on main 93b4e17), gating vs a1a2a5fc3.
 
 How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort) <(git diff --name-only $base
@@ -39,7 +40,8 @@ Dead agents still list as IN_PROGRESS/IDLE and probably still hold machines; age
 
 ## Spawn retries
 
-Every spawn since 12:20 fails with "ProvisionSandbox ... no hosts match the requirements" (12:20, 14:33, 14:47).
+Every spawn since 12:20 fails with "ProvisionSandbox ... no hosts match the requirements" (12:20, 14:33, 14:47,
+15:45 "decorators"). Next: 16:50 (one-shot cron reminder).
 Supervisor: retry once an hour (next 15:50; a one-shot cron reminder is set), or at once if told machines were
 freed. A failed spawn: agent_close it and tell the supervisor.
 

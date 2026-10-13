@@ -121,6 +121,15 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
   coroutine nesting counted against the stack limit (RangeError), then `ulimit -v` in run.mjs. After proper tail
   calls land, the main stack shrinks to ~64 MB.
 
+## Known gaps (not regressions)
+
+- intl402/Temporal, 9 Chinese-calendar files (daysInYear 4, monthCode M06L vs M07 5): our tables are generated from
+  node's ICU 78.3, which differs from the official (HKO) Chinese calendar in a few years (CNY 2027 02-07 vs 02-06,
+  2030 02-02 vs 02-03, the 1987 leap month after month 7 vs 6); test262 follows the official calendar. If it's
+  ever fixed, it'll be an astronomical new-moon/solar-term computation cross-checked against ICU (no third-party
+  data). Deferred: 9 files vs $262.agent's 112.
+- intl402/Temporal/ZonedDateTime/links.js: tzdb 2026d made CST6CDT etc. Zones again; we follow node's data.
+
 ## Waivers
 
 Each line is a known regression, with its reason.
