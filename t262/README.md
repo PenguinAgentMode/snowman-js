@@ -43,6 +43,7 @@ node t262/runner/milestones.mjs results/<sha>.json --parse-only results/<sha>-pa
   `milestones.mjs results/<sha>.json --full results/<sha>-full.json`. `tools/lead/measure.sh suite` does all three.
 - `--jobs` defaults to 4. A watchdog SIGKILLs an engine whose resident memory passes `--mem-mb` (env
   `T262_MEM_MB`, default 700); the scenario fails with `error_name` `MemoryLimit`. Jobs x the cap must fit the machine.
+  Each engine also runs under `ulimit -v` of `--vm-mb` (env `T262_VM_MB`, default 1024; 0 for none).
 
 `results/node/es-core.json` is node itself through `hosts/node-host.mjs` (97.42% of files). A test node fails
 here usually needs host support, not engine work.

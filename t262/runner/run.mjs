@@ -3,11 +3,12 @@
 //
 //   node runner/run.mjs --engine "<command>" [--suite es-core|full] [--shard k/N] [--jobs J (4)]
 //                       [--parse-only] [--filter <path prefix>] [--out results/shard.jsonl]
-//                       [--mem-mb M (env T262_MEM_MB, 700)]
+//                       [--mem-mb M (env T262_MEM_MB, 700)] [--vm-mb V (env T262_VM_MB, 1024; 0: none)]
 //
 // Memory: a watchdog polls each engine's VmRSS and SIGKILLs one above --mem-mb; the scenario fails with
 // error_name MemoryLimit. A runaway test then fails alone instead of taking the machine down (4 jobs x the cap
-// has to fit the machine).
+// has to fit the machine). Each engine also runs under `ulimit -v` --vm-mb, for growth faster than the poll
+// (the engine's 480 MB main stack is reserved address space, most of it never touched).
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
@@ -29,6 +30,7 @@ function parseArgs(argv) {
     parseOnly: false,
     test262: path.join(KIT, 'test262'),
     memMb: process.env.T262_MEM_MB || 700,
+    vmMb: process.env.T262_VM_MB || 1024,
   };
   for (let i = 0; i < argv.length; i++) {
     const key = argv[i];
@@ -124,12 +126,14 @@ function rssKb(entry) {
   }
 }
 
-// Runs the command; SIGKILLs it after timeoutMs, or once its resident set exceeds memLimitKb. marker is an
-// argument unique to this run among concurrent ones (the composed test's path).
-function execute(command, args, timeoutMs, memLimitKb, marker) {
+// Runs the command under an address-space cap of vmLimitKb (0: none); SIGKILLs it after timeoutMs, or once its
+// resident set exceeds memLimitKb. marker is an argument unique to this run among concurrent ones (the
+// composed test's path).
+function execute(command, args, timeoutMs, memLimitKb, vmLimitKb, marker) {
   return new Promise((resolve) => {
     const started = performance.now();
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+    const capped = vmLimitKb ? ['/bin/sh', ['-c', 'ulimit -v "$0" && exec "$@"', String(vmLimitKb), command, ...args]] : [command, args];
+    const child = spawn(capped[0], capped[1], { stdio: ['ignore', 'pipe', 'pipe'] });
     let output = '';
     let timedOut = false;
     let memoryExceeded = false;
@@ -177,7 +181,7 @@ async function runScenario(args, engine, scenario, slot) {
   if (args.parseOnly) engineArgs.push('--parse-only');
   if (isModule) engineArgs.push('--module');
   engineArgs.push(composed);
-  const result = await execute(engine[0], engineArgs, TIMEOUT_MS, Number(args.memMb) * 1024, composed);
+  const result = await execute(engine[0], engineArgs, TIMEOUT_MS, Number(args.memMb) * 1024, Number(args.vmMb) * 1024, composed);
   fs.rmSync(composed, { force: true });
 
   const status = verdict(result, metadata, args.parseOnly);
