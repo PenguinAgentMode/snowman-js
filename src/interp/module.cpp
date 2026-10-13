@@ -587,7 +587,7 @@ Result<void> ExecuteModule(ModuleRecord* module, PromiseCapability* capability =
   return {};
 }
 
-uint64_t gModuleAsyncEvaluationCount = 1;
+thread_local uint64_t gModuleAsyncEvaluationCount = 1;
 
 void ExecuteAsyncModule(ModuleRecord* module);
 

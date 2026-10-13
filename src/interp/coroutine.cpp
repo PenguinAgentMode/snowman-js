@@ -11,6 +11,7 @@
 #include <sys/mman.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <vector>
@@ -61,12 +62,14 @@ namespace snowman::interp {
 
 namespace {
 
-Coroutine* gCurrent = nullptr;
+// Per thread (agent): the running coroutine and the pool of finished stacks.
+thread_local Coroutine* gCurrent = nullptr;
 // Finished default-sized stacks, kept for reuse: async code makes and finishes coroutines constantly.
-std::vector<char*> gStackPool;
+thread_local std::vector<char*> gStackPool;
 constexpr size_t kMaxPooledStacks = 64;
-// The bytes of the stacks started and not yet released (pooled ones aside), against kStackBytesBudget.
-size_t gStackBytes = 0;
+// The bytes of the stacks started and not yet released (pooled ones aside), against kStackBytesBudget: one count for
+// the whole process, every agent's stacks included.
+std::atomic<size_t> gStackBytes = 0;
 
 // CheckStack() throws below a stack's limit: leave room under it for the error path and for code between checks.
 size_t stackMargin(size_t stackSize) { return stackSize >= (size_t(64) << 20) ? size_t(1) << 20 : size_t(64) << 10; }
@@ -113,7 +116,11 @@ Coroutine::~Coroutine() {
 Coroutine* Coroutine::current() { return gCurrent; }
 
 bool Coroutine::mapStack() {
-  if (gStackBytes + stackSize_ > kStackBytesBudget) return false;
+  // Reserve against the budget first (one atomic step, so two agents can't both pass the check), undo on failure.
+  if (gStackBytes.fetch_add(stackSize_) + stackSize_ > kStackBytesBudget) {
+    gStackBytes -= stackSize_;
+    return false;
+  }
   size_t guard = pageSize();
   if (stackSize_ == kDefaultStackSize && !gStackPool.empty()) {
     mapping_ = gStackPool.back();
@@ -121,11 +128,13 @@ bool Coroutine::mapStack() {
   } else {
     void* mapping = mmap(nullptr, stackSize_ + guard, PROT_READ | PROT_WRITE,
                          MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_STACK, -1, 0);
-    if (mapping == MAP_FAILED) return false;
+    if (mapping == MAP_FAILED) {
+      gStackBytes -= stackSize_;
+      return false;
+    }
     mapping_ = static_cast<char*>(mapping);
     mprotect(mapping_, guard, PROT_NONE);
   }
-  gStackBytes += stackSize_;
   stackLow_ = mapping_ + guard;
   stackHigh_ = stackLow_ + stackSize_;
   return true;
