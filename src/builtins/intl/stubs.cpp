@@ -3,7 +3,7 @@
 namespace snowman::intl {
 
 void installDateTimeFormat(Realm&, Object*) {}
-void installDisplayNames(Realm&, Object*) {}
+
 void installDurationFormat(Realm&, Object*) {}
 
 
