@@ -83,6 +83,35 @@ Result<Value> ErrorPrototype_toString(NativeCall& call) {
   return Value(concatStrings({name->view(), u": ", msg->view()}));
 }
 
+// SetterThatIgnoresPrototypeProperties ( thisValue, home, p, v ) (27.1.4.14.1)
+Result<void> SetterThatIgnoresPrototypeProperties(Value thisValue, Object* home, const PropertyKey& p, Value v) {
+  if (!thisValue.isObject()) return ThrowTypeError("setter called on non-object");
+  if (thisValue.asObject() == home) return ThrowTypeError("Cannot assign to read only property");
+  auto desc = TRY(thisValue.asObject()->GetOwnProperty(p));
+  if (!desc) TRY(CreateDataPropertyOrThrow(thisValue.asObject(), p, v));
+  else TRY(Set(thisValue.asObject(), p, v, true));
+  return {};
+}
+
+// get Error.prototype.stack (error-stack-accessor). The string is implementation-defined: there are no
+// stack traces, so it is empty.
+Result<Value> ErrorPrototype_getStack(NativeCall& call) {
+  Value e = call.thisValue;
+  if (!e.isObject()) return ThrowTypeError("Error.prototype.stack getter called on non-object");
+  if (!e.asObject()->is<ErrorObject>()) return Value::undefined();
+  return Value(emptyString());
+}
+
+// set Error.prototype.stack (error-stack-accessor)
+Result<Value> ErrorPrototype_setStack(NativeCall& call) {
+  Value e = call.thisValue;
+  if (!e.isObject()) return ThrowTypeError("Error.prototype.stack setter called on non-object");
+  if (!call.args[0].isString()) return ThrowTypeError("Error.prototype.stack must be set to a string");
+  TRY(SetterThatIgnoresPrototypeProperties(e, intrinsic(Intrinsic::ErrorPrototype), PropertyKey(u"stack"),
+                                           call.args[0]));
+  return Value::undefined();
+}
+
 BuiltinFunction* defineErrorType(Realm& realm, Intrinsic ctorId, Intrinsic protoId, const char16_t* name,
                                  Object* protoParent, Object* ctorParent) {
   Object* proto = OrdinaryObjectCreate(protoParent);
@@ -101,6 +130,7 @@ void installErrors(Realm& realm) {
   Object* errorProto = realm.intrinsic(Intrinsic::ErrorPrototype);
   defineFunction(realm, errorProto, PropertyKey(u"toString"), 0, ErrorPrototype_toString);
   defineFunction(realm, error, PropertyKey(u"isError"), 1, Error_isError);
+  defineAccessor(realm, errorProto, PropertyKey(u"stack"), ErrorPrototype_getStack, ErrorPrototype_setStack);
 
   defineErrorType(realm, Intrinsic::EvalError, Intrinsic::EvalErrorPrototype, u"EvalError", errorProto, error);
   defineErrorType(realm, Intrinsic::RangeError, Intrinsic::RangeErrorPrototype, u"RangeError", errorProto, error);
