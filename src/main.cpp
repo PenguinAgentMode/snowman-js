@@ -21,6 +21,10 @@ std::optional<snowman::CliOptions> parseOptions(int argc, char** argv) {
       options.parseOnly = true;
       continue;
     }
+    if (arg == "--can-block=false") {
+      options.canBlock = false;
+      continue;
+    }
     if (arg == "--dump-ast") {
       options.dumpAst = true;
       continue;
@@ -52,7 +56,7 @@ std::optional<std::string> readFile(const std::string& path) {
 int main(int argc, char** argv) {
   auto options = parseOptions(argc, argv);
   if (!options) {
-    std::cerr << "usage: engine [--prelude h.js]... [--epilogue e.js]... [--module] [--parse-only] [--dump-ast] file.js\n";
+    std::cerr << "usage: engine [--prelude h.js]... [--epilogue e.js]... [--module] [--parse-only] [--can-block=false] [--dump-ast] file.js\n";
     return 64;
   }
 

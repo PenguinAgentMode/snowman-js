@@ -20,6 +20,8 @@ relative to `src/` (`#include "runtime/value.h"`), no exceptions for JS control 
 - Errors go to stdout as `Name: message` (`SyntaxError: ...`, `TypeError: ...`, `Test262Error: ...`), exit 1.
   An uncaught non-Error value prints `Uncaught: <ToString(value)>` style text but still exits 1.
 - Results format: the JSONL t262/runner/run.mjs writes and the JSON aggregate.mjs writes.
+- **`--can-block=false`** (approved 2026-10-13): the main agent's [[CanBlock]] is false (`vm().canBlock`), so
+  `Atomics.wait` throws a TypeError (AgentCanSuspend). run.mjs passes it for `flags: [CanBlockIsFalse]` tests.
 - **Preludes and epilogues** (approved 2026-10-13; module tests run in place, so a test that imports itself gets
   the same module record): `engine [--prelude h.js]... [--epilogue e.js]... [--module] file`.
   - Each `--prelude` file is evaluated, in order, as a global Script in the main realm before the entry (real
