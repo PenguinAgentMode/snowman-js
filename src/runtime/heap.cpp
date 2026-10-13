@@ -101,10 +101,10 @@ void Heap::track(Cell* cell) {
   }
 }
 
-// Over the limit: collect (which comes back here), give back free malloc memory and the dead stack, look again.
-void checkMemoryLimit(Heap& heap, bool collected) {
+// Over the limit: give back free malloc memory and the dead stack, then look again. No collection is forced here: a
+// collection at that size allocates its own sorted copy of every cell, which would push the peak further up.
+void checkMemoryLimit(Heap&, bool) {
   if (memoryLimitBytes() == SIZE_MAX || residentBytes() <= memoryLimitBytes()) return;
-  if (!collected) return heap.collect();
   malloc_trim(0);
   char here;
   releaseDeadStackBelow(&here);
