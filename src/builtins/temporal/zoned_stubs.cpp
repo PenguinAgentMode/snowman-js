@@ -74,7 +74,9 @@ SNOWMAN_WEAK Result<EpochNanoseconds> InterpretISODateTimeOffset(const ISODate& 
     if (!IsValidEpochNanoseconds(epochNs)) return ThrowRangeError("date-time is outside the supported range");
     return epochNs;
   }
-  if (!ISODateTimeWithinLimits(isoDateTime)) return ThrowRangeError("date-time is outside the supported range");
+  // CheckISODaysRange(isoDate)
+  int64_t epochDays = ISODateToEpochDays(isoDate.year, isoDate.month - 1, isoDate.day);
+  if (epochDays < -100000000 || epochDays > 100000000) return ThrowRangeError("date-time is outside the supported range");
   EpochNanoseconds candidate = TRY(GetEpochNanosecondsForZone(timeZone, isoDateTime, Disambiguation::Compatible));
   int64_t candidateOffset = TRY(GetOffsetNanosecondsForZone(timeZone, candidate));
   if (candidateOffset == offsetNanoseconds) return candidate;
