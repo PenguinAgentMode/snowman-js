@@ -17,8 +17,12 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~16:30 UTC, main 317949e 
 
 ## Merge queue
 
-1. Merged addd9a2 (reference years, +4); not yet measured (measure with the next batch).
-2. builtins: $262.agent step 3 (ws/agent3 738da48 WIP: SharedBlock, real atomics); then step 4 (agents, waiters).
+1. Lead's integration gate int/dec-re 38e96b9 = main 2bbe05d + decorators2 5eada31 + staging-regexp 41e448c27
+   (worktree $HOME/wt/int; JSONL $HOME/logs/int1.jsonl). If clean vs 19dc92105, merge 38e96b9.
+2. Merged: builtins step 4 17f576c (c47ec06: ES-core 43,305 / 43,305) and statics-lint bdd3485 (2853690).
+3. perf e7f8922: the lead gates it next (stranded agent); then tell perf2 to start batch 2.
+4. staging-caller bc68f1d7e: gate after perf (both touch interp/interpreter.h).
+5. chinese/stability: ws/runner-strict (runner change) after its repeats.
 
 How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort) <(git diff --name-only $base
 <sha>|sort)` (AGENTS.md older-base rule); merge the exact sha; `make -j4` warning-free; push; list it under
@@ -26,16 +30,20 @@ How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort
 
 ## Workers
 
-| Agent | State | Area | Branch |
+| Agent (entry) | State | Area | Branch |
 | --- | --- | --- | --- |
-| builtins | LIVE since ~07:10 | $262.agent step 3 (ws/agent3 d995052, gating vs 317949e37), then step 4 | ws/agent3; notes/builtins.md + notes/agent-design.md on ws/builtins5 |
-| chinese | REOPENED 18:15 as "stability": 3 repeats of 19dc92105 + flaky list + parse-only (M1) | ws/stability |
-| perf | started 17:35 | interpreter speed (binding caches, env slots, GC roots); flaky DST timeouts | ws/perf; notes/perf.md |
-| decorators2 | started 16:46 | decorators (22 + 2 staging), from ws/decorators fb2d287 | ws/decorators2; notes/decorators2.md |
-| staging | LIVE 16:45 | staging: Date merged; regexp + caller gating; then the approved runner change ws/runner-strict (13 sm/strict) | ws/staging*; notes/staging.md |
-| intlfmt | REOPENED 18:15 as "hardening": ASan+UBSan full suite in shards, gated fixes | ws/hardening; notes/hardening.md |
-| memcap, temporal2, survey, temporal, intl | machines stopped 16:33 | — | all their commits are on origin (see STATUS) |
-| calendars, calendars2, calendars3, decorators | never started ("no hosts") | — | — |
+| builtins | LIVE since ~07:10 | $262.agent step 4 (ws/agent4 17f576c, gating); then the statics lint (ws/statics-lint bdd3485) | ws/agent4; notes on ws/builtins5 |
+| chinese → "stability" | LIVE (reopened 18:15) | 3 repeats of 19dc92105 → tools/lead/flaky.md; parse-only (M1); then the strict-prefix runner change (ws/runner-strict f29154e WIP) | ws/stability |
+| intlfmt → "hardening" | LIVE (reopened 18:15) | ASan+UBSan full suite in 4 shards (~22:40 done) → tools/lead/sanitizers.md + gated fixes | ws/hardening |
+| decorators → "perf2" | LIVE (entry reused 19:20) | perf's batch 2 (ws/perf 42ff096) after the lead merges batch 1 e7f8922 | ws/perf2; notes/perf2.md |
+| perf, decorators2, staging | STRANDED (turn > 300 KB), machines stopped 19:17 | pushed work gated by the lead: ws/perf e7f8922, ws/decorators2 5eada31, ws/staging-regexp 41e448c27, ws/staging-caller bc68f1d7e | — |
+| memcap, temporal2, survey, temporal, intl | machines stopped 16:33 | — | all commits on origin |
+| calendars, calendars2, calendars3, stability, hardening | never started (no hosts); reusable entries | — | — |
+
+The agent table is capped at 17 entries and closing doesn't free one: reuse an entry by reopening it with
+agent_send (a new brief; it gets a machine if a slot is free). Supervisor rules: never reopen a stranded entry
+(perf, staging, decorators2, temporal, temporal2, intl, memcap, survey: their threads hold only their prompts);
+record entry → role here; at most 6 working at once.
 
 Dead agents still list as IN_PROGRESS/IDLE and probably still hold machines; agent_close doesn't free them.
 

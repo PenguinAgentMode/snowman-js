@@ -53,8 +53,12 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-None: 19dc92105 covers calendars-ref (addd9a2), agent step 3 (6203fc5), staging-date (b84715f), chinese (1c12abb),
-intlfmt (1a9f084).
+Not in 19dc92105's run:
+- c47ec06 ws/agent4 17f576c ($262.agent step 4: agents as threads, mailboxes, process-wide waiter lists, _Exit once
+  agents exist, one heap budget; audit fixes for per-thread statics). Gate vs 19dc92105: ES-core 0 / full 0
+  regressions, +109: **ES-core 43,305 / 43,305 on its branch**. Atomics 5× through an exit-code/stderr wrapper: 760/760
+  each, 0 abnormal exits; TSan on 3 multi-agent tests: 0 races.
+- 2853690 ws/statics-lint bdd3485 (tools only: the mutable-static lint, run by gate.mjs).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
