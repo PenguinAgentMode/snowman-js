@@ -2,6 +2,7 @@
 // time out (nothing else can notify).
 #include <time.h>
 
+#include <atomic>
 #include <cmath>
 #include <cstring>
 
@@ -59,17 +60,65 @@ uint64_t bitsOf(ElementType type, Value v) {
   return uint64_t(DoubleToUint32(v.asNumber()));
 }
 
-uint64_t readBits(ArrayBufferObject* buffer, size_t byteIndex, size_t size) {
-  uint64_t bits = 0;
-  std::memcpy(&bits, buffer->data() + byteIndex, size);
-  return bits;
+enum class Op { Add, And, Exchange, Or, Sub, Xor, Load, Store, CompareExchange };
+
+uint64_t apply(Op op, uint64_t a, uint64_t b) {
+  switch (op) {
+    case Op::Add: return a + b;
+    case Op::And: return a & b;
+    case Op::Or: return a | b;
+    case Op::Sub: return a - b;
+    case Op::Xor: return a ^ b;
+    default: return b;  // Exchange, Store
+  }
 }
 
-void writeBits(ArrayBufferObject* buffer, size_t byteIndex, size_t size, uint64_t bits) {
-  std::memcpy(buffer->data() + byteIndex, &bits, size);
+// One sequentially consistent atomic operation on the element at byteIndex (TypedArray elements are naturally
+// aligned), shared with other agents' threads when the buffer is a SharedArrayBuffer. Returns the element's bits
+// before the operation (for CompareExchange, b is the expected bits and c the replacement).
+template <class T>
+uint64_t atomicOp(uint8_t* p, Op op, uint64_t b, uint64_t c) {
+  std::atomic_ref<T> ref(*reinterpret_cast<T*>(p));
+  switch (op) {
+    case Op::Load: return uint64_t(ref.load());
+    case Op::Store: ref.store(T(b)); return b;
+    case Op::CompareExchange: {
+      T expected = T(b);
+      ref.compare_exchange_strong(expected, T(c));
+      return uint64_t(expected);
+    }
+    default: {
+      T old = ref.load();
+      while (!ref.compare_exchange_weak(old, T(apply(op, uint64_t(old), b)))) {
+      }
+      return uint64_t(old);
+    }
+  }
 }
 
-enum class Op { Add, And, Exchange, Or, Sub, Xor };
+uint64_t atomicOp(TypedArrayObject* ta, size_t byteIndex, Op op, uint64_t b, uint64_t c = 0) {
+  uint8_t* p = ta->buffer->data() + byteIndex;
+  switch (ElementSize(ta->elementType)) {
+    case 1: return atomicOp<uint8_t>(p, op, b, c);
+    case 2: return atomicOp<uint16_t>(p, op, b, c);
+    case 4: return atomicOp<uint32_t>(p, op, b, c);
+    default: return atomicOp<uint64_t>(p, op, b, c);
+  }
+}
+
+// The value of an integer element's bits (RawBytesToNumeric).
+Value valueOfBits(ElementType type, uint64_t bits) {
+  switch (type) {
+    case ElementType::Int8: return Value::number(int8_t(bits));
+    case ElementType::Uint8: return Value::number(uint8_t(bits));
+    case ElementType::Int16: return Value::number(int16_t(bits));
+    case ElementType::Uint16: return Value::number(uint16_t(bits));
+    case ElementType::Int32: return Value::number(int32_t(bits));
+    case ElementType::Uint32: return Value::number(uint32_t(bits));
+    case ElementType::BigInt64: return Value(BigInt::fromInt64(int64_t(bits)));
+    default: return Value(BigInt::fromUint64(bits));
+  }
+}
 
 // 25.4.3.17 AtomicReadModifyWrite ( typedArray, index, value, op )
 template <Op O>
@@ -78,19 +127,7 @@ Result<Value> readModifyWrite(NativeCall& call) {
   size_t byteIndex = TRY(ValidateAtomicAccess(ta, call.args[1]));
   Value v = TRY(toIntegerValue(ta, call.args[2]));
   TRY(RevalidateAtomicAccess(ta, byteIndex));
-  size_t size = ElementSize(ta->elementType);
-  Value old = GetValueFromBuffer(ta->buffer, byteIndex, ta->elementType);
-  uint64_t a = readBits(ta->buffer, byteIndex, size), b = bitsOf(ta->elementType, v), r = 0;
-  switch (O) {
-    case Op::Add: r = a + b; break;
-    case Op::And: r = a & b; break;
-    case Op::Exchange: r = b; break;
-    case Op::Or: r = a | b; break;
-    case Op::Sub: r = a - b; break;
-    case Op::Xor: r = a ^ b; break;
-  }
-  writeBits(ta->buffer, byteIndex, size, r);
-  return old;
+  return valueOfBits(ta->elementType, atomicOp(ta, byteIndex, O, bitsOf(ta->elementType, v)));
 }
 
 // 25.4.7 Atomics.compareExchange ( typedArray, index, expectedValue, replacementValue )
@@ -100,12 +137,9 @@ Result<Value> Atomics_compareExchange(NativeCall& call) {
   Value expected = TRY(toIntegerValue(ta, call.args[2]));
   Value replacement = TRY(toIntegerValue(ta, call.args[3]));
   TRY(RevalidateAtomicAccess(ta, byteIndex));
-  size_t size = ElementSize(ta->elementType);
-  uint64_t mask = size == 8 ? ~uint64_t(0) : (uint64_t(1) << (8 * size)) - 1;
-  Value old = GetValueFromBuffer(ta->buffer, byteIndex, ta->elementType);
-  if ((readBits(ta->buffer, byteIndex, size) & mask) == (bitsOf(ta->elementType, expected) & mask))
-    writeBits(ta->buffer, byteIndex, size, bitsOf(ta->elementType, replacement));
-  return old;
+  uint64_t old = atomicOp(ta, byteIndex, Op::CompareExchange, bitsOf(ta->elementType, expected),
+                          bitsOf(ta->elementType, replacement));
+  return valueOfBits(ta->elementType, old);
 }
 
 // 25.4.9 Atomics.isLockFree ( size )
@@ -119,7 +153,7 @@ Result<Value> Atomics_load(NativeCall& call) {
   TypedArrayObject* ta = TRY(ValidateIntegerTypedArray(call.args[0], false));
   size_t byteIndex = TRY(ValidateAtomicAccess(ta, call.args[1]));
   TRY(RevalidateAtomicAccess(ta, byteIndex));
-  return GetValueFromBuffer(ta->buffer, byteIndex, ta->elementType);
+  return valueOfBits(ta->elementType, atomicOp(ta, byteIndex, Op::Load, 0));
 }
 
 // 25.4.12 Atomics.store ( typedArray, index, value )
@@ -128,7 +162,7 @@ Result<Value> Atomics_store(NativeCall& call) {
   size_t byteIndex = TRY(ValidateAtomicAccess(ta, call.args[1]));
   Value v = TRY(toIntegerValue(ta, call.args[2]));
   TRY(RevalidateAtomicAccess(ta, byteIndex));
-  SetValueInBuffer(ta->buffer, byteIndex, ta->elementType, v);
+  atomicOp(ta, byteIndex, Op::Store, bitsOf(ta->elementType, v));
   return v;
 }
 
