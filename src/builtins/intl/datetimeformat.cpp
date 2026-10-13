@@ -639,10 +639,11 @@ bool isDaylight(const DateTimeFormatObject& dtf, double epochMs) {
   return offsetMsAt(dtf, epochMs) > std::min(at(0), at(6));
 }
 
-// The localized GMT format: short "GMT+5:30" / "GMT-8", long "GMT+05:30" (zero offsets as "GMT+0", as V8 prints).
+// The localized GMT format: short "GMT+5:30" / "GMT-8", long "GMT+05:30"; a zero offset is the gmtZeroFormat ("GMT").
 std::u16string gmtString(const DateTimeFormatObject& dtf, int offsetMinutes, bool longForm) {
   std::vector<std::u16string_view> f = items(dateField(dtf.dataLocale, FZoneFormats));
   f.resize(3);
+  if (offsetMinutes == 0 && !f[2].empty()) return std::u16string(f[2]);
   std::u16string_view hourFormat = f[0];
   size_t semi = hourFormat.find(u';');
   std::u16string_view pat = offsetMinutes >= 0 ? hourFormat.substr(0, semi) : hourFormat.substr(semi + 1);
@@ -882,9 +883,10 @@ namespace {
 
 int styleIndex(const std::string& s) { return s == "full" ? 0 : s == "long" ? 1 : s == "medium" ? 2 : 3; }
 
-// 11.1.2 CreateDateTimeFormat ( newTarget, locales, options, required, defaults )
+// 11.1.2 CreateDateTimeFormat ( newTarget, locales, options, required, defaults [ , toLocaleStringTimeZone ] )
 Result<DateTimeFormatObject*> CreateDateTimeFormat(Object* newTarget, Value locales, Value optionsValue, DateRequired2 required,
-                                                   DateDefaults defaults) {
+                                                   DateDefaults defaults,
+                                                   const temporal::TimeZone* toLocaleStringTimeZone = nullptr) {
   DateTimeFormatObject* dtf = TRY(OrdinaryCreateFromConstructor<DateTimeFormatObject>(newTarget, Intrinsic::IntlDateTimeFormatPrototype));
   std::vector<std::string> requested = TRY(CanonicalizeLocaleList(locales));
   Object* options = TRY(CoerceOptionsToObject(optionsValue));
@@ -915,7 +917,13 @@ Result<DateTimeFormatObject*> CreateDateTimeFormat(Object* newTarget, Value loca
 
   Value timeZoneValue = TRY(Get(options, PropertyKey(u"timeZone")));
   std::string timeZone;
-  if (timeZoneValue.isUndefined()) {
+  if (toLocaleStringTimeZone) {
+    // Temporal.ZonedDateTime.prototype.toLocaleString: the ZonedDateTime's own time zone, never an option.
+    if (!timeZoneValue.isUndefined())
+      return ThrowTypeError("Temporal.ZonedDateTime.prototype.toLocaleString: the timeZone option is not allowed");
+    timeZone = toLocaleStringTimeZone->isOffset() ? formatOffsetIdentifier(toLocaleStringTimeZone->offsetMinutes)
+                                                  : utf16ToUtf8(temporal::TimeZoneIdentifier(*toLocaleStringTimeZone));
+  } else if (timeZoneValue.isUndefined()) {
     timeZone = "UTC";  // SystemTimeZoneIdentifier: the host time zone of Date (TZ unset: UTC)
   } else {
     String* s = TRY(ToString(timeZoneValue));
@@ -979,6 +987,8 @@ Result<DateTimeFormatObject*> CreateDateTimeFormat(Object* newTarget, Value loca
       for (const char16_t* p : {u"year", u"month", u"day"}) formatOptions.emplace_back(p, "numeric");
     if (needDefaults && defaults != DateDefaults::Date)
       for (const char16_t* p : {u"hour", u"minute", u"second"}) formatOptions.emplace_back(p, "numeric");
+    // A ZonedDateTime's default format names its time zone.
+    if (needDefaults && toLocaleStringTimeZone && !has(u"timeZoneName")) formatOptions.emplace_back(u"timeZoneName", "short");
     Skeleton k;
     for (const auto& [name, value] : formatOptions) skeletonAdd(k, name, value, hourCharFor(hc));
     k.normalizeDayPeriod();
@@ -1092,8 +1102,10 @@ std::u16string restrictedPattern(const Generator& g, std::u16string_view pattern
   return getBestPattern(g, k);
 }
 
-// The [[TemporalPlain*Format]] of a kind (GetDateTimeFormat with inherit ~relevant~), "" for null.
-std::u16string temporalPattern(const DateTimeFormatObject& dtf, ValueKind kind) {
+// The [[TemporalPlain*Format]] of a kind (GetDateTimeFormat with inherit ~relevant~), "" for null. toLocaleString
+// formats with the format its own CreateDateTimeFormat made for the type, so there options the type has no field
+// for (era on a PlainTime) are dropped instead of nulling the format.
+std::u16string temporalPattern(const DateTimeFormatObject& dtf, ValueKind kind, bool toLocaleString) {
   const Generator& g = generatorFor(dtf.dataLocale);
   if (dtf.dateStyle || dtf.timeStyle) {
     std::u16string date, time;
@@ -1149,7 +1161,7 @@ std::u16string temporalPattern(const DateTimeFormatObject& dtf, ValueKind kind) 
     if (contains(required, name)) needDefaults = false;
   }
   if (needDefaults) {
-    if (anyPresent && !anyRelevant) return {};
+    if (anyPresent && !anyRelevant && !toLocaleString) return {};
     for (std::u16string_view d : defaults) options.emplace_back(d, "numeric");
   }
   Skeleton k;
@@ -1158,8 +1170,25 @@ std::u16string temporalPattern(const DateTimeFormatObject& dtf, ValueKind kind) 
   return applyHourCycle(g, getBestPattern(g, k), dtf.formatHourCycle);
 }
 
+// [[TemporalInstantFormat]]: GetDateTimeFormat(formats, matcher, options, ~any~, ~all~, ~all~). The format's own
+// pattern, unless no date or time component was given: then the defaults are the date and the time, whatever the
+// constructor's defaults were (Intl.DateTimeFormat() formats an Instant with its time).
+std::u16string instantPattern(const DateTimeFormatObject& dtf) {
+  if (dtf.dateStyle || dtf.timeStyle) return dtf.pattern;
+  for (const auto& [name, value] : dtf.components)
+    for (std::u16string_view c : {u"weekday", u"year", u"month", u"day", u"dayPeriod", u"hour", u"minute", u"second", u"fractionalSecondDigits"})
+      if (name == c) return dtf.pattern;
+  const Generator& g = generatorFor(dtf.dataLocale);
+  Skeleton k;
+  for (const auto& [name, value] : dtf.components) skeletonAdd(k, name, value, hourCharFor(dtf.formatHourCycle));
+  for (const char16_t* p : {u"year", u"month", u"day", u"hour", u"minute", u"second"}) skeletonAdd(k, p, "numeric", hourCharFor(dtf.formatHourCycle));
+  k.normalizeDayPeriod();
+  return applyHourCycle(g, getBestPattern(g, k), dtf.formatHourCycle);
+}
+
 // HandleDateTimeValue: the pattern a value is formatted with, and whether it is a plain (UTC) value.
-Result<std::pair<std::u16string, bool>> patternForValue(const DateTimeFormatObject& dtf, const Formattable& v) {
+Result<std::pair<std::u16string, bool>> patternForValue(const DateTimeFormatObject& dtf, const Formattable& v,
+                                                         bool toLocaleString = false) {
   switch (v.kind) {
     case ValueKind::Number: {
       if (!std::isfinite(v.epochMs) || std::fabs(v.epochMs) > 8.64e15) return ThrowRangeError("Invalid time value");
@@ -1168,21 +1197,21 @@ Result<std::pair<std::u16string, bool>> patternForValue(const DateTimeFormatObje
     case ValueKind::ZonedDateTime:
       return ThrowTypeError("Intl.DateTimeFormat: Temporal.ZonedDateTime is not supported; use its toLocaleString");
     case ValueKind::Instant:
-      return std::make_pair(dtf.pattern, false);
+      return std::make_pair(instantPattern(dtf), false);
     default: {
       std::string calendar = utf16ToUtf8(v.calendar);
       bool yearMonthOrMonthDay = v.kind == ValueKind::PlainYearMonth || v.kind == ValueKind::PlainMonthDay;
       if (v.kind != ValueKind::PlainTime && calendar != dtf.calendar && (yearMonthOrMonthDay || calendar != "iso8601"))
         return ThrowRangeError("Intl.DateTimeFormat: the calendar " + calendar + " is not the format's " + dtf.calendar);
-      std::u16string pattern = temporalPattern(dtf, v.kind);
+      std::u16string pattern = temporalPattern(dtf, v.kind, toLocaleString);
       if (pattern.empty()) return ThrowTypeError("Intl.DateTimeFormat: the options have no field this Temporal value has");
       return std::make_pair(pattern, true);
     }
   }
 }
 
-Result<std::vector<DatePart>> formatParts(const DateTimeFormatObject& dtf, const Formattable& x) {
-  auto [pattern, utc] = TRY(patternForValue(dtf, x));
+Result<std::vector<DatePart>> formatParts(const DateTimeFormatObject& dtf, const Formattable& x, bool toLocaleString = false) {
+  auto [pattern, utc] = TRY(patternForValue(dtf, x, toLocaleString));
   std::vector<DatePart> parts;
   formatPatternInto(parts, dtf, pattern, x.kind == ValueKind::Number ? timeClip(x.epochMs) : x.epochMs, 0, utc);
   return parts;
@@ -1483,6 +1512,49 @@ Result<Value> dateToLocaleString(double timeValue, Value locales, Value options,
   DateDefaults d = required == DateRequired::Date ? DateDefaults::Date : required == DateRequired::Time ? DateDefaults::Time : DateDefaults::All;
   DateTimeFormatObject* dtf = TRY(CreateDateTimeFormat(builtins::intrinsic(Intrinsic::IntlDateTimeFormat), locales, options, r, d));
   std::vector<DatePart> parts = TRY(formatParts(*dtf, timeValue));
+  return Value(newString(joinParts(parts)));
+}
+
+// Temporal.{Instant,PlainDate,PlainDateTime,PlainMonthDay,PlainTime,PlainYearMonth}.prototype.toLocaleString:
+// CreateDateTimeFormat with the type's required and defaults, then FormatDateTime.
+Result<Value> temporalToLocaleString(Value temporalValue, Value locales, Value options) {
+  Formattable x = TRY(toFormattable(temporalValue));
+  DateRequired2 required = DateRequired2::Any;
+  DateDefaults defaults = DateDefaults::All;
+  switch (x.kind) {
+    case ValueKind::PlainDate:
+    case ValueKind::PlainYearMonth:
+    case ValueKind::PlainMonthDay:
+      required = DateRequired2::Date;
+      defaults = DateDefaults::Date;
+      break;
+    case ValueKind::PlainTime:
+      required = DateRequired2::Time;
+      defaults = DateDefaults::Time;
+      break;
+    default:
+      break;
+  }
+  DateTimeFormatObject* dtf =
+      TRY(CreateDateTimeFormat(builtins::intrinsic(Intrinsic::IntlDateTimeFormat), locales, options, required, defaults));
+  std::vector<DatePart> parts = TRY(formatParts(*dtf, x, true));
+  return Value(newString(joinParts(parts)));
+}
+
+// Temporal.ZonedDateTime.prototype.toLocaleString: its instant, in its own time zone, in a calendar that matches.
+Result<Value> zonedDateTimeToLocaleString(Value zonedDateTime, Value locales, Value options) {
+  auto* zoned = temporal::asTemporal<temporal::ZonedDateTimeObject>(zonedDateTime);
+  DateTimeFormatObject* dtf = TRY(CreateDateTimeFormat(builtins::intrinsic(Intrinsic::IntlDateTimeFormat), locales, options,
+                                                       DateRequired2::Any, DateDefaults::All, &zoned->timeZone));
+  std::string calendar = utf16ToUtf8(zoned->calendar);
+  if (calendar != "iso8601" && calendar != dtf->calendar)
+    return ThrowRangeError("Temporal.ZonedDateTime.prototype.toLocaleString: the calendar " + calendar + " is not the format's " +
+                           dtf->calendar);
+  temporal::EpochNanoseconds ns = zoned->epochNanoseconds;
+  temporal::EpochNanoseconds ms = ns / 1000000 - (ns % 1000000 < 0 ? 1 : 0);
+  // FormatDateTime(dateTimeFormat, instant) with the format this CreateDateTimeFormat made (~any~, ~all~, its time
+  // zone): [[DateTimeFormat]] itself, as for a time value.
+  std::vector<DatePart> parts = TRY(formatParts(*dtf, double(int64_t(ms))));
   return Value(newString(joinParts(parts)));
 }
 

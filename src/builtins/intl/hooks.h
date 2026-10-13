@@ -26,4 +26,12 @@ Result<Value> numberToLocaleString(Value x, Value locales, Value options);
 enum class DateRequired : uint8_t { Any, Date, Time };
 Result<Value> dateToLocaleString(double timeValue, Value locales, Value options, DateRequired required);
 
+// The ECMA-402 Temporal.*.prototype.toLocaleString methods, called from src/builtins/temporal/ after the this-value
+// check. temporalValue is a Temporal.Instant, PlainDate, PlainDateTime, PlainMonthDay, PlainTime or PlainYearMonth.
+Result<Value> temporalToLocaleString(Value temporalValue, Value locales, Value options);
+// zonedDateTime is a Temporal.ZonedDateTime: formatted in its own time zone (a timeZone option is a TypeError).
+Result<Value> zonedDateTimeToLocaleString(Value zonedDateTime, Value locales, Value options);
+// duration is a Temporal.Duration: Intl.DurationFormat's format.
+Result<Value> durationToLocaleString(Value duration, Value locales, Value options);
+
 }  // namespace snowman::intl

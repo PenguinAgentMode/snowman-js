@@ -1,6 +1,7 @@
 // Temporal.PlainTime (proposal-temporal §4).
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/temporal/temporal.h"
 
 namespace snowman::temporal {
@@ -201,7 +202,7 @@ Result<Value> PlainTimePrototype_toString(NativeCall& call) {
 
 Result<Value> PlainTimePrototype_toLocaleString(NativeCall& call) {
   PlainTimeObject* t = TRY(thisTime(call, "Temporal.PlainTime.prototype.toLocaleString"));
-  return Value(newString(TimeRecordToString(t->time, -1)));
+  return intl::temporalToLocaleString(Value(t), call.args[0], call.args[1]);
 }
 
 Result<Value> PlainTimePrototype_toJSON(NativeCall& call) {
