@@ -99,6 +99,20 @@ bool Parser::isAwaitUsing(bool forHead) {
 Node* Parser::parseStatement(const char* context, bool topLevel) {
   checkStack();
   Pos start = here();
+  if (is(T::At)) {
+    // Decorators before `class`, or (modules) before `export class` / `export default class`.
+    if (context) unexpected();
+    std::vector<Decorator*> decorators = parseDecorators();
+    if (isKw(K::Class)) {
+      pendingClassDecorators_ = std::move(decorators);
+      return parseClass(startNode<ClassDeclaration>(start), true, false);
+    }
+    if (!isKw(K::Export) || !module_ || !topLevel) unexpected();
+    pendingClassDecorators_ = std::move(decorators);
+    Node* exported = parseExport(start);
+    if (!pendingClassDecorators_.empty()) raise(start.start, "Decorators must be followed by a class");
+    return exported;
+  }
   if (isLet(context)) {
     if (context) unexpected();
     return parseVarStatement(start, VariableKind::Let);
@@ -775,7 +789,54 @@ bool keyIs(const Node* key, bool computed, const char16_t* name) {
 
 }  // namespace
 
+std::vector<Decorator*> Parser::parseDecorators() {
+  std::vector<Decorator*> decorators;
+  while (is(T::At)) {
+    auto* decorator = startNode<Decorator>();
+    next();  // @
+    Pos start = here();
+    if (is(T::LParen)) {
+      // DecoratorParenthesizedExpression: @( Expression )
+      next();
+      Node* expression = parseExpression();
+      expect(T::RParen);
+      expression->parenthesized = true;
+      decorator->expression = expression;
+    } else {
+      // DecoratorMemberExpression: IdentifierReference, then `.IdentifierName` / `.#PrivateIdentifier`s; then
+      // DecoratorCallExpression: one Arguments.
+      if (!isName()) unexpected();
+      Node* expression = parseExprAtom(nullptr, false, false);
+      if (!expression->is<Identifier>()) raise(expression->start, "Invalid decorator");
+      while (eat(T::Dot)) {
+        auto* member = startNode<MemberExpression>(start);
+        member->object = expression;
+        if (is(T::PrivateName)) {
+          PrivateIdentifier* id = parsePrivateIdent();
+          usePrivateName(id->name, id->start);
+          member->property = id;
+        } else {
+          member->property = parseIdent(true);
+        }
+        expression = finish(member);
+      }
+      if (is(T::LParen)) {
+        next();
+        auto* call = startNode<CallExpression>(start);
+        call->callee = expression;
+        call->arguments = parseExprList(T::RParen, true, false, nullptr);
+        expression = finish(call);
+      }
+      decorator->expression = expression;
+    }
+    decorators.push_back(finish(decorator));
+  }
+  return decorators;
+}
+
 Class* Parser::parseClass(Class* node, bool statement, bool nullableId) {
+  node->decorators = std::move(pendingClassDecorators_);
+  pendingClassDecorators_.clear();
   next();  // class
   bool oldStrict = ctx_->strict;
   ctx_->strict = true;
@@ -818,18 +879,20 @@ Class* Parser::parseClass(Class* node, bool statement, bool nullableId) {
 Node* Parser::parseClassElement(Class* cls, bool& hadConstructor) {
   if (eat(T::Semi)) return nullptr;
   Pos start = here();
-  Pos methodStart = start;
+  std::vector<Decorator*> decorators = parseDecorators();
+  Pos methodStart = here();
   auto isElementNameStart = [&]() {
     return is(T::Name) || is(T::PrivateName) || is(T::Num) || is(T::BigInt) || is(T::Str) || is(T::LBracket);
   };
   std::u16string keyName;
   Token keyTok;
-  bool isStatic = false, isAsync = false, isGenerator = false;
+  bool isStatic = false, isAsync = false, isGenerator = false, isAccessor = false;
   MethodKind kind = MethodKind::Method;
   if (isKw(K::Static)) {
     keyTok = tok_;
     next();
     if (is(T::LBrace)) {
+      if (!decorators.empty()) raise(decorators[0]->start, "Decorators are not valid on a static block");
       // static { ... }
       auto* block = startNode<StaticBlock>(start);
       next();
@@ -854,14 +917,22 @@ Node* Parser::parseClassElement(Class* cls, bool& hadConstructor) {
       keyName = u"static";
     }
   }
-  if (keyName.empty() && isKw(K::Async)) {
+  // `accessor [no LineTerminator here] ClassElementName` (decorators): an auto-accessor; otherwise `accessor` names
+  // the element.
+  if (keyName.empty() && isContextual(u"accessor")) {
+    keyTok = tok_;
+    next();
+    if (isElementNameStart() && !tok_.nlBefore) isAccessor = true;
+    else keyName = u"accessor";
+  }
+  if (keyName.empty() && !isAccessor && isKw(K::Async)) {
     keyTok = tok_;
     next();
     if ((isElementNameStart() || is(T::Star)) && !tok_.nlBefore) isAsync = true;
     else keyName = u"async";
   }
-  if (keyName.empty() && eat(T::Star)) isGenerator = true;
-  if (keyName.empty() && !isAsync && !isGenerator && (isKw(K::Get) || isKw(K::Set))) {
+  if (keyName.empty() && !isAccessor && eat(T::Star)) isGenerator = true;
+  if (keyName.empty() && !isAccessor && !isAsync && !isGenerator && (isKw(K::Get) || isKw(K::Set))) {
     keyTok = tok_;
     bool getter = isKw(K::Get);
     next();
@@ -882,14 +953,16 @@ Node* Parser::parseClassElement(Class* cls, bool& hadConstructor) {
     key = parsePropertyName(computed);
   }
   bool isPrivate = key->is<PrivateIdentifier>();
-  if (is(T::LParen) || kind != MethodKind::Method || isGenerator || isAsync) {
+  if (!isAccessor && (is(T::LParen) || kind != MethodKind::Method || isGenerator || isAsync)) {
     bool isConstructor = !isStatic && keyIs(key, computed, u"constructor");
+    if (isConstructor && !decorators.empty()) raise(decorators[0]->start, "Decorators are not valid on a constructor");
     if (isConstructor && kind != MethodKind::Method) raise(key->start, "Class constructor may not be an accessor");
     if (isConstructor && isGenerator) raise(key->start, "Class constructor may not be a generator");
     if (isConstructor && isAsync) raise(key->start, "Class constructor may not be an async method");
     if (isStatic && keyIs(key, computed, u"prototype"))
       raise(key->start, "Classes may not have a static property named 'prototype'");
     auto* method = startNode<MethodDefinition>(start);
+    method->decorators = std::move(decorators);
     method->key = key;
     method->computed = computed;
     method->isStatic = isStatic;
@@ -928,15 +1001,13 @@ Node* Parser::parseClassElement(Class* cls, bool& hadConstructor) {
   if (keyIs(key, computed, u"constructor")) raise(key->start, "Classes may not have a field named 'constructor'");
   if (isStatic && keyIs(key, computed, u"prototype"))
     raise(key->start, "Classes may not have a static property named 'prototype'");
-  auto* field = startNode<PropertyDefinition>(start);
-  field->key = key;
-  field->computed = computed;
-  field->isStatic = isStatic;
+  Expression* value = nullptr;
+  bool hasDirectEval = false;
   if (eat(T::Assign)) {
     uint32_t oldYield = ctx_->yieldPos, oldAwait = ctx_->awaitPos, oldAwaitIdent = ctx_->awaitIdentPos;
     FnCtx* c = enterFn(FnCtx::Kind::FieldInit, false, false, nullptr);
-    field->value = parseMaybeAssign();
-    field->hasDirectEval = c->evalCount > 0;
+    value = parseMaybeAssign();
+    hasDirectEval = c->evalCount > 0;
     exitFn();
     ctx_->yieldPos = oldYield;
     ctx_->awaitPos = oldAwait;
@@ -944,10 +1015,28 @@ Node* Parser::parseClassElement(Class* cls, bool& hadConstructor) {
   }
   semicolon();
   if (isPrivate) {
+    // An auto-accessor's private name is a getter/setter pair (a method-like private name); a field's is a field.
     auto& name = key->as<PrivateIdentifier>()->name;
     if (private_->declared.count(name)) raise(key->start, "Identifier '#" + utf8(name) + "' has already been declared");
-    private_->declared[name] = 4 | (isStatic ? 8 : 16);
+    private_->declared[name] = (isAccessor ? 3 : 4) | (isStatic ? 8 : 16);
   }
+  if (isAccessor) {
+    auto* accessor = startNode<AccessorProperty>(start);
+    accessor->decorators = std::move(decorators);
+    accessor->key = key;
+    accessor->computed = computed;
+    accessor->isStatic = isStatic;
+    accessor->value = value;
+    accessor->hasDirectEval = hasDirectEval;
+    return finish(accessor);
+  }
+  auto* field = startNode<PropertyDefinition>(start);
+  field->decorators = std::move(decorators);
+  field->key = key;
+  field->computed = computed;
+  field->isStatic = isStatic;
+  field->value = value;
+  field->hasDirectEval = hasDirectEval;
   return finish(field);
 }
 
@@ -1156,6 +1245,14 @@ Node* Parser::parseImport(Pos start) {
 
 Node* Parser::parseExport(Pos start) {
   next();  // export
+  // `export @dec class C {}` / `export default @dec class {}` (not on both sides of `export`).
+  auto exportDecorators = [&]() {
+    if (!is(T::At)) return;
+    if (!pendingClassDecorators_.empty()) unexpected();
+    pendingClassDecorators_ = parseDecorators();
+    if (!isKw(K::Class)) unexpected();
+  };
+  if (pendingClassDecorators_.empty() && !isKw(K::Default)) exportDecorators();
   auto localEntry = [&](const std::u16string& exportName, const std::u16string& localName, Node* n) {
     ExportEntry e;
     e.exportName = exportName;
@@ -1194,6 +1291,8 @@ Node* Parser::parseExport(Pos start) {
     auto* node = startNode<ExportDefaultDeclaration>(start);
     next();
     addExportName(u"default", prevStart_);
+    exportDecorators();
+    if (!pendingClassDecorators_.empty() && !isKw(K::Class)) unexpected();
     Pos ds = here();
     if (isKw(K::Function) || isAsyncFunction()) {
       bool isAsync = isKw(K::Async);

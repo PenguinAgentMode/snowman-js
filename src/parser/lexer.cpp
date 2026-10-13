@@ -799,6 +799,7 @@ void Lexer::lexPunctuator(Token& tok) {
     case ',': type = T::Comma; break;
     case ':': type = T::Colon; break;
     case '~': type = T::Tilde; break;
+    case '@': type = T::At; break;
     case '.':
       if (at(p + 1) == '.' && at(p + 2) == '.') {
         type = T::Ellipsis;
