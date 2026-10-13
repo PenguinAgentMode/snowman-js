@@ -125,6 +125,17 @@ Result<TypedArrayObject*> ValidateTypedArray(Value o, AccessMode accessMode) {
   return ta;
 }
 
+bool IsTypedArrayFixedLength(const TypedArrayObject* o) {
+  if (!o->arrayLength) return false;
+  return !o->buffer->isResizable() || o->buffer->isShared();
+}
+
+// [[PreventExtensions]] (10.4.5): a TypedArray whose length can change can't be made non-extensible.
+Result<bool> TypedArrayObject::PreventExtensions() {
+  if (!IsTypedArrayFixedLength(this)) return false;
+  return Object::PreventExtensions();
+}
+
 // 10.4.5.1 [[GetOwnProperty]]
 Result<std::optional<PropertyDescriptor>> TypedArrayObject::GetOwnProperty(const PropertyKey& key) {
   if (auto index = numericIndex(key)) {
