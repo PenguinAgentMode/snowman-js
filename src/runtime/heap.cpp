@@ -201,9 +201,11 @@ class CandidateSet {
 
 using Range = std::pair<const void*, const void*>;
 
-// Calls f on every aligned word of the ranges that lies in [lowest, highest].
+// Calls f on every aligned word of the ranges that lies in [lowest, highest]. Reads every word of a stack, ASan's
+// redzones included (as scanRange).
 template <class F>
-void forEachStackWord(const std::vector<Range>& ranges, uintptr_t lowest, uintptr_t highest, F&& f) {
+__attribute__((no_sanitize("address"))) void forEachStackWord(const std::vector<Range>& ranges, uintptr_t lowest,
+                                                              uintptr_t highest, F&& f) {
   for (const auto& [low, high] : ranges) {
     auto begin = reinterpret_cast<uintptr_t>(low) & ~uintptr_t(sizeof(void*) - 1);
     auto end = reinterpret_cast<uintptr_t>(high);
