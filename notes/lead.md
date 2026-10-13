@@ -8,7 +8,8 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~16:30 UTC, main 317949e 
 - Latest measured main: **19dc92105**, full **53,452 / 53,616 (99.69%)**, ES-core **43,196 / 43,305 (99.75%)**, M8.
   `node t262/runner/milestones.mjs results/19dc92105.json --full results/19dc92105-full.json`
 - Gate baselines: `results/19dc92105{,-full}.json`; JSONL on the results branch at `results/19dc92105/suite.jsonl`.
-- Monitor lesson: my measurement monitor (tail -F | grep -m1) missed M5DONE; check the log when a run should be done.
+- Monitor misses 17:21–19:07 UTC were a stack limit (GS session depth, 390262), since raised. Stranded agents: perf,
+  decorators2, staging (turns over the 300 KB per-message limit); their pushed work is what's left.
 - Measure: `TMPDIR=$HOME/tmp tools/lead/measure.sh suite results/<previous>.json` in the background with a monitor
   (~22 min at 4 jobs). Then `gate.mjs <prev>-full.json results/<sha>/suite.jsonl` and `clusters.mjs <sha>-full.json
   <prev>-full.json`. Commit `results/<sha>{,-full}.json` to main, push the JSONL to the results branch (worktree

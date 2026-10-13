@@ -33,12 +33,18 @@
   2>&1 &` in a background call) with a completion monitor, and then you end your turn. Messages are read between
   steps; an agent stuck inside a call whose machine died hangs IN_PROGRESS for good (temporal and temporal2 were
   lost that way). At the start of every new task: `du -sh /tmp` and MemTotal − MemFree from /proc/meminfo.
-- **Completion monitors: the done-file pattern** (two `tail -f | grep` monitors missed their line today). The
-  background script ends by touching a marker: `trap 'touch $HOME/logs/NAME.fail' ERR; ...; touch
-  $HOME/logs/NAME.done`. The monitor is a poll that prints once and exits, so it can't miss a line and works even if
-  the run finished before it started: `until [ -e $HOME/logs/NAME.done ] || [ -e $HOME/logs/NAME.fail ]; do sleep
-  20; done; ls $HOME/logs/NAME.*`. One monitor per event. Put the expected finish time in your status line, and
-  check the log yourself if you're idle past it.
+- **Completion monitors: the done-file pattern.** The background script ends by touching a marker:
+  `trap 'touch $HOME/logs/NAME.fail' ERR; ...; touch $HOME/logs/NAME.done`; the monitor polls for it and prints
+  once: `until [ -e $HOME/logs/NAME.done ] || [ -e $HOME/logs/NAME.fail ]; do sleep 20; done; ls $HOME/logs/NAME.*`.
+  It works even if the run finished before the monitor started. (Correction: the monitor notices missed on
+  2026-10-13 between 17:21 and 19:07 UTC were a stack limit, GS session depth error 390262, since fixed, not the
+  monitor pattern. The pattern stays because it's still the most robust.) Put the expected finish time in your
+  status line, and check the log yourself if you're idle past it.
+- **Keep every turn small: the stack stores each turn as one message of at most 300 KB.** A bigger turn is
+  dropped: the agent's thread then holds only its prompt and never reads messages again (perf, decorators2 and
+  staging were stranded this way; their gates finished but were never read). End your turn after a few steps;
+  keep tool output tiny (summaries, `tail -5`, counts); never print logs, JSONL, diffs or source files whole; push
+  results to the repo instead of printing them.
 - **Background runs get a completion monitor.** Before ending a turn with a long run going (gate, suite run,
   build) in the background, attach a `monitor` that fires when it finishes, e.g. a command source that waits
   for the process to exit and then prints the runner's summary line. An idle agent with an unwatched run never
