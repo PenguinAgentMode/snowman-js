@@ -255,6 +255,28 @@ Result<ISODate> NonISOCalendarDateToISO(const Sys* sys, CalendarFields& fields, 
   return CalendarIntegersToISO(sys, year, month, day);
 }
 
+// The chinese and dangi ISO reference years (proposal-intl-era-monthcode, "chinese-dangi-iso-reference-years"):
+// for each month code, the reference year of days 1-29 and of day 30; 0 is "—" (not known to occur).
+struct LunisolarReferenceYears {
+  int16_t days1to29;
+  int16_t day30;
+};
+constexpr LunisolarReferenceYears kLunisolarCommon[12] = {
+    {1972, 1970}, {1972, 1972}, {1972, 1966}, {1972, 1970}, {1972, 1972}, {1972, 1971},
+    {1972, 1972}, {1972, 1971}, {1972, 1972}, {1972, 1972}, {1972, 1970}, {1972, 1972},
+};
+constexpr LunisolarReferenceYears kLunisolarLeap[12] = {
+    {0, 0}, {1947, 0}, {1966, 1955}, {1963, 1944}, {1971, 1952}, {1960, 1941},
+    {1968, 1938}, {1957, 0}, {2014, 0}, {1984, 0}, {2034, 0}, {0, 0},
+};
+// The reference year for `code` and `day` in chinese (dangi differs only for M03 day 30: 1968), 0 for none.
+int32_t lunisolarReferenceYear(bool dangi, MonthCodeParts code, int64_t day) {
+  const LunisolarReferenceYears& row = (code.leap ? kLunisolarLeap : kLunisolarCommon)[code.number - 1];
+  if (day == 30) return !code.leap && code.number == 3 && dangi ? 1968 : row.day30;
+  if (code.leap && code.number == 11 && day <= 10) return 2033;  // M11L days 1-10: 2033; days 11-29: 2034
+  return row.days1to29;
+}
+
 // NonISOMonthDayToISOReferenceDate
 Result<ISODate> NonISOMonthDayToISOReferenceDate(const Sys* sys, CalendarFields& fields, Overflow overflow) {
   MonthCodeParts code;
@@ -283,6 +305,23 @@ Result<ISODate> NonISOMonthDayToISOReferenceDate(const Sys* sys, CalendarFields&
   if (day > daysInMonth) {
     if (overflow == Overflow::Reject) return ThrowRangeError("the day does not exist in that month");
     day = daysInMonth;
+  }
+  if (sys == ChineseCalendarSystem() || sys == DangiCalendarSystem()) {
+    // A combination not known to have occurred constrains to the common month (or rejects).
+    bool dangi = sys == DangiCalendarSystem();
+    int32_t referenceYear = lunisolarReferenceYear(dangi, code, day);
+    if (!referenceYear) {
+      if (overflow == Overflow::Reject) return ThrowRangeError("that month code and day are not known to occur in this calendar");
+      code = {code.number, false};
+      referenceYear = lunisolarReferenceYear(dangi, code, day);
+    }
+    // The latest ISO date in the reference year with this month code and day.
+    for (int64_t e = ISODateToEpochDays(referenceYear, 11, 31), first = ISODateToEpochDays(referenceYear, 0, 1); e >= first; e--) {
+      CalendarSystem::Date d = sys->fromEpochDays(e);
+      MonthCodeParts c = sys->monthCodeOf(d.year, d.month);
+      if (c.number == code.number && c.leap == code.leap && d.day == day) return EpochDaysToISODate(e);
+    }
+    return ThrowRangeError("no reference date for this month code and day");
   }
   // The latest ISO date from 1900-01-01 to 1972-12-31 with this month code and day, else the earliest from
   // 1973-01-01 to 2035-12-31.
