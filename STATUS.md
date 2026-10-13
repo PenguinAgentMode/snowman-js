@@ -56,6 +56,8 @@ fails 138 of them too):
 Not in 317949e37's run:
 - ws/calendars-ref addd9a2 (chinese/dangi PlainMonthDay reference years, calendar.cpp only). Gate vs 317949e37:
   ES-core 0, full 0 regressions; full 53,414 → 53,418.
+- 6203fc5 ws/agent3 d995052 ($262.agent step 3: SharedBlock + std::atomic_ref Atomics; arraybuffer.h additive).
+  Gate vs 317949e37: ES-core 0, full 0 regressions (neutral with one agent).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719

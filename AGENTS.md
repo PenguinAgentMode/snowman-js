@@ -30,6 +30,9 @@
   2>&1 &` in a background call) with a completion monitor, and then you end your turn. Messages are read between
   steps; an agent stuck inside a call whose machine died hangs IN_PROGRESS for good (temporal and temporal2 were
   lost that way). At the start of every new task: `du -sh /tmp` and MemTotal − MemFree from /proc/meminfo.
+- **One monitor per event.** A monitor that watches for several stages can deliver the first and never the
+  second (builtins went idle that way): attach a separate monitor, printing once (`grep -m1`), for each stage
+  you need to wake for.
 - **Background runs get a completion monitor.** Before ending a turn with a long run going (gate, suite run,
   build) in the background, attach a `monitor` that fires when it finishes, e.g. a command source that waits
   for the process to exit and then prints the runner's summary line. An idle agent with an unwatched run never
