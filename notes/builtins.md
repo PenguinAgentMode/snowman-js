@@ -25,6 +25,11 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   both kept) + notes + importValue through ImportModuleForRealm (ShadowRealm full slice 64/64). Full ES-core gate of
   d55e14b running (vs results/c21bcd82e.json). Step 1 alone (6ce8f3e) was gated clean: 43,169, +3.
 - ws/builtins6 dd70aa8: nonextensible-applies-to-private, gated clean (43,166, 0 regressions; full slice +3), sent alone.
+- Merge order from the lead: survey 5aba3f349, the lead's main measurement, memcap's runtime-r 44d3159, then mine.
+  ws/builtins8 40f1c7e = d55e14b rebased onto runtime-r 44d3159 (host.cpp keeps AbstractModuleSource, IsHTMLDDA and agent):
+  ShadowRealm full slice 64/64; full ES-core gate running (/tmp/core11.jsonl). Then rebase step 2 (ws/builtins7) onto it
+  and gate; then the speed comparison (step-2 engine vs its base, same machine, quiet). Notes live on ws/builtins5;
+  never commit notes onto a gated sha.
 - d55e14b gated clean (43,169) and sent. Step 2 (thread_local) on ws/builtins7, rebased on main 258ff44 (tip 7ab3d0e),
   gate running (/tmp/core10.jsonl, engine /tmp/engine-tls; main engine for the speed run: /tmp/engine-main258):
   88850c4 runtime (vm, heap, atom table, emptyString, index strings, length key), 37fc0f0 builtins (lastIndex key,

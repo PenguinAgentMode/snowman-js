@@ -78,6 +78,9 @@ share no objects, only SharedArrayBuffer data blocks.
     async waiters get a "resolve ok" message posted to their agent's mailbox. Returns the count.
   - `Atomics.waitAsync`: the same list; a timeout is a deadline the owning agent's event loop watches.
 - Non-shared buffers keep today's single-agent code paths.
+- AgentCanSuspend() is `vm().canBlock` (memcap adds the flag, the `--can-block=false` CLI/runner flag and the spec's
+  `if (!AgentCanSuspend()) throw TypeError` step in Atomics.wait). Agent threads always run with canBlock = true; the main
+  agent's comes from the CLI flag.
 
 ## 4. Agents (src/interp/host.cpp, src/interp/cli.cpp)
 
@@ -123,7 +126,7 @@ share no objects, only SharedArrayBuffer data blocks.
 3. Shared blocks + real atomics + process-wide waiter lists (sections 2, 3), still one agent; ES-core gate.
 4. Agents: start/broadcast/report/getReport/receiveBroadcast/leaving, mailboxes, shutdown, memory budget (sections 4-6);
    the 109 files under the real runner, plus a 4-agent stress file repeated 20x at 4 jobs (timing flakiness), then the gate.
-5. Optional, runner: `--can-block=false` for the 2 `CanBlockIsFalse` files (lead-owned t262/).
+5. memcap's: `--can-block=false` + vm().canBlock for the 2 `CanBlockIsFalse` files.
 
 ## Files and owners (approval needed per step)
 
