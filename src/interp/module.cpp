@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "interp/dispose.h"
 #include "interp/suspend.h"
 #include "runtime/builtins.h"
 #include "runtime/errors.h"
@@ -437,10 +438,10 @@ Result<void> Link(ModuleRecord* module) {
   return {};
 }
 
-// The statements of a module body (Evaluation of ModuleBody).
+// The statements of a module body (Evaluation of ModuleBody), then DisposeResources for its top-level
+// `using` / `await using` declarations.
 Result<Value> evaluateModuleBody(ModuleRecord* module) {
-  Completion completion = TRY(evaluateStatementList(module->code->body));
-  (void)completion;
+  TRY(DisposeResources(module->environment, evaluateStatementList(module->code->body)));
   return Value::undefined();
 }
 
