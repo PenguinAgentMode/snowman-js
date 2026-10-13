@@ -35,24 +35,23 @@ Environment* GetThisEnvironment(Environment* env) {
 // ---- Declarative ----
 
 DeclarativeEnvironment::Binding* DeclarativeEnvironment::find(String* name) {
-  if (index_) {
-    auto it = index_->find(name);
-    return it == index_->end() ? nullptr : &bindings_[it->second];
+  if (!index_) {
+    if (bindings_.size() <= kIndexThreshold) {
+      for (auto& binding : bindings_) {
+        if (binding.name == name) return &binding;
+      }
+      return nullptr;
+    }
+    index_ = std::make_unique<std::unordered_map<String*, uint32_t>>();
+    for (uint32_t i = 0; i < bindings_.size(); i++) (*index_)[bindings_[i].name] = i;
   }
-  for (auto& binding : bindings_) {
-    if (binding.name == name) return &binding;
-  }
-  return nullptr;
+  auto it = index_->find(name);
+  return it == index_->end() ? nullptr : &bindings_[it->second];
 }
 
 DeclarativeEnvironment::Binding& DeclarativeEnvironment::add(String* name) {
   bindings_.push_back(Binding{name, Value::empty(), true, false, false});
-  if (index_) {
-    (*index_)[name] = uint32_t(bindings_.size() - 1);
-  } else if (bindings_.size() > kIndexThreshold) {
-    index_ = std::make_unique<std::unordered_map<String*, uint32_t>>();
-    for (uint32_t i = 0; i < bindings_.size(); i++) (*index_)[bindings_[i].name] = i;
-  }
+  if (index_) (*index_)[name] = uint32_t(bindings_.size() - 1);
   return bindings_.back();
 }
 
@@ -68,6 +67,8 @@ Result<bool> DeclarativeEnvironment::HasBinding(String* name) { return find(name
 Result<void> DeclarativeEnvironment::CreateMutableBinding(String* name, bool deletable) {
   Binding& binding = add(name);
   binding.deletable = deletable;
+  // Only eval code declares deletable bindings, and it adds them to a record that already exists.
+  if (deletable) dynamic_ = true;
   return {};
 }
 
@@ -91,10 +92,14 @@ Result<void> DeclarativeEnvironment::SetMutableBinding(String* name, Value value
     TRY(InitializeBinding(name, value));
     return {};
   }
-  if (binding->strict) strict = true;
-  if (binding->value.isEmpty()) return throwUninitialized(name);
-  if (binding->mutable_) {
-    binding->value = value;
+  return setBinding(*binding, name, value, strict);
+}
+
+Result<void> DeclarativeEnvironment::setBinding(Binding& binding, String* name, Value value, bool strict) {
+  if (binding.strict) strict = true;
+  if (binding.value.isEmpty()) return throwUninitialized(name);
+  if (binding.mutable_) {
+    binding.value = value;
     return {};
   }
   if (strict) return ThrowTypeError("Assignment to constant variable '" + name->toUtf8() + "'");
@@ -110,6 +115,7 @@ Result<Value> DeclarativeEnvironment::GetBindingValue(String* name, bool) {
 Result<bool> DeclarativeEnvironment::DeleteBinding(String* name) {
   Binding* binding = find(name);
   if (!binding->deletable) return false;
+  dynamic_ = true;
   size_t at = size_t(binding - bindings_.data());
   bindings_.erase(bindings_.begin() + ptrdiff_t(at));
   if (index_) {

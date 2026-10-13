@@ -148,7 +148,10 @@ struct Reference {
   PrivateName* privateName = nullptr;  // Private
   Value thisValue = Value::empty();  // a super reference's [[ThisValue]]
   bool strict = false;
+  // Environment, a declarative record: the binding's slot when resolution found it (checked against name).
+  uint32_t slot = kNoSlot;
 
+  static constexpr uint32_t kNoSlot = UINT32_MAX;
   bool isPropertyReference() const { return kind == Kind::Property || kind == Kind::Private; }
   bool isSuperReference() const { return !thisValue.isEmpty(); }
 };
@@ -161,14 +164,35 @@ Result<PropertyKey> referenceKey(Reference& ref);  // converts [[ReferencedName]
 
 // GetIdentifierReference / ResolveBinding. env nullptr: the running context's LexicalEnvironment.
 Result<Reference> ResolveBinding(String* name, Environment* env = nullptr);
+// ResolveBinding of an identifier node in the running context's LexicalEnvironment, through the node's
+// binding cache.
+Result<Reference> resolveIdentifier(const ast::Identifier* id);
 Result<Value> ResolveThisBinding();
 Value GetNewTarget();
 Object* GetGlobalObject();
 
 // ---- Evaluation ----
 
+// An identifier node's interpCache: its atom, and where its last resolution found the binding. Valid while
+// the identifier's environment chain has the same records, which holds for every chain of static
+// declarative records (the evaluator creates the same records, with the same bindings in the same order,
+// each time it runs the same code); with environments, the global environment and dynamic records
+// (DeclarativeEnvironment::isDynamic) are never looked through by the cache.
+struct IdentifierCache {
+  enum class Kind : uint8_t { None, Slot, Global };
+  String* name;
+  Kind kind = Kind::None;
+  uint32_t hops = 0;  // records skipped from the running LexicalEnvironment
+  uint32_t slot = 0;  // Slot: the binding's slot in the record `hops` out
+};
+IdentifierCache* newIdentifierCache(const ast::Identifier* id);
+inline IdentifierCache* identifierCache(const ast::Identifier* id) {
+  if (id->interpCache) return static_cast<IdentifierCache*>(id->interpCache);
+  return newIdentifierCache(id);
+}
+
 // The atom for an identifier node's name (cached on the node).
-String* identifierName(const ast::Identifier* id);
+inline String* identifierName(const ast::Identifier* id) { return identifierCache(id)->name; }
 // The atom for a name held by the AST (cached by address: never pass a string that does not live forever).
 String* atomFor(const std::u16string& name);
 

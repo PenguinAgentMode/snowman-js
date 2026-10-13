@@ -1,5 +1,7 @@
 // Evaluation of expressions (ECMA-262 13), Reference Records (6.2.5) and identifier resolution (9.4).
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <typeinfo>
 #include <unordered_map>
 
@@ -38,9 +40,11 @@ Cell* GetActiveScriptOrModule() {
   return nullptr;
 }
 
-String* identifierName(const Identifier* id) {
-  if (!id->interpCache) id->interpCache = atom(id->name);
-  return static_cast<String*>(id->interpCache);
+IdentifierCache* newIdentifierCache(const Identifier* id) {
+  // Nodes are never freed: the cache lives in the node arena with them.
+  auto* cache = new (arenaAllocate(sizeof(IdentifierCache), alignof(IdentifierCache))) IdentifierCache{atom(id->name)};
+  id->interpCache = cache;
+  return cache;
 }
 
 // AST strings are never freed and atoms live forever, so the atom can be cached by the string's address.
@@ -85,34 +89,137 @@ Result<Reference> ResolveBinding(String* name, Environment* env) {
 
 namespace {
 
+using Binding = DeclarativeEnvironment::Binding;
+
 Throw throwNotDefined(String* name) { return ThrowReferenceError(name->toUtf8() + " is not defined"); }
 
-// ResolveBinding + GetValue for an identifier, without materializing the Reference.
-Result<Value> getIdentifierValue(String* name) {
+Throw throwUninitialized(String* name) {
+  return ThrowReferenceError("Cannot access '" + name->toUtf8() + "' before initialization");
+}
+
+// SNOWMAN_VERIFY_IC=1: every identifier cache hit is checked against a walk by name (aborts on a mismatch).
+const bool verifyCaches = std::getenv("SNOWMAN_VERIFY_IC") != nullptr;
+
+bool isDeclarativeKind(const Environment* env) {
+  Environment::Kind kind = env->kind();
+  return kind == Environment::Kind::Declarative || kind == Environment::Kind::Function ||
+         kind == Environment::Kind::Module;
+}
+
+bool isStaticDeclarative(const Environment* env) {
+  return isDeclarativeKind(env) && !static_cast<const DeclarativeEnvironment*>(env)->isDynamic();
+}
+
+// The record `hops` out from env, if every record on the way is a static declarative one; nullptr otherwise.
+Environment* followCache(Environment* env, uint32_t hops) {
+  for (; hops; hops--) {
+    if (!isStaticDeclarative(env)) return nullptr;
+    env = env->outer;
+    if (!env) return nullptr;
+  }
+  return env;
+}
+
+// The binding `name` at `slot` of a declarative record (not a module import, whose value lives elsewhere);
+// nullptr when the slot holds something else.
+Binding* slotBinding(Environment* env, uint32_t slot, String* name) {
+  if (!isDeclarativeKind(env)) return nullptr;
+  Binding* binding = static_cast<DeclarativeEnvironment*>(env)->bindingAt(slot);
+  if (!binding || binding->name != name || binding->indirectModule) return nullptr;
+  return binding;
+}
+
+[[noreturn]] void cacheMismatch(String* name) {
+  fprintf(stderr, "fatal: identifier cache mismatch for '%s'\n", name->toUtf8().c_str());
+  abort();
+}
+
+// SNOWMAN_VERIFY_IC: the walk by name from start reaches target (holding binding, or the global environment)
+// without finding the name before it.
+void verifyCache(Environment* start, Environment* target, Binding* binding, String* name) {
+  for (Environment* env = start; env != target; env = env->outer) {
+    if (!env || !isDeclarativeKind(env) || static_cast<DeclarativeEnvironment*>(env)->find(name)) {
+      cacheMismatch(name);
+    }
+  }
+  if (binding && static_cast<DeclarativeEnvironment*>(target)->find(name) != binding) cacheMismatch(name);
+}
+
+void recordSlot(IdentifierCache* cache, uint32_t hops, DeclarativeEnvironment* env, const Binding* binding) {
+  if (binding->indirectModule) return;
+  cache->kind = IdentifierCache::Kind::Slot;
+  cache->hops = hops;
+  cache->slot = env->slotOf(binding);
+}
+
+void recordGlobal(IdentifierCache* cache, uint32_t hops) {
+  cache->kind = IdentifierCache::Kind::Global;
+  cache->hops = hops;
+}
+
+// GetValue of an identifier resolved to the global environment.
+Result<Value> globalIdentifierValue(GlobalEnvironment* global, String* name, bool strict) {
+  if (Binding* binding = global->declarativeRecord->find(name)) {
+    if (binding->value.isEmpty()) return throwUninitialized(name);
+    return binding->value;
+  }
+  if (std::optional<PropertySlot> slot = global->objectRecord->ownDataSlot(name)) return slot->value;
+  bool exists = TRY(global->objectRecord->HasBinding(name));
+  if (!exists) return throwNotDefined(name);
+  return global->objectRecord->GetBindingValue(name, strict);
+}
+
+// ResolveBinding + GetValue for an identifier node, without materializing the Reference.
+Result<Value> getIdentifierValue(const Identifier* id) {
+  IdentifierCache* cache = identifierCache(id);
+  String* name = cache->name;
   InterpContext* context = runningContext();
-  for (Environment* env = context->lexicalEnvironment; env; env = env->outer) {
+  Environment* start = context->lexicalEnvironment;
+  if (cache->kind != IdentifierCache::Kind::None) {
+    if (Environment* env = followCache(start, cache->hops)) {
+      if (cache->kind == IdentifierCache::Kind::Slot) {
+        if (Binding* binding = slotBinding(env, cache->slot, name)) {
+          if (verifyCaches) verifyCache(start, env, binding, name);
+          if (binding->value.isEmpty()) return throwUninitialized(name);
+          return binding->value;
+        }
+      } else if (env->kind() == Environment::Kind::Global) {
+        if (verifyCaches) verifyCache(start, env, nullptr, name);
+        return globalIdentifierValue(static_cast<GlobalEnvironment*>(env), name, context->strict);
+      }
+    }
+  }
+  uint32_t hops = 0;
+  bool cacheable = true;  // every record passed is a static declarative one
+  for (Environment* env = start; env; env = env->outer, hops++) {
     switch (env->kind()) {
       case Environment::Kind::Declarative:
       case Environment::Kind::Function: {
-        auto* binding = static_cast<DeclarativeEnvironment*>(env)->find(name);
-        if (!binding) continue;
-        if (binding->value.isEmpty()) {
-          return ThrowReferenceError("Cannot access '" + name->toUtf8() + "' before initialization");
+        auto* declarative = static_cast<DeclarativeEnvironment*>(env);
+        Binding* binding = declarative->find(name);
+        if (!binding) {
+          if (declarative->isDynamic()) cacheable = false;
+          continue;
         }
+        if (cacheable) recordSlot(cache, hops, declarative, binding);
+        if (binding->value.isEmpty()) return throwUninitialized(name);
         return binding->value;
       }
-      case Environment::Kind::Module:
-        if (!static_cast<DeclarativeEnvironment*>(env)->hasBindingDirect(name)) continue;
+      case Environment::Kind::Module: {
+        auto* declarative = static_cast<DeclarativeEnvironment*>(env);
+        Binding* binding = declarative->find(name);
+        if (!binding) {
+          if (declarative->isDynamic()) cacheable = false;
+          continue;
+        }
+        if (cacheable) recordSlot(cache, hops, declarative, binding);
         return env->GetBindingValue(name, true);
-      case Environment::Kind::Global: {
-        auto* global = static_cast<GlobalEnvironment*>(env);
-        if (global->declarativeRecord->hasBindingDirect(name)) return global->declarativeRecord->GetBindingValue(name, true);
-        if (std::optional<PropertySlot> slot = global->objectRecord->ownDataSlot(name)) return slot->value;
-        bool exists = TRY(global->objectRecord->HasBinding(name));
-        if (!exists) continue;
-        return global->objectRecord->GetBindingValue(name, context->strict);
       }
+      case Environment::Kind::Global:
+        if (cacheable) recordGlobal(cache, hops);
+        return globalIdentifierValue(static_cast<GlobalEnvironment*>(env), name, context->strict);
       case Environment::Kind::Object: {
+        cacheable = false;
         bool exists = TRY(env->HasBinding(name));
         if (!exists) continue;
         return env->GetBindingValue(name, context->strict);
@@ -123,6 +230,69 @@ Result<Value> getIdentifierValue(String* name) {
 }
 
 }  // namespace
+
+Result<Reference> resolveIdentifier(const Identifier* id) {
+  IdentifierCache* cache = identifierCache(id);
+  String* name = cache->name;
+  InterpContext* context = runningContext();
+  Environment* start = context->lexicalEnvironment;
+  Reference ref;
+  ref.name = name;
+  ref.strict = context->strict;
+  if (cache->kind != IdentifierCache::Kind::None) {
+    if (Environment* env = followCache(start, cache->hops)) {
+      if (cache->kind == IdentifierCache::Kind::Slot) {
+        if (Binding* binding = slotBinding(env, cache->slot, name)) {
+          if (verifyCaches) verifyCache(start, env, binding, name);
+          ref.kind = Reference::Kind::Environment;
+          ref.env = env;
+          ref.slot = cache->slot;
+          return ref;
+        }
+      } else if (env->kind() == Environment::Kind::Global) {
+        if (verifyCaches) verifyCache(start, env, nullptr, name);
+        bool exists = TRY(env->HasBinding(name));
+        if (exists) {
+          ref.kind = Reference::Kind::Environment;
+          ref.env = env;
+        } else {
+          ref.kind = Reference::Kind::Unresolvable;
+        }
+        return ref;
+      }
+    }
+  }
+  uint32_t hops = 0;
+  bool cacheable = true;
+  for (Environment* env = start; env; env = env->outer, hops++) {
+    if (isDeclarativeKind(env)) {
+      auto* declarative = static_cast<DeclarativeEnvironment*>(env);
+      Binding* binding = declarative->find(name);
+      if (!binding) {
+        if (declarative->isDynamic()) cacheable = false;
+        continue;
+      }
+      if (cacheable) recordSlot(cache, hops, declarative, binding);
+      ref.kind = Reference::Kind::Environment;
+      ref.env = env;
+      if (!binding->indirectModule) ref.slot = declarative->slotOf(binding);
+      return ref;
+    }
+    if (env->kind() == Environment::Kind::Global) {
+      if (cacheable) recordGlobal(cache, hops);
+    } else {
+      cacheable = false;
+    }
+    bool exists = TRY(env->HasBinding(name));
+    if (exists) {
+      ref.kind = Reference::Kind::Environment;
+      ref.env = env;
+      return ref;
+    }
+  }
+  ref.kind = Reference::Kind::Unresolvable;
+  return ref;
+}
 
 Result<Value> ResolveThisBinding() {
   Environment* env = GetThisEnvironment(runningContext()->lexicalEnvironment);
@@ -174,6 +344,12 @@ Result<Value> GetValue(Reference& ref) {
       if (ref.name) return throwNotDefined(ref.name);
       return ref.base;  // a value (not a Reference)
     case Reference::Kind::Environment:
+      if (ref.slot != Reference::kNoSlot) {
+        if (Binding* binding = slotBinding(ref.env, ref.slot, ref.name)) {
+          if (binding->value.isEmpty()) return throwUninitialized(ref.name);
+          return binding->value;
+        }
+      }
       return ref.env->GetBindingValue(ref.name, ref.strict);
     case Reference::Kind::Property: {
       if (ref.base.isNullish()) return throwNullishBase(ref.base, ref, "read");
@@ -198,6 +374,11 @@ Result<void> PutValue(Reference& ref, Value value) {
       return Set(GetGlobalObject(), PropertyKey(ref.name), value, false);
     }
     case Reference::Kind::Environment:
+      if (ref.slot != Reference::kNoSlot) {
+        if (Binding* binding = slotBinding(ref.env, ref.slot, ref.name)) {
+          return static_cast<DeclarativeEnvironment*>(ref.env)->setBinding(*binding, ref.name, value, ref.strict);
+        }
+      }
       return ref.env->SetMutableBinding(ref.name, value, ref.strict);
     case Reference::Kind::Property: {
       if (ref.base.isNullish()) return throwNullishBase(ref.base, ref, "set");
@@ -220,6 +401,12 @@ Result<void> PutValue(Reference& ref, Value value) {
 }
 
 Result<void> InitializeReferencedBinding(Reference& ref, Value value) {
+  if (ref.slot != Reference::kNoSlot) {
+    if (Binding* binding = slotBinding(ref.env, ref.slot, ref.name)) {
+      binding->value = value;
+      return {};
+    }
+  }
   return ref.env->InitializeBinding(ref.name, value);
 }
 
@@ -364,7 +551,7 @@ Result<Reference> evaluateChainReference(const Node* node, bool* shortCircuit) {
 Result<Reference> evaluateReference(const Node* node) {
   switch (node->type) {
     case NodeType::Identifier:
-      return ResolveBinding(identifierName(node->as<Identifier>()));
+      return resolveIdentifier(node->as<Identifier>());
     case NodeType::MemberExpression:
       return evaluateMember(node->as<MemberExpression>(), nullptr);
     case NodeType::CallExpression:
@@ -667,7 +854,7 @@ Result<Value> evaluateUnary(const UnaryExpression* node) {
       return Value::undefined();
     case UnaryOperator::Typeof: {
       if (node->argument->type == NodeType::Identifier) {
-        Reference ref = TRY(ResolveBinding(identifierName(node->argument->as<Identifier>())));
+        Reference ref = TRY(resolveIdentifier(node->argument->as<Identifier>()));
         if (ref.kind == Reference::Kind::Unresolvable) return Value(atom(u"undefined"));
         return typeofValue(TRY(GetValue(ref)));
       }
@@ -807,7 +994,7 @@ Result<Value> evaluateMetaProperty(const MetaProperty* node) {
 Result<Value> evaluate(const Node* node) {
   switch (node->type) {
     case NodeType::Identifier:
-      return getIdentifierValue(identifierName(node->as<Identifier>()));
+      return getIdentifierValue(node->as<Identifier>());
     case NodeType::Literal:
       return evaluateLiteral(node->as<Literal>());
     case NodeType::ThisExpression:
