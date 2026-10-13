@@ -3,8 +3,10 @@
 #pragma once
 
 #include <cstdint>
+#include <cstring>
 #include <memory>
 #include <optional>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
@@ -58,10 +60,63 @@ class DeclarativeEnvironment : public Environment {
     bool mutable_;
     bool deletable;
     bool strict;  // immutable bindings: a strict binding throws on assignment even in sloppy code
-    // Module import bindings: the binding is name `indirectName` of `indirectModule`'s environment.
-    ModuleRecord* indirectModule = nullptr;
-    String* indirectName = nullptr;
+    // A module import binding: a binding of another module's environment (ModuleEnvironment::imports_).
+    bool indirect = false;
   };
+
+  // The bindings, the first few stored in the record itself (most records hold a handful, and a function
+  // call creates one). Bindings are trivially copyable.
+  class BindingList {
+   public:
+    static constexpr uint32_t kInline = 4;
+    BindingList() = default;
+    BindingList(const BindingList&) = delete;
+    BindingList& operator=(const BindingList&) = delete;
+    ~BindingList() {
+      if (data_ != inline_) ::operator delete(data_);
+    }
+    uint32_t size() const { return size_; }
+    Binding* data() { return data_; }
+    const Binding* data() const { return data_; }
+    Binding& operator[](size_t i) { return data_[i]; }
+    Binding* begin() { return data_; }
+    Binding* end() { return data_ + size_; }
+    const Binding* begin() const { return data_; }
+    const Binding* end() const { return data_ + size_; }
+    Binding& back() { return data_[size_ - 1]; }
+    void reserve(size_t count) {
+      if (count > capacity_) grow(count);
+    }
+    void push_back(const Binding& binding) {
+      if (size_ == capacity_) grow(size_t(capacity_) * 2);
+      data_[size_++] = binding;
+    }
+    void assign(const Binding* bindings, size_t count) {
+      size_ = 0;
+      reserve(count);
+      if (count) std::memcpy(static_cast<void*>(data_), bindings, count * sizeof(Binding));
+      size_ = uint32_t(count);
+    }
+    void erase(size_t at) {
+      std::memmove(static_cast<void*>(data_ + at), data_ + at + 1, (size_ - at - 1) * sizeof(Binding));
+      size_--;
+    }
+
+   private:
+    void grow(size_t capacity) {
+      auto* grown = static_cast<Binding*>(::operator new(capacity * sizeof(Binding)));
+      std::memcpy(static_cast<void*>(grown), data_, size_ * sizeof(Binding));
+      if (data_ != inline_) ::operator delete(data_);
+      data_ = grown;
+      capacity_ = uint32_t(capacity);
+    }
+
+    Binding* data_ = inline_;
+    uint32_t size_ = 0;
+    uint32_t capacity_ = kInline;
+    Binding inline_[kInline];
+  };
+  static_assert(std::is_trivially_copyable_v<Binding>);
 
   explicit DeclarativeEnvironment(Environment* outer) : Environment(Kind::Declarative, outer) {}
 
@@ -86,12 +141,12 @@ class DeclarativeEnvironment : public Environment {
   bool isDynamic() const { return dynamic_; }
   // A function record's whole binding list at once (FunctionDeclarationInstantiation's fast path).
   void assignBindings(const std::vector<Binding>& bindings) {
-    bindings_ = bindings;
+    bindings_.assign(bindings.data(), bindings.size());
     index_.reset();
   }
   // A new binding initialized to `value` (CreateMutableBinding + InitializeBinding).
   void createInitializedBinding(String* name, Value value, bool mutable_ = true);
-  const std::vector<Binding>& bindings() const { return bindings_; }
+  const BindingList& bindings() const { return bindings_; }
   void reserve(size_t count) { bindings_.reserve(count); }
   // Every binding back to uninitialized (a reused loop iteration environment).
   void resetBindings() {
@@ -109,7 +164,7 @@ class DeclarativeEnvironment : public Environment {
   DeclarativeEnvironment(Kind kind, Environment* outer) : Environment(kind, outer) {}
   Binding& add(String* name);
 
-  std::vector<Binding> bindings_;
+  BindingList bindings_;
   std::unique_ptr<std::unordered_map<String*, uint32_t>> index_;  // built by find() once a record has many bindings
   bool dynamic_ = false;
 };
@@ -140,8 +195,7 @@ class FunctionEnvironment final : public DeclarativeEnvironment {
 // 9.1.1.2 Object Environment Records.
 class ObjectEnvironment final : public Environment {
  public:
-  ObjectEnvironment(Object* bindingObject, bool isWithEnvironment, Environment* outer)
-      : Environment(Kind::Object, outer), bindingObject(bindingObject), isWithEnvironment(isWithEnvironment) {}
+  ObjectEnvironment(Object* bindingObject, bool isWithEnvironment, Environment* outer);
 
   Result<bool> HasBinding(String* name) override;
   Result<void> CreateMutableBinding(String* name, bool deletable) override;
@@ -161,6 +215,9 @@ class ObjectEnvironment final : public Environment {
 
   Object* bindingObject;
   bool isWithEnvironment;
+
+ private:
+  bool direct_;  // ownDataSlot applies: an ordinary binding object, not a with environment
 };
 
 // 9.1.1.4 Global Environment Records.
@@ -202,6 +259,17 @@ class ModuleEnvironment final : public DeclarativeEnvironment {
   bool HasThisBinding() const override { return true; }
   // CreateImportBinding(N, M, N2): an immutable, initialized binding that reads N2 of M's environment.
   void CreateImportBinding(String* name, ModuleRecord* module, String* targetName);
+
+  void trace(Tracer& tracer) override;
+
+ private:
+  // The import bindings' targets: binding `name` is `targetName` of `module`'s environment.
+  struct Import {
+    String* name;
+    ModuleRecord* module;
+    String* targetName;
+  };
+  std::vector<Import> imports_;
 };
 
 // 9.1.2.1 GetIdentifierReference's environment walk is in the evaluator (it needs Reference Records).
