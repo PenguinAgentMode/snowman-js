@@ -20,6 +20,10 @@
   suite run on the new main (`tools/lead/measure.sh suite <baseline>`) and `gate.mjs` against the previous
   baseline. Any regression reverts the offending merge at once; it comes back re-gated on current main.
   Every published number names the main commit it was measured on.
+- **Background runs get a completion monitor.** Before ending a turn with a long run going (gate, suite run,
+  build) in the background, attach a `monitor` that fires when it finishes, e.g. a command source that waits
+  for the process to exit and then prints the runner's summary line. An idle agent with an unwatched run never
+  wakes, and from outside that looks the same as done.
 - **Report every ~30 minutes**, even mid-task: one line to the lead (agent_send to="parent"): the branch sha
   pushed, the pass count on your directories, the next step, blockers. Silence reads as a problem.
 - **Merge per feature**: when one feature (a built-in, a constructor, a class) reaches a stable pass count,
