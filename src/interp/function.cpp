@@ -99,7 +99,7 @@ String* ECMAScriptFunction::sourceText() const { return newString(sourceTextView
 // 10.2.1 [[Call]]
 Result<Value> ECMAScriptFunction::Call(Value thisArgument, Args args) {
   TRY(CheckStack());
-  heap().maybeCollect();
+  safepoint();
   if (codeKind == CodeKind::DefaultConstructor) {
     ExecutionContext context;
     context.realm = realm();
@@ -118,7 +118,7 @@ Result<Value> ECMAScriptFunction::Call(Value thisArgument, Args args) {
 // 10.2.2 [[Construct]]
 Result<Object*> ECMAScriptFunction::Construct(Args args, Object* newTarget) {
   TRY(CheckStack());
-  heap().maybeCollect();
+  safepoint();
   if (codeKind == CodeKind::DefaultConstructor) {
     ExecutionContext context;
     context.realm = realm();

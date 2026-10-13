@@ -98,6 +98,7 @@ int runProgram(const CliOptions& options, const std::string& source) {
   vm().initialRealm = realm;
   interp::setUpRealm(realm);
   heap().setCollectorEnabled(true);
+  if (const char* stress = std::getenv("SNOWMAN_GC_STRESS")) interp::gcStressInterval = unsigned(std::atoi(stress));
   std::u16string text = utf8ToUtf16(source);
   size_t slash = options.file.rfind('/');
   interp::setScriptDirectory(slash == std::string::npos ? "." : options.file.substr(0, slash));
