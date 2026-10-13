@@ -65,6 +65,11 @@ class CalendarSystem {
 // The calendar system of a canonical non-ISO calendar type, nullptr if there is none (iso8601, unsupported).
 const CalendarSystem* GetCalendarSystem(std::u16string_view calendar);
 
+// The table-driven calendars (calendar_chinese.cpp, calendar_dangi.cpp, calendar_islamic_umalqura.cpp).
+const CalendarSystem* ChineseCalendarSystem();
+const CalendarSystem* DangiCalendarSystem();
+const CalendarSystem* IslamicUmalquraCalendarSystem();
+
 // ParseMonthCode / CreateMonthCode.
 std::optional<MonthCodeParts> ParseMonthCode(std::u16string_view monthCode);
 std::u16string CreateMonthCode(MonthCodeParts parts);

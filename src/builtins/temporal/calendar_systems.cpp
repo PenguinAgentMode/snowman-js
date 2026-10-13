@@ -84,6 +84,9 @@ const IsoLikeCalendar kGregory(0, kGregoryEras);
 
 const CalendarSystem* GetCalendarSystem(std::u16string_view calendar) {
   if (calendar == u"gregory") return &kGregory;
+  if (calendar == u"chinese") return ChineseCalendarSystem();
+  if (calendar == u"dangi") return DangiCalendarSystem();
+  if (calendar == u"islamic-umalqura") return IslamicUmalquraCalendarSystem();
   return nullptr;
 }
 
