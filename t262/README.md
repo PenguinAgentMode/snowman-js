@@ -5,7 +5,7 @@ It needs node 22 and nothing else. Every command runs from the repo root.
 
 ## The engine's contract
 
-`engine [--module] [--parse-only] file.js`
+`engine [--prelude h.js]... [--epilogue e.js]... [--module] [--parse-only] file.js`
 - Exit 0 when the script runs to completion.
 - On an uncaught exception, print `Name: message` (for example `TypeError: x is not a function`) and exit
   non-zero.
@@ -15,9 +15,14 @@ It needs node 22 and nothing else. Every command runs from the repo root.
   test262's INTERPRETING.md).
 - With `--module`, run the file as a module; imports resolve relative to it.
 - With `--parse-only`, parse (including early errors) and exit 0 or report the SyntaxError; run nothing.
+- `--prelude` / `--epilogue` files are global Scripts run before the entry and after it completed normally;
+  an error in one prints `Test262:HostScriptError <file>` first (INTERFACES.md section 1).
 
 The runner appends `print("Test262:Ran")` after each test. A test passes only if that line is printed, so an
-engine that runs nothing can't pass.
+engine that runs nothing can't pass. A script test is composed with the harness into a temp file next to it; a
+module test runs unmodified at its own path, with the harness as a prelude and the `Ran` line as an epilogue
+(temp files in os.tmpdir()), so a test that imports itself gets the same module record. A
+`Test262:HostScriptError` line fails the scenario whatever the test expects.
 
 ## Running
 
