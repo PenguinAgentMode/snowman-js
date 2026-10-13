@@ -1,14 +1,14 @@
 # Lead handoff (snowman-js)
 
 Updated at every merge and measurement. A new lead (or the supervisor directly) continues from this file,
-STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~15:45 UTC, main a1a2a5f + results.
+STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~16:30 UTC, main 317949e + results.
 
 ## Numbers and baselines
 
-- Latest measured main: **a1a2a5fc3**, full **52,230 / 53,616 (97.41%)**, ES-core **43,196 / 43,305 (99.75%)**, M8.
-  `node t262/runner/milestones.mjs results/a1a2a5fc3.json --full results/a1a2a5fc3-full.json`
-- Gate baselines: `results/a1a2a5fc3.json` (ES-core) and `results/a1a2a5fc3-full.json` (full); JSONL on the
-  results branch at `results/a1a2a5fc3/suite.jsonl`. Nothing merged since.
+- Latest measured main: **317949e37**, full **53,414 / 53,616 (99.62%)**, ES-core **43,196 / 43,305 (99.75%)**, M8.
+  `node t262/runner/milestones.mjs results/317949e37.json --full results/317949e37-full.json`
+- Gate baselines: `results/317949e37.json` (ES-core) and `results/317949e37-full.json` (full); JSONL on the
+  results branch at `results/317949e37/suite.jsonl`. Nothing merged since.
 - Measure: `TMPDIR=$HOME/tmp tools/lead/measure.sh suite results/<previous>.json` in the background with a monitor
   (~22 min at 4 jobs). Then `gate.mjs <prev>-full.json results/<sha>/suite.jsonl` and `clusters.mjs <sha>-full.json
   <prev>-full.json`. Commit `results/<sha>{,-full}.json` to main, push the JSONL to the results branch (worktree
@@ -16,9 +16,9 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~15:45 UTC, main a1a2a5f 
 
 ## Merge queue
 
-1. Merged cb6d5f1 (calendar group 2); not yet measured. Measure main after group 3 merges.
-   builtins' queue after group 3: ws/calendars-ref e27ba47 (reference-year table, 4 files), then $262.agent step 3.
-2. builtins: calendar group 3, ws/calendars-g3 f21aed9 (arithmetic calendars, on main 93b4e17), gating vs a1a2a5fc3.
+1. builtins: ws/calendars-ref addd9a2 (chinese/dangi reference years, 4 files), gated vs a1a2a5fc3; re-gate its JSONL
+   against 317949e37 before merging.
+2. builtins: $262.agent step 3 (ws/agent3 738da48 WIP: SharedBlock, real atomics); then step 4 (agents, waiters).
 
 How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort) <(git diff --name-only $base
 <sha>|sort)` (AGENTS.md older-base rule); merge the exact sha; `make -j4` warning-free; push; list it under

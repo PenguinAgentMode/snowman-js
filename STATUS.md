@@ -16,25 +16,25 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-Post-merge run: **main a1a2a5fc3** (`tools/lead/measure.sh suite results/29a14dfdd.json`, 4 jobs, 1,221 s, run by the
-lead; `results/a1a2a5fc3{,-full}.json`; JSONL `results/a1a2a5fc3/suite.jsonl` on the results branch).
+Post-merge run: **main 317949e37** (`tools/lead/measure.sh suite results/a1a2a5fc3.json`, 4 jobs, 1,323 s, run by
+the lead; `results/317949e37{,-full}.json`; JSONL `results/317949e37/suite.jsonl` on the results branch).
 
-- milestones.mjs: highest **M8**; **ES-core: 43,196 / 43,305 files (99.75%)**; **full suite: 52,230 / 53,616 files
-  (97.41%)**; scenarios 100,254 / 102,994.
-- vs 29a14dfdd: ES-core +2 (CanBlockIsFalse, a runner change), 0 regressions; full +591, 0 regressions.
-- Command: `node t262/runner/milestones.mjs results/a1a2a5fc3.json --full results/a1a2a5fc3-full.json`
+- milestones.mjs: highest **M8**; **ES-core: 43,196 / 43,305 files (99.75%)**; **full suite: 53,414 / 53,616 files
+  (99.62%)**; scenarios 102,622 / 102,994.
+- vs a1a2a5fc3: ES-core +0, 0 regressions; full +1,184 (calendar groups 2 + 3), 0 regressions.
+- Command: `node t262/runner/milestones.mjs results/317949e37.json --full results/317949e37-full.json`
 
-| Cluster | Passing (a1a2a5fc3) | Files | % | vs 29a14dfdd |
+| Cluster | Passing (317949e37) | Files | % | vs a1a2a5fc3 |
 | --- | ---: | ---: | ---: | ---: |
-| ES-core | 43,196 | 43,305 | 99.75 | +2 |
+| ES-core | 43,196 | 43,305 | 99.75 | +0 |
 | built-ins/Temporal | 4,605 | 4,605 | 100.00 | +0 |
-| intl402/Temporal | 825 | 2,029 | 40.66 | +571 |
-| intl402 (other) | 1,336 | 1,353 | 98.74 | +18 |
+| intl402/Temporal | 2,009 | 2,029 | 99.01 | +1,184 |
+| intl402 (other) | 1,336 | 1,353 | 98.74 | +0 |
 | staging | 1,449 | 1,483 | 97.71 | +0 |
 | proposals (in ES-core dirs) | 819 | 841 | 97.38 | +0 |
-| **full suite** | **52,230** | **53,616** | **97.41** | **+591** |
+| **full suite** | **53,414** | **53,616** | **99.62** | **+1,184** |
 
-Earlier: 29a14dfdd full 51,639 (96.31%); 3edca9940 51,607 (96.25%); c21bcd82e 50,887 (94.91%); 8a5df0b93 44,766 (83.49%).
+Earlier: a1a2a5fc3 full 52,230 (97.41%); 29a14dfdd 51,639 (96.31%); 3edca9940 51,607 (96.25%); c21bcd82e 50,887 (94.91%); 8a5df0b93 44,766 (83.49%).
 Previous: main 8a5df0b93, full 44,766 / 53,616 (83.49%), ES-core 43,059 (99.43%).
 
 ES-core residue at c21bcd82e (142 files; memcap, `tools/lead/es-core-residue.md` on ws/measure 4f999b1; node
@@ -53,13 +53,7 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-Not in a1a2a5fc3's run:
-- ws/calendars-g2 cb6d5f1 (buddhist, roc, japanese), on base 10979b4. Its gate vs a1a2a5fc3: only the 2
-  CanBlockIsFalse files (Atomics/wait/{,bigint/}cannot-suspend-throws.js), because its base predates 7205b4d,
-  which cb6d5f1 doesn't touch; both pass on the merged main. Full on its base: 52,586 (+358 from group 2).
-- ws/calendars-g3 f21aed9 (coptic, ethiopic, ethioaa, indian, persian, islamic-civil, islamic-tbla, hebrew). Gate vs
-  a1a2a5fc3: ES-core 0, full 0 regressions; full 52,230 → 53,414 (+1,184 with group 2). Main's src after the merge
-  is byte-identical to f21aed9 (the only conflicts were with its rebased copy of group 2).
+None: 317949e37 covers 579c3fa (calendar group 2) and 84730f5 (calendar group 3).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
@@ -94,8 +88,8 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Gate baseline
 
-- ES-core: `results/a1a2a5fc3.json` (43,196 passing files); full suite: `results/a1a2a5fc3-full.json` (52,230).
-  Check: `node tools/lead/gate.mjs results/a1a2a5fc3.json <jsonl>` and `... results/a1a2a5fc3-full.json <jsonl>`
+- ES-core: `results/317949e37.json` (43,196 passing files); full suite: `results/317949e37-full.json` (53,414).
+  Check: `node tools/lead/gate.mjs results/317949e37.json <jsonl>` and `... results/317949e37-full.json <jsonl>`
   (AGENTS.md). Gates already running against c21bcd82e stay valid (a subset of this baseline).
 
 ## Survey interim (main 7e957a05a)
