@@ -10,9 +10,12 @@
 
 namespace snowman {
 
+// One heap per thread (agent); cells never cross threads.
+thread_local Heap* tHeap = nullptr;
+
 Heap& heap() {
-  static Heap* instance = new Heap();
-  return *instance;
+  if (!tHeap) tHeap = new Heap();
+  return *tHeap;
 }
 
 RootProvider::RootProvider() {
