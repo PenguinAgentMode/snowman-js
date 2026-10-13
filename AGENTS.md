@@ -40,6 +40,10 @@
   build) in the background, attach a `monitor` that fires when it finishes, e.g. a command source that waits
   for the process to exit and then prints the runner's summary line. An idle agent with an unwatched run never
   wakes, and from outside that looks the same as done.
+- **No new shared mutable statics** (the engine runs real threads since $262.agent): no new mutable
+  function-local or global `static` in src/ unless it is `thread_local`, atomic, mutex-protected, or immutable after
+  initialization, and listed with its reason in notes/agent-design.md. A lint in the gate checks it against an
+  allowlist.
 - **Keep big output out of your conversation** (an agent's context has a hard limit; intl's turn died at 1M
   tokens). Redirect build, test and generator output to files; print only summaries (`tail -20`, `grep -c`,
   gate.mjs's summary line, a node one-liner over the JSONL). Never cat JSONL, results/*.json, .inc data or large
