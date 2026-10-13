@@ -869,7 +869,8 @@ void formatPatternInto(std::vector<DatePart>& out, const DateTimeFormatObject& d
         }
         int64_t year = tok.ch == u'u' ? cf.year : tok.ch == u'r' ? (cycle ? cf.year : t.year) : cycle ? cycleIndex + 1 : cf.eraYear;
         const char16_t* type = tok.ch == u'r' ? u"relatedYear" : tok.ch == u'U' ? u"yearName" : u"year";
-        if (n == 2) out.push_back({type, digitsOf(nu, ((year % 100) + 100) % 100, 2), source});
+        // Only y and Y are truncated to two digits (as ICU's).
+        if (n == 2 && (tok.ch == u'y' || tok.ch == u'Y')) out.push_back({type, digitsOf(nu, ((year % 100) + 100) % 100, 2), source});
         else out.push_back({type, digitsOf(nu, year, n), source});
         break;
       }

@@ -1,12 +1,14 @@
 // check-dtf.mjs: compare the engine's Intl.DateTimeFormat output with node's for combinations of options, locales
 // and instants. Differences are printed; the count of differing cases last.
-//   node tools/intl/check-dtf.mjs ./engine [locale ...]
+//   [DTF_INSTANTS=ms,...] node tools/intl/check-dtf.mjs ./engine [locale ...]
 import { execFileSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 
 const engine = process.argv[2] ?? './engine';
 const locales = process.argv.length > 3 ? process.argv.slice(3) : ['en', 'en-GB', 'de', 'fr', 'ja', 'zh', 'ko', 'es', 'ru', 'ar'];
-const instants = [Date.UTC(1886, 4, 1, 14, 12, 47, 123), Date.UTC(2024, 0, 9, 0, 5, 3, 7), Date.UTC(-500, 11, 31, 23, 59, 59, 999)];
+// DTF_INSTANTS=ms,ms,... replaces the instants (ICU's Gregorian-based calendars switch to Julian dates before 1582).
+const instants = process.env.DTF_INSTANTS ? process.env.DTF_INSTANTS.split(',').map(Number)
+  : [Date.UTC(1886, 4, 1, 14, 12, 47, 123), Date.UTC(2024, 0, 9, 0, 5, 3, 7), Date.UTC(-500, 11, 31, 23, 59, 59, 999)];
 const choices = {
   weekday: [undefined, 'short', 'long'], era: [undefined, 'short'], year: [undefined, 'numeric', '2-digit'],
   month: [undefined, 'numeric', '2-digit', 'short', 'long'], day: [undefined, 'numeric'], hour: [undefined, 'numeric', '2-digit'],
@@ -28,8 +30,9 @@ cases.push({ hour12: true, hour: 'numeric' }, { hour12: false, hour: 'numeric' }
 const json = (o) => JSON.stringify(o, (k, v) => (v === undefined ? undefined : v));
 const script = `const cases = ${json(cases)}; const locales = ${JSON.stringify(locales)}; const instants = ${JSON.stringify(instants)};
 for (const l of locales) for (const c of cases) { let out; try { const f = new Intl.DateTimeFormat(l, { timeZone: 'UTC', ...c }); out = instants.map((t) => f.format(t)).join(' | '); } catch (e) { out = 'ERR ' + e.name; } print(JSON.stringify(out)); }`;
-writeFileSync('/tmp/check-dtf.js', script);
-const got = execFileSync('sh', ['-c', `ulimit -v 2000000; ${engine} /tmp/check-dtf.js`], { encoding: 'utf8', maxBuffer: 1 << 26 }).trim().split('\n').map((l) => JSON.parse(l));
+const tmp = `${process.env.TMPDIR ?? '/tmp'}/check-dtf.js`;
+writeFileSync(tmp, script);
+const got = execFileSync('sh', ['-c', `ulimit -v 2000000; ${engine} ${tmp}`], { encoding: 'utf8', maxBuffer: 1 << 26 }).trim().split('\n').map((l) => JSON.parse(l));
 let i = 0, bad = 0;
 for (const l of locales) {
   for (const c of cases) {
