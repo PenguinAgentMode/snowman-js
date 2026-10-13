@@ -1,14 +1,15 @@
 // nodegap.mjs results/<sha>.json [baseline=results/node/es-core.json]: classify every failing file as a real
 // gap ("node passes, we fail") or a data point ("node fails too"), per top-level directory.
 import fs from 'node:fs';
+import { listScenarios } from '../../t262/runner/scenarios.mjs';
 const [file, nodeFile = 'results/node/es-core.json'] = process.argv.slice(2);
 const ours = JSON.parse(fs.readFileSync(file, 'utf8'));
 const node = JSON.parse(fs.readFileSync(nodeFile, 'utf8'));
 const weOk = new Set(ours.passing_files);
 const nodeOk = new Set(node.passing_files);
 const all = new Set();
-const lines = fs.readFileSync(file.replace(/\.json$/, '/full.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-for (const l of lines) all.add(l.file);
+// The suite's own file list, so it works for an es-core run and for the ES-core subset of a full-suite run.
+for (const s of listScenarios(new URL('../../t262/test262', import.meta.url).pathname, ours.suite ?? 'es-core')) all.add(s.file);
 const gap = {}, both = {};
 let gapN = 0, bothN = 0, onlyUs = 0;
 for (const f of all) {
