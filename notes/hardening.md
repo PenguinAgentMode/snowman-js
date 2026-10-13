@@ -33,14 +33,24 @@ Owner: hardening (sanitizer sweep: ASan + UBSan over the full suite). Lead: the 
   %TypedArray%.prototype.set x2; arraybuffer.cpp slice, transfer): guarded.
 - ASan + SNOWMAN_GC_STRESS=1: class.cpp ClassElements collected mid-ClassDefinitionEvaluation: Rooted (lead approved).
 
-## Pipeline now (after the rebase on c2fcc37, HEAD 8d966b9)
+## Pipeline now (lead's order, 22:30): fixes first, widened GC-stress pass after
 
-- $HOME/wt-asan at 8d966b9 rebuilding -> $HOME/engine-asan2 (marker build-asan2.done).
-- $HOME/logs/run-gcs2.sh (queued): verify the 16 class files (gcsv.done), then GC_STRESS=1 over --shard 0/2 of the
-  lead's directories (gcs2.done / gcs2.fail; reports $HOME/logs/gcs2; per-dir lines in gcs2-progress.txt).
-- Then: rebuild UBSan engine at the final sha, rerun the UBSan-reporting scenarios (the u.PID files name no test:
-  find them by grepping the sweep's JSONL order, or rerun the dirs: TypedArray*, ArrayBuffer), one normal full-suite
-  gate vs results/5f3218f30{,-full}.json (or STATUS.md's newest), statics lint, JSONL to results branch.
+- run-gate.sh: normal build at the tree (= 8d966b9 code) -> $HOME/engine-gate, waits for the UBSan driver
+  (ubsan-all.done), then the full suite --jobs 4 -> gate-8d966b9.jsonl, marker gate.done/.fail. Then
+  `node tools/lead/gate.mjs results/5f3218f30.json $HOME/logs/gate-8d966b9.jsonl` (and -full), statics.mjs, JSONL to the
+  results branch, MR.
+- run-verify.sh (on $HOME/t262-b): the 16 class files under ASan+GC_STRESS=1 with engine-asan2 (gcsv.done), then the
+  UBSan rebuild at 8d966b9 (engine-ubsan2) and TypedArray/TypedArrayConstructors/ArrayBuffer under the old vs the new
+  UBSan engine (ubv.done: report-file counts).
+- UBSan shard 3/4 is DEFERRED ($HOME/engine-ubsan is a wrapper that fails fast once ub-2.done exists): rerun it later
+  with engine-ubsan2: `SHARDS=3`-style, `node t262/runner/run.mjs --engine $HOME/engine-ubsan2 --suite full --shard 3/4
+  --jobs 4` with UBSAN_OPTIONS=log_path=$HOME/logs/ubsan2/u:print_stacktrace=1.
+- AFTER the MR: the widened GC_STRESS=1 pass, $HOME/logs/run-gcs2.sh (edit it: engine-asan2 exists; drop the verify
+  block, it is done), over --shard 0/2 of class x2, generators, async-generators, for-await-of, Proxy, Reflect, Array
+  sort/splice/flat/flatMap, RegExp, Temporal (~17k scenarios, ~70 min at --jobs 3). New finds: second small merge,
+  or a written report + patch here.
+- Killing a background run from a later tool call doesn't work (separate PID namespaces): stop a queued script
+  through its own marker guards, or swap the engine path for a fail-fast wrapper.
 
 ## Next steps
 
