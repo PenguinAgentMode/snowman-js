@@ -50,6 +50,8 @@ PrivateElement* PrivateElementFind(Object* O, PrivateName* P) {
 // 7.3.27 PrivateFieldAdd
 Result<void> PrivateFieldAdd(Object* O, PrivateName* P, Value value) {
   if (PrivateElementFind(O, P)) return ThrowTypeError("Cannot initialize #" + P->description->toUtf8() + " twice on the same object");
+  // nonextensible-applies-to-private: a non-extensible object gets no new private elements either.
+  if (!TRY(IsExtensible(O))) return ThrowTypeError("Cannot define private field #" + P->description->toUtf8() + " on a non-extensible object");
   privateElementsOf(O).push_back(PrivateElement{P, PrivateElement::Kind::Field, value, Value(), Value()});
   return {};
 }
@@ -58,6 +60,9 @@ Result<void> PrivateFieldAdd(Object* O, PrivateName* P, Value value) {
 Result<void> PrivateMethodOrAccessorAdd(Object* O, const PrivateElement& method) {
   if (PrivateElementFind(O, method.key)) {
     return ThrowTypeError("Cannot initialize #" + method.key->description->toUtf8() + " twice on the same object");
+  }
+  if (!TRY(IsExtensible(O))) {
+    return ThrowTypeError("Cannot define private method #" + method.key->description->toUtf8() + " on a non-extensible object");
   }
   privateElementsOf(O).push_back(method);
   return {};
