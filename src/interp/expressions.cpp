@@ -1,7 +1,10 @@
 // Evaluation of expressions (ECMA-262 13), Reference Records (6.2.5) and identifier resolution (9.4).
+#include <alloca.h>
+
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <typeinfo>
 #include <unordered_map>
 
@@ -486,6 +489,18 @@ Result<Reference> evaluateMember(const MemberExpression* node, bool* shortCircui
   return ref;
 }
 
+// The TypeError of reading a property of a nullish base. Out of line: the Reference stays out of the frames of
+// the fast paths below (C stack per JS call; see kStackArguments).
+[[gnu::noinline, gnu::cold]] Throw throwNullishPropertyRead(Value base, Value propertyName,
+                                                            const std::optional<PropertyKey>& key) {
+  Reference ref;
+  ref.kind = Reference::Kind::Property;
+  ref.base = base;
+  ref.propertyName = propertyName;
+  ref.key = key;
+  return throwNullishBase(base, ref, "read");
+}
+
 // Evaluation + GetValue of `base.name` / `base[expression]` without materializing the Reference.
 Result<Value> evaluatePropertyValue(const MemberExpression* node) {
   Value baseValue = TRY(evaluate(node->object));
@@ -496,14 +511,7 @@ Result<Value> evaluatePropertyValue(const MemberExpression* node) {
   } else {
     propertyName = TRY(evaluate(node->property));
   }
-  if (baseValue.isNullish()) {
-    Reference ref;
-    ref.kind = Reference::Kind::Property;
-    ref.base = baseValue;
-    ref.propertyName = propertyName;
-    ref.key = key;
-    return throwNullishBase(baseValue, ref, "read");
-  }
+  if (baseValue.isNullish()) return throwNullishPropertyRead(baseValue, propertyName, key);
   if (!key) key = TRY(ToPropertyKey(propertyName));
   if (baseValue.isObject()) return baseValue.asObject()->Get(*key, baseValue);
   Object* baseObj = TRY(ToObject(baseValue));
@@ -552,6 +560,29 @@ Result<Reference> evaluateChainReference(const Node* node, bool* shortCircuit) {
   return evaluateCallLink(node->as<CallExpression>(), shortCircuit);
 }
 
+// `base.name(...)` / `base[key](...)` outside an optional chain, without materializing References. Out of line:
+// its frame isn't on the stack of the other calls (C stack per JS call; see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateMethodCallValue(const CallExpression* node, const MemberExpression* member) {
+  Value baseValue = TRY(evaluate(member->object));
+  Value propertyName;
+  std::optional<PropertyKey> key;
+  if (!member->computed) {
+    key = PropertyKey(identifierName(member->property->as<Identifier>()));
+  } else {
+    propertyName = TRY(evaluate(member->property));
+  }
+  if (baseValue.isNullish()) return throwNullishPropertyRead(baseValue, propertyName, key);
+  if (!key) key = TRY(ToPropertyKey(propertyName));
+  Value func;
+  if (baseValue.isObject()) {
+    func = TRY(baseValue.asObject()->Get(*key, baseValue));
+  } else {
+    Object* baseObj = TRY(ToObject(baseValue));
+    func = TRY(baseObj->Get(*key, baseValue));
+  }
+  return EvaluateCall(func, baseValue, node->arguments);
+}
+
 // Evaluation + GetValue of a call outside an optional chain, without materializing the References of the
 // callee (`base.name(...)` / `base[key](...)`) or of the result.
 Result<Value> evaluateCallValue(const CallExpression* node) {
@@ -560,31 +591,7 @@ Result<Value> evaluateCallValue(const CallExpression* node) {
     auto* member = callee->as<MemberExpression>();
     if (member->object->type != NodeType::Super && member->property->type != NodeType::PrivateIdentifier &&
         !member->optional) {
-      Value baseValue = TRY(evaluate(member->object));
-      Value propertyName;
-      std::optional<PropertyKey> key;
-      if (!member->computed) {
-        key = PropertyKey(identifierName(member->property->as<Identifier>()));
-      } else {
-        propertyName = TRY(evaluate(member->property));
-      }
-      if (baseValue.isNullish()) {
-        Reference ref;
-        ref.kind = Reference::Kind::Property;
-        ref.base = baseValue;
-        ref.propertyName = propertyName;
-        ref.key = key;
-        return throwNullishBase(baseValue, ref, "read");
-      }
-      if (!key) key = TRY(ToPropertyKey(propertyName));
-      Value func;
-      if (baseValue.isObject()) {
-        func = TRY(baseValue.asObject()->Get(*key, baseValue));
-      } else {
-        Object* baseObj = TRY(ToObject(baseValue));
-        func = TRY(baseObj->Get(*key, baseValue));
-      }
-      return EvaluateCall(func, baseValue, node->arguments);
+      return evaluateMethodCallValue(node, member);
     }
   }
   Reference ref = TRY(evaluateCallLink(node, nullptr));
@@ -642,7 +649,10 @@ Result<Value> evaluateNamed(const Node* node, Value name) {
 namespace {
 
 // An argument list of at most kStackArguments arguments and no spread element is evaluated into an array on
-// the C stack, which the collector scans (no ValueVector to allocate and register).
+// the C stack, which the collector scans (no ValueVector to allocate and register). The array is sized to the
+// argument count (alloca), in a frame of its own that only exists while arguments are on the stack: a fixed
+// buffer in the recursive frames would cost every JS call C stack, and the deepest recursion tests (100,000
+// nested calls, for/tco-*-body.js) need more than 432 MB of the 480 MB main stack (tools/lead/stackdepth.mjs).
 constexpr size_t kStackArguments = 8;
 
 bool fitsStackArguments(const std::vector<Node*>& arguments) {
@@ -674,17 +684,36 @@ Result<ValueVector> ArgumentListEvaluation(const std::vector<Node*>& arguments) 
   return list;
 }
 
-Result<Value> EvaluateCall(Value func, Value thisValue, const std::vector<Node*>& arguments) {
-  if (fitsStackArguments(arguments)) {
-    Value argList[kStackArguments];
-    size_t count = arguments.size();
-    for (size_t i = 0; i < count; i++) argList[i] = TRY(evaluate(arguments[i]));
-    if (!func.isObject() || !func.asObject()->isCallable()) return ThrowTypeError("not a function");
-    return func.asObject()->Call(thisValue, Args(argList, count));
-  }
+namespace {
+
+// The arguments' values in argList (count of them, uninitialized memory on the caller's stack).
+Result<void> evaluateStackArguments(const std::vector<Node*>& arguments, Value* argList, size_t count) {
+  std::uninitialized_default_construct_n(argList, count);  // scanned by a collection during the evaluation
+  for (size_t i = 0; i < count; i++) argList[i] = TRY(evaluate(arguments[i]));
+  return {};
+}
+
+[[gnu::noinline]] Result<Value> callWithStackArguments(Value func, Value thisValue,
+                                                       const std::vector<Node*>& arguments) {
+  size_t count = arguments.size();
+  auto* argList = static_cast<Value*>(alloca(count * sizeof(Value)));
+  TRY(evaluateStackArguments(arguments, argList, count));
+  if (!func.isObject() || !func.asObject()->isCallable()) return ThrowTypeError("not a function");
+  return func.asObject()->Call(thisValue, Args(argList, count));
+}
+
+[[gnu::noinline]] Result<Value> callWithArgumentList(Value func, Value thisValue,
+                                                     const std::vector<Node*>& arguments) {
   ValueVector argList = TRY(ArgumentListEvaluation(arguments));
   if (!func.isObject() || !func.asObject()->isCallable()) return ThrowTypeError("not a function");
   return func.asObject()->Call(thisValue, argList);
+}
+
+}  // namespace
+
+Result<Value> EvaluateCall(Value func, Value thisValue, const std::vector<Node*>& arguments) {
+  if (fitsStackArguments(arguments)) return callWithStackArguments(func, thisValue, arguments);
+  return callWithArgumentList(func, thisValue, arguments);
 }
 
 // ---- Literals, templates, property names ----
@@ -775,7 +804,8 @@ namespace {
 
 // ---- Array and object literals ----
 
-Result<Value> evaluateArray(const ArrayExpression* node) {
+// Out of line: a smaller frame for evaluate, which every recursion goes through (see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateArray(const ArrayExpression* node) {
   Object* array = TRY(ArrayCreate(0));
   uint32_t nextIndex = 0;
   for (const Node* element : node->elements) {
@@ -844,7 +874,8 @@ Result<void> definePropertyFromLiteral(Object* object, const Property* property)
   return DefinePropertyOrThrow(object, TRY(ToPropertyKey(propKey)), desc);
 }
 
-Result<Value> evaluateObject(const ObjectExpression* node) {
+// Out of line: a smaller frame for evaluate, which every recursion goes through (see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateObject(const ObjectExpression* node) {
   Object* object = OrdinaryObjectCreate(vm().currentRealm()->intrinsic(Intrinsic::ObjectPrototype));
   for (const Node* member : node->properties) {
     if (member->type == NodeType::SpreadElement) {
@@ -1032,21 +1063,16 @@ Result<Value> evaluateAssignment(const AssignmentExpression* node) {
   return r;
 }
 
-Result<Value> evaluateNew(const NewExpression* node) {
+// A NewExpression whose arguments don't fit the stack (see evaluate for the others).
+[[gnu::noinline]] Result<Value> evaluateNew(const NewExpression* node) {
   Value constructor = TRY(evaluate(node->callee));
-  if (fitsStackArguments(node->arguments)) {
-    Value argList[kStackArguments];
-    size_t count = node->arguments.size();
-    for (size_t i = 0; i < count; i++) argList[i] = TRY(evaluate(node->arguments[i]));
-    if (!IsConstructor(constructor)) return ThrowTypeError("not a constructor");
-    return Value(TRY(Construct(constructor.asObject(), Args(argList, count))));
-  }
   ValueVector argList = TRY(ArgumentListEvaluation(node->arguments));
   if (!IsConstructor(constructor)) return ThrowTypeError("not a constructor");
   return Value(TRY(Construct(constructor.asObject(), argList)));
 }
 
-Result<Value> evaluateTaggedTemplate(const TaggedTemplateExpression* node) {
+// Out of line: a smaller frame for evaluate, which every recursion goes through (see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateTaggedTemplate(const TaggedTemplateExpression* node) {
   Reference tagRef = TRY(evaluateReference(node->tag));
   Value tagFunc = TRY(GetValue(tagRef));
   Value thisValue = thisValueForCall(tagRef);
@@ -1057,9 +1083,17 @@ Result<Value> evaluateTaggedTemplate(const TaggedTemplateExpression* node) {
   return tagFunc.asObject()->Call(thisValue, argList);
 }
 
-Result<Value> evaluateMetaProperty(const MetaProperty* node) {
+// Out of line: a smaller frame for evaluate, which every recursion goes through (see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateMetaProperty(const MetaProperty* node) {
   if (node->meta->name == u"new") return GetNewTarget();
   return evaluateImportMeta();
+}
+
+// GetValue(evaluateReference(node)), out of line: the Reference stays out of evaluate's frame, which every
+// recursion goes through (C stack per JS call; see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateReferenceValue(const Node* node) {
+  Reference ref = TRY(evaluateReference(node));
+  return GetValue(ref);
 }
 
 }  // namespace
@@ -1107,19 +1141,27 @@ Result<Value> evaluate(const Node* node) {
           !member->optional) {
         return evaluatePropertyValue(member);
       }
-      Reference ref = TRY(evaluateReference(node));
-      return GetValue(ref);
+      return evaluateReferenceValue(node);
     }
     case NodeType::CallExpression:
       TRY(CheckStack());
       return evaluateCallValue(node->as<CallExpression>());
     case NodeType::ChainExpression: {
       TRY(CheckStack());
-      Reference ref = TRY(evaluateReference(node));
-      return GetValue(ref);
+      return evaluateReferenceValue(node);
     }
-    case NodeType::NewExpression:
-      return evaluateNew(node->as<NewExpression>());
+    case NodeType::NewExpression: {
+      // The arguments in this frame (alloca, released when evaluate returns): a frame of their own would cost
+      // every nested `new` C stack (see kStackArguments).
+      auto* expression = node->as<NewExpression>();
+      if (!fitsStackArguments(expression->arguments)) return evaluateNew(expression);
+      Value constructor = TRY(evaluate(expression->callee));
+      size_t count = expression->arguments.size();
+      auto* argList = static_cast<Value*>(alloca(count * sizeof(Value)));
+      TRY(evaluateStackArguments(expression->arguments, argList, count));
+      if (!IsConstructor(constructor)) return ThrowTypeError("not a constructor");
+      return Value(TRY(Construct(constructor.asObject(), Args(argList, count))));
+    }
     case NodeType::SequenceExpression: {
       Value value;
       for (const Node* expression : node->as<SequenceExpression>()->expressions) value = TRY(evaluate(expression));
