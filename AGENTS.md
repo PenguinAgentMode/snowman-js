@@ -45,6 +45,11 @@
   gate it and ask to merge. Don't hold it for the rest of your area; later batches get their own gate.
 - **Machines**: 4 GB enforced, shared by the build and the run: `make -j4`, `--jobs 4`. Push after every
   meaningful step; a killed machine loses everything unpushed.
+- **/tmp is memory.** On our sandboxes `/tmp` is a tmpfs inside the machine's 4 GB (`$HOME` is host-backed).
+  `export TMPDIR=$HOME/tmp`; keep JSONL, logs, engine copies, test262 copies and worktrees under `$HOME`, and
+  delete them when done. builtins' machine died with ~1.5–2 GB of files in /tmp. `MemTotal − MemFree` in
+  /proc/meminfo is the machine's real usage; run.mjs's machine guard pauses at 78% and kills the largest engine
+  at 86% of 4 GB.
 - **Push WIP at least every 20 minutes of coding**, not only at gate points: a `wip:` commit on your own branch
   is fine (squash or reword before the merge request; the gated sha is what merges). The stack can drop a turn
   at any time (a GS restart lost survey's unpushed calendar code).

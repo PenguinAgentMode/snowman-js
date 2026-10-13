@@ -11,6 +11,9 @@
 # rebuild mid-run mixes binaries). Build and slice in a separate `git worktree` while a run is going.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+# /tmp is a tmpfs inside the machine's memory on our sandboxes.
+if [ -z "${TMPDIR:-}" ] || [ "$TMPDIR" = /tmp ]; then export TMPDIR="$HOME/tmp"; fi
+mkdir -p "$TMPDIR"
 mode=${1:-parse}
 baseline=${2:-}
 lock=results/.measure.lock
