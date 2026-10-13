@@ -4,7 +4,8 @@ Owner: intlfmt (intl402 leftovers: Intl.DateTimeFormat in non-Gregorian calendar
 
 ## Branch / state
 
-- Branch `ws/intlfmt`, based on main 53d4d86 (gate baseline 317949e37).
+- Branch `ws/intlfmt`, rebased on main 786b6f2 (STATUS/notes only since 53d4d86; gate baseline 317949e37).
+- Gate: full suite running at ac942bf2d (engine copy $HOME/engine-gate, JSONL $HOME/logs/full-ac942bf2d.jsonl).
 - Done (WIP, not yet gated): tools/intl/gen-date-data.mjs now also emits kCalendarFields (cldr-cal-*-full 48.0.0 +
   ca-generic from cldr-dates-full): months (hebrew 14 incl. 7-yeartype-leap), days, day periods, date/time/atTime
   formats, availableFormats, appendItems, intervalFormats, leap monthPatterns (31), cyclic year names (32-34),
@@ -20,6 +21,14 @@ Owner: intlfmt (intl402 leftovers: Intl.DateTimeFormat in non-Gregorian calendar
 
 - intl402/DateTimeFormat 245 / 245 (main 228). intl402 total 3,372 / 3,382 (main 317949e37: 3,345).
 - Left: 9 Chinese-calendar Temporal files (known gap, Temporal tables vs HKO), Temporal/ZonedDateTime/links.js (tz data).
+
+## Checks
+
+- gen-date-data.mjs re-run is byte-identical. check-dtf.mjs (default 10 Gregorian locales, 3,470 cases): output
+  identical to main's engine (458 differ from node on both, pre-existing). Calendar locales vs node (DTF_INSTANTS
+  1886..2024): remaining diffs are ICU quirks (ja-japanese yy in Gy年 patterns, chinese G = cycle number, which
+  test262's era.js forbids), pre-existing ko/fa Gregorian diffs, hanidays.
+- links.js: node's tz 2026d keeps CST6CDT as its own Zone (1936/1960 -06:00 vs Chicago -05:00); data gap, left.
 
 ## Gaps (known, not tested by test262)
 
