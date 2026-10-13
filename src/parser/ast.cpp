@@ -47,7 +47,8 @@ struct Chunk {
   char* end = nullptr;
 };
 
-Chunk gChunk;
+// Per thread (agent): each agent parses into its own arena.
+thread_local Chunk gChunk;
 
 }  // namespace
 
