@@ -19,7 +19,20 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   IsTypedArrayFixedLength.
 - runtime/realm.h: Intrinsic::ShadowRealm, ShadowRealmPrototype.
 
-## Current batch
+## Current batch: $262.agent (ws/builtins5)
+
+- Step 1 (gating): $262.agent.sleep / monotonicNow / getReport (null) on the main agent in src/interp/host.cpp, no threads.
+  Atomics slice vs results/c21bcd82e.json: +3 (waitAsync/{,bigint/}true-for-timeout,
+  returns-result-object-value-is-promise-resolves-to-timed-out), 0 regressions. No `start`, so tests that need agents fail
+  fast at start() instead of spinning in the helper's getReport loop.
+- Step 2: notes/agent-design.md before any threading code (lead reviews, then approves files). Hard constraints from the
+  supervisor: agent stacks 8-16 MB inside kStackBytesBudget; one process-wide memory budget (700 MB RSS watchdog is per
+  process); test under the real runner with the max agent count any Atomics test uses; join/kill agents on exit, uncaught
+  error and timeout, nothing outlives a SIGKILL, normal exit doesn't hang on a blocked agent.
+- Quick win option: nonextensible-applies-to-private (src/interp/class.cpp).
+- Baselines now: results/c21bcd82e.json (ES-core 43,163), results/c21bcd82e-full.json (full 50,887).
+
+## Earlier batch
 
 1. importValue: replace the stub in src/builtins/shadowrealm.cpp (ShadowRealmImportValue) with
    `ImportModuleForRealm(evalRealm, specifierString, innerCapability);` + `#include "interp/module.h"`, once temporal2's
