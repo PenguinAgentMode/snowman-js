@@ -77,5 +77,19 @@ for (const [name, list] of Object.entries(classes)) {
     for (const s of scenarios) lines.push(`| ${file.replace(/^test\//, '')} | ${s.mode} | ${s.results.map(cell).join(' | ')} |`);
   }
 }
+// Not flaky yet, but at risk: the same status in every run and >= SLOW_MS in some run.
+const slow = [];
+for (const key of keys) {
+  const results = runs.map((r) => r.rows.get(key) ?? { status: 'missing' });
+  if (new Set(results.map((x) => x.status)).size !== 1 || !results.some((x) => x.ms >= SLOW_MS)) continue;
+  const [file, mode] = key.split('|');
+  slow.push({ file, mode, results });
+}
+slow.sort((a, b) => a.file.localeCompare(b.file) || a.mode.localeCompare(b.mode));
+lines.push('', `## Near the timeout, same status in every run (${slow.length} scenarios)`);
+if (slow.length) {
+  lines.push('', `| File | Mode | ${runs.map((r) => r.name).join(' | ')} |`, `| --- | --- | ${runs.map(() => '---').join(' | ')} |`);
+  for (const s of slow) lines.push(`| ${s.file.replace(/^test\//, '')} | ${s.mode} | ${s.results.map(cell).join(' | ')} |`);
+}
 fs.writeFileSync(out, lines.join('\n') + '\n');
-console.log(`files ${byFile.size}: timeout ${classes.timeout.length}, crash ${classes.crash.length}, memory ${classes.memory.length}, other ${classes.other.length}`);
+console.log(`near timeout ${slow.length}; files ${byFile.size}: timeout ${classes.timeout.length}, crash ${classes.crash.length}, memory ${classes.memory.length}, other ${classes.other.length}`);
