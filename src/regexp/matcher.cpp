@@ -22,7 +22,7 @@ bool isWordUnit(char16_t c, bool unicodeIgnoreCase) {
   return unicodeIgnoreCase && (c == 0x017F || c == 0x212A);
 }
 
-enum class Entry : uint8_t { Choice, UndoCapture, UndoRegister, Barrier, StarGreedy, StarLazy };
+enum class Entry : uint8_t { Choice, UndoCapture, UndoRegister, UndoLoop, Barrier, StarGreedy, StarLazy };
 struct Frame {
   Entry kind;
   uint32_t pc;  // or the capture / register index
@@ -126,21 +126,23 @@ class VM {
           }
           break;
         }
-        case Op::LoopIter:
-          setRegister(in.a + 1, pos);
+        case Op::LoopIter: {
+          // One undo record restores both registers when backtracking out of this iteration.
+          uint32_t count = static_cast<uint32_t>(regs_[in.a]);
+          push({Entry::UndoLoop, in.a, regs_[in.a], regs_[in.a + 1]});
+          if (count != UINT32_MAX) regs_[in.a] = static_cast<int32_t>(count + 1);
+          regs_[in.a + 1] = pos;
           pc++;
           break;
-        case Op::LoopNext: {
-          uint32_t count = static_cast<uint32_t>(regs_[in.a]);
+        }
+        case Op::LoopNext:
           // RepeatMatcher's empty check: past the minimum, an iteration that matched empty fails.
-          if (count >= in.b && pos == regs_[in.a + 1]) {
+          if (static_cast<uint32_t>(regs_[in.a]) > in.b && pos == regs_[in.a + 1]) {
             ok = false;
             break;
           }
-          if (count != UINT32_MAX) setRegister(in.a, static_cast<int32_t>(count + 1));
           pc = in.c;
           break;
-        }
         case Op::Star:
           ok = star(pc, pos);
           break;
@@ -273,12 +275,23 @@ class VM {
     if (in.flags & kGreedy) {
       while (n < in.c && matchOne(m, p)) n++;
       if (p != minPos) push({Entry::StarGreedy, pc, p, minPos});
-    } else if (in.c > in.b) {
+    } else {
       uint32_t more = in.c == UINT32_MAX ? UINT32_MAX : in.c - in.b;  // UINT32_MAX: unbounded
-      push({Entry::StarLazy, pc, p, static_cast<int32_t>(more)});
+      if (!lazyToFollower(in, m, p, more)) return false;
+      if (more > 0) push({Entry::StarLazy, pc, p, static_cast<int32_t>(more)});
     }
     pos = p;
     pc += 2;
+    return true;
+  }
+
+  // With kFollow, the continuation needs the follower at p: a lazy Star takes more characters until it is there.
+  bool lazyToFollower(const Inst& star, const Inst& m, int32_t& p, uint32_t& more) const {
+    if (!(star.flags & kFollow)) return true;
+    while (more > 0 && !(p < len_ && in_[p] == star.d)) {
+      if (!matchOne(m, p)) return false;
+      if (more != UINT32_MAX) more--;
+    }
     return true;
   }
 
@@ -353,6 +366,9 @@ class VM {
       caps_[2 * f.pc + 1] = f.b;
     } else if (f.kind == Entry::UndoRegister) {
       regs_[f.pc] = f.a;
+    } else if (f.kind == Entry::UndoLoop) {
+      regs_[f.pc] = f.a;
+      regs_[f.pc + 1] = f.b;
     }
   }
 
@@ -367,6 +383,7 @@ class VM {
           return true;
         case Entry::UndoCapture:
         case Entry::UndoRegister:
+        case Entry::UndoLoop:
           undo(f);
           break;
         case Entry::Barrier: {
@@ -380,7 +397,11 @@ class VM {
           break;
         }
         case Entry::StarGreedy: {
+          const Inst& star = code_[f.pc];
           int32_t p = unstep(code_[f.pc + 1], f.a);
+          if (star.flags & kFollow) {
+            while (p != f.b && !(p < len_ && in_[p] == star.d)) p = unstep(code_[f.pc + 1], p);
+          }
           if (p != f.b) push({Entry::StarGreedy, f.pc, p, f.b});
           *pc = f.pc + 2;
           *pos = p;
@@ -391,6 +412,7 @@ class VM {
           if (!matchOne(code_[f.pc + 1], p)) break;
           uint32_t more = static_cast<uint32_t>(f.b);
           if (more != UINT32_MAX) more--;
+          if (!lazyToFollower(code_[f.pc], code_[f.pc + 1], p, more)) break;
           if (more > 0) push({Entry::StarLazy, f.pc, p, static_cast<int32_t>(more)});
           *pc = f.pc + 2;
           *pos = p;
@@ -412,6 +434,15 @@ class VM {
   bool exhausted_ = false;
 };
 
+// The character at i: a code point with u/v (a lone surrogate is one).
+char32_t characterAt(const Program& program, std::u16string_view input, size_t i) {
+  char32_t c = input[i];
+  if (program.unicodeMode && isLead(c) && i + 1 < input.size() && isTrail(input[i + 1])) {
+    c = 0x10000 + ((c - 0xD800) << 10) + (input[i + 1] - 0xDC00);
+  }
+  return c;
+}
+
 }  // namespace
 
 ExecStatus exec(const Program& program, std::u16string_view input, size_t lastIndex, std::vector<Span>* spans) {
@@ -425,7 +456,10 @@ ExecStatus exec(const Program& program, std::u16string_view input, size_t lastIn
     if (program.unicodeMode && index > 0 && index < len && isTrail(input[index]) && isLead(input[index - 1])) start--;
     if (program.anchoredStart && start != 0) return ExecStatus::NoMatch;
     int32_t end;
-    ExecStatus status = vm.run(static_cast<int32_t>(start), &end);
+    ExecStatus status = ExecStatus::NoMatch;
+    if (!program.firstChars || (start < len && program.firstChars->contains(characterAt(program, input, start)))) {
+      status = vm.run(static_cast<int32_t>(start), &end);
+    }
     if (status == ExecStatus::Match) {
       const std::vector<int32_t>& caps = vm.captures();
       spans->assign(program.captureCount + 1, Span{});
