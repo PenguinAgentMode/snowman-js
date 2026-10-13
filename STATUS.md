@@ -16,26 +16,26 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-Post-merge run: **main c21bcd82e** (`tools/lead/measure.sh suite results/8a5df0b93.json`, 4 jobs, 2,295 s;
-`results/c21bcd82e.json`, `results/c21bcd82e-full.json`; JSONL `results/c21bcd82e/suite.jsonl` on the results branch).
+Post-merge run: **main 3edca9940** (`tools/lead/measure.sh suite results/c21bcd82e.json`, 4 jobs, 1,588 s, run by
+the lead; `results/3edca9940.json`, `results/3edca9940-full.json`; JSONL `results/3edca9940/suite.jsonl` on the
+results branch).
 
-- milestones.mjs: highest **M8**; **ES-core: 43,163 / 43,305 files (99.67%)**; **full suite: 50,887 / 53,616 files
-  (94.91%)**; scenarios 97,709 / 102,994.
-- ES-core vs 8a5df0b93: +104 newly passing (the runner change), 0 regressions.
-- Full suite vs 8a5df0b93: +6,121 files. The gate lists 6 staging files, all waived below: 3 that passed only
-  before Intl existed, and 3 flaky DST timeouts.
-- Command: `node t262/runner/milestones.mjs results/c21bcd82e.json --full results/c21bcd82e-full.json`
+- milestones.mjs: highest **M8**; **ES-core: 43,166 / 43,305 files (99.68%)**; **full suite: 51,607 / 53,616 files
+  (96.25%)**; scenarios 99,010 / 102,994.
+- vs c21bcd82e: ES-core +3, 0 regressions; full suite +720, 0 regressions (gate.mjs vs c21bcd82e-full).
+- Command: `node t262/runner/milestones.mjs results/3edca9940.json --full results/3edca9940-full.json`
 
-| Cluster | Passing (c21bcd82e) | Files | % | vs 8a5df0b93 |
+| Cluster | Passing (3edca9940) | Files | % | vs c21bcd82e |
 | --- | ---: | ---: | ---: | ---: |
-| ES-core | 43,163 | 43,305 | 99.67 | +104 |
-| built-ins/Temporal | 4,605 | 4,605 | 100.00 | +4,605 |
-| intl402/Temporal | 197 | 2,029 | 9.71 | +197 |
-| intl402 (other) | 1,069 | 1,353 | 79.01 | +1,044 |
-| staging | 1,429 | 1,483 | 96.36 | -1 |
-| proposals (in ES-core dirs) | 424 | 841 | 50.42 | +172 |
-| **full suite** | **50,887** | **53,616** | **94.91** | **+6,121** |
+| ES-core | 43,166 | 43,305 | 99.68 | +3 |
+| built-ins/Temporal | 4,605 | 4,605 | 100.00 | +0 |
+| intl402/Temporal | 254 | 2,029 | 12.52 | +57 |
+| intl402 (other) | 1,318 | 1,353 | 97.41 | +249 |
+| staging | 1,446 | 1,483 | 97.51 | +17 |
+| proposals (in ES-core dirs) | 818 | 841 | 97.27 | +394 |
+| **full suite** | **51,607** | **53,616** | **96.25** | **+720** |
 
+Before: c21bcd82e, full 50,887 (94.91%), ES-core 43,163 (99.67%).
 Previous: main 8a5df0b93, full 44,766 / 53,616 (83.49%), ES-core 43,059 (99.43%).
 
 ES-core residue at c21bcd82e (142 files; memcap, `tools/lead/es-core-residue.md` on ws/measure 4f999b1; node
@@ -54,17 +54,7 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-Not in c21bcd82e's run; memcap measures main after ws/runtime-r's gate:
-- e535e4b ws/builtins (fast-forward): immutable ArrayBuffer, ShadowRealm, Promise.try no-wrap, TA
-  [[PreventExtensions]], Proxy revoke fix, GetSubstitution limit. ES-core gate 43,059 → 43,166, 0 regressions.
-- 68e8bb7 ws/survey-intl 32879c42e: Intl.DateTimeFormat; intl402 non-Temporal 1,069 → 1,318 / 1,353. Gates vs
-  c21bcd82e: ES-core 0, full 0 regressions. The 3 Intl-gated staging waivers pass again (waiver dropped).
-- 6dab50e ws/modules2 71b2722: import defer / source-phase / text / bytes modules, AbstractModuleSource,
-  ImportModuleForRealm, CoverInitializedName, B.3.2 labelled/duplicate block functions. Module-proposal files
-  244 → 515 / 516; all 242 negative-syntax tests still pass, now on their real early errors (no flips). Gates:
-  ES-core 0; full 1 (dst-offset-caching-6, flaky, passes alone).
-- 23c2b86 ws/interp2-r 7b89bae: the previous team's interpreter commits + SNOWMAN_GC_STRESS. ES-core 0
-  regressions; GC stress clean; no measurable end-to-end speedup at 4 jobs.
+None: 3edca9940 covers e535e4b, 68e8bb7, 6dab50e, 23c2b86, 0f9d97b, 3edca99.
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
@@ -92,8 +82,9 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Gate baseline
 
-- `results/85210ca13.json` on main (43,059 passing files). Check: `node tools/lead/gate.mjs results/85210ca13.json
-  /tmp/core.jsonl` (AGENTS.md). For full-suite branches: `results/<sha>-full.json` once the first suite run lands.
+- ES-core: `results/3edca9940.json` (43,166 passing files); full suite: `results/3edca9940-full.json` (51,607).
+  Check: `node tools/lead/gate.mjs results/3edca9940.json <jsonl>` and `... results/3edca9940-full.json <jsonl>`
+  (AGENTS.md). Gates already running against c21bcd82e stay valid (a subset of this baseline).
 
 ## Survey interim (main 7e957a05a)
 
