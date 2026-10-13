@@ -25,11 +25,13 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   both kept) + notes + importValue through ImportModuleForRealm (ShadowRealm full slice 64/64). Full ES-core gate of
   d55e14b running (vs results/c21bcd82e.json). Step 1 alone (6ce8f3e) was gated clean: 43,169, +3.
 - ws/builtins6 dd70aa8: nonextensible-applies-to-private, gated clean (43,166, 0 regressions; full slice +3), sent alone.
-- Step 2 APPROVED (notes/agent-design.md): thread_local conversion, no behaviour change. Conditions: mechanical, small
-  commits by area (runtime / builtins / interp / parser / intl / temporal); rebase right before gating and tell the lead
-  first (he warns temporal2: parser + module.cpp, survey: intl/*, temporal/temporal2: temporal/time_zone.cpp); measure the
-  speed cost (sum of ms over the ES-core run + CPU-heavy files alone vs main); heap.h/vm.h keep their signatures, list any
-  change. TSan only on 1-2 small agent tests, one at a time, stop past ~1.5 GB RSS.
+- Step 2 (thread_local) on ws/builtins7 (from main 7a345df), all pushed, warning-free, not yet gated:
+  88850c4 runtime (vm, heap, atom table, emptyString, index strings, length key), 37fc0f0 builtins (lastIndex key,
+  Math.random state; seeded per thread by the Math installer), aa57585 interp (gCurrent, gStackPool thread_local;
+  gStackBytes std::atomic with an atomic reserve-then-check; gModuleAsyncEvaluationCount), 63fb221 parser (gChunk,
+  stackLimit; parser.h `extern thread_local` = interface change to list), 96ad528 intl caches, aeade2f temporal tz cache.
+  vm.h / heap.h unchanged. Next: gate it in quiet conditions, then the speed comparison vs main 7a345df (sum of ms over
+  the ES-core run, and CPU-heavy files alone).
 - Baselines: results/c21bcd82e.json (ES-core 43,163), results/c21bcd82e-full.json (full 50,887).
 
 ## Earlier batch
