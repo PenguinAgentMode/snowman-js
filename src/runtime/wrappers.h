@@ -36,6 +36,16 @@ class BigIntObject : public Object {
   void trace(Tracer& tracer) override;
 };
 
+// An object with an [[IsHTMLDDA]] internal slot (B.3.6), the host's $262.IsHTMLDDA: callable, and
+// calling it returns null.
+class HTMLDDAObject : public Object {
+ public:
+  explicit HTMLDDAObject(Object* prototype) : Object(prototype) {}
+  bool isHTMLDDA() const override { return true; }
+  bool isCallable() const override { return true; }
+  Result<Value> Call(Value, Args) override { return Value::null(); }
+};
+
 // A String exotic object: integer-indexed own properties for its code units, plus "length".
 class StringObject : public Object {
  public:

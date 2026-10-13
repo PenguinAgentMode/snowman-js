@@ -2,6 +2,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstdint>
 #include <string>
 #include <string_view>
 
@@ -17,6 +18,9 @@ class String final : public Cell {
   size_t length() const { return units_.size(); }
   char16_t at(size_t index) const { return units_[index]; }
   bool isAtom() const { return atom_; }
+  // For atoms, PropertyKey canonicalization caches whether the string is an array index (and which).
+  int8_t indexState = 0;  // 0 unknown, 1 not an index, 2 an index
+  uint32_t indexValue = 0;
   size_t hash() const;
   // UTF-8 for printing; lone surrogates become U+FFFD.
   std::string toUtf8() const;

@@ -76,13 +76,17 @@ class PropertyMap {
   };
   int findNamed(const PropertyKey& key) const;
   void compact();
+  void rebuildTable();
+  void tableInsert(int32_t index);
 
   std::vector<Value> dense_;  // empty() = hole
   size_t denseCount_ = 0;
   std::map<uint32_t, PropertySlot> sparse_;
   std::vector<Entry> named_;
   size_t namedDeleted_ = 0;
-  std::unordered_map<PropertyKey, uint32_t, PropertyKeyHash> namedIndex_;  // built once named_ is large
+  // Open-addressing index into named_ once it is large: -1 empty, -2 removed; power-of-two size.
+  std::vector<int32_t> table_;
+  size_t tableUsed_ = 0;
 };
 
 }  // namespace snowman

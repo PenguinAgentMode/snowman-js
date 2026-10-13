@@ -42,8 +42,23 @@ String* indexString(uint32_t index) {
 }  // namespace
 
 PropertyKey::PropertyKey(String* string) {
+  if (string->isAtom() && string->indexState != 0) {
+    if (string->indexState == 2) {
+      kind_ = Kind::Index;
+      u_.index = string->indexValue;
+    } else {
+      kind_ = Kind::String;
+      u_.string = string;
+    }
+    return;
+  }
   uint32_t index;
-  if (parseArrayIndex(string->view(), index)) {
+  bool isIndex = parseArrayIndex(string->view(), index);
+  if (string->isAtom()) {
+    string->indexState = isIndex ? 2 : 1;
+    string->indexValue = isIndex ? index : 0;
+  }
+  if (isIndex) {
     kind_ = Kind::Index;
     u_.index = index;
   } else {
