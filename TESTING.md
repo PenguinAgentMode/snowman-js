@@ -35,5 +35,9 @@ Lessons from this project's own incidents. t262/ is the measuring stick and stay
   request.
 - **The GC is barely exercised by test262** (most tests never reach the collection budget). Run
   `SNOWMAN_GC_STRESS=N ./engine test.js` (collect every N safepoints) on anything that touches cells.
+- **Interior pointers don't keep a cell alive.** The stack scan only recognizes a pointer to a cell's start: hold
+  a raw cell pointer that stays live, or a `Rooted<T>`, across anything that can reach a safepoint (any JS call).
+  `auto* x = make<T>(); auto& v = x->vec; ...` with `x` dead afterwards lets the collector free the cell
+  (class.cpp's ClassElements did). ASan + `SNOWMAN_GC_STRESS=1` finds these: tools/lead/sanitizers.md.
 - **Timeouts are 10 s per scenario under full parallel load.** A test that takes over ~3 s alone is at risk
   in a full run; treat it as a performance bug.
