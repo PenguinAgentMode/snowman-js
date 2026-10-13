@@ -55,11 +55,14 @@ class Record final : public Object {
   void trace(Tracer& tracer) override {
     Object::trace(tracer);
     tracer.visitAll(values);
+    for (const PropertyKey& key : keys) key.trace(tracer);
     tracer.visit(capability);
   }
   bool flag = false;
+  bool keyed = false;  // Promise.allKeyed / allSettledKeyed: values[i] belongs to keys[i]
   double count = 0;
   std::vector<Value> values;
+  std::vector<PropertyKey> keys;
   PromiseCapability* capability = nullptr;
 };
 
@@ -371,6 +374,20 @@ Value aggregateError(const std::vector<Value>& errors) {
   return Value(error);
 }
 
+// CreateKeyedPromiseCombinatorResultObject (await-dictionary)
+Value keyedResultObject(Record* record) {
+  Object* obj = OrdinaryObjectCreate(nullptr);
+  for (size_t i = 0; i < record->keys.size(); i++) {
+    (void)CreateDataPropertyOrThrow(obj, record->keys[i], record->values[i]);
+  }
+  return Value(obj);
+}
+
+Value combinatorResult(Record* record) {
+  if (record->keyed) return keyedResultObject(record);
+  return Value(CreateArrayFromList(Args(record->values.data(), record->values.size())));
+}
+
 // slots: [record, index, alreadyCalled record, kind]
 Result<Value> combinatorElementFunction(NativeCall& call) {
   auto* record = call.callee->slots[0].asObject()->as<Record>();
@@ -397,8 +414,7 @@ Result<Value> combinatorElementFunction(NativeCall& call) {
       TRY(Call(record->capability->reject, Value::undefined(), {aggregateError(record->values)}));
       return Value::undefined();
     }
-    Object* valuesArray = CreateArrayFromList(Args(record->values.data(), record->values.size()));
-    return Call(record->capability->resolve, Value::undefined(), {Value(valuesArray)});
+    return Call(record->capability->resolve, Value::undefined(), {combinatorResult(record)});
   }
   return Value::undefined();
 }
@@ -472,6 +488,64 @@ Result<Value> combinator(NativeCall& call, Combinator kind) {
 Result<Value> promiseAll(NativeCall& call) { return combinator(call, Combinator::All); }
 Result<Value> promiseAllSettled(NativeCall& call) { return combinator(call, Combinator::AllSettled); }
 Result<Value> promiseAny(NativeCall& call) { return combinator(call, Combinator::Any); }
+
+// PerformPromiseAllKeyed (await-dictionary): variant is All or AllSettled.
+Result<Value> performPromiseAllKeyed(Combinator variant, Object* promises, Value constructor,
+                                     PromiseCapability* resultCapability, Value promiseResolve) {
+  std::vector<PropertyKey> allKeys = TRY(promises->OwnPropertyKeys());
+  RootedKeys rootedKeys(allKeys);
+  auto* record = make<Record>();
+  record->keyed = true;
+  record->capability = resultCapability;
+  record->count = 1;
+  uint32_t index = 0;
+  for (const PropertyKey& key : allKeys) {
+    std::optional<PropertyDescriptor> desc = TRY(promises->GetOwnProperty(key));
+    if (!desc || !desc->enumerable.value_or(false)) continue;
+    Value value = TRY(Get(promises, key));
+    record->keys.push_back(key);
+    record->values.push_back(Value::undefined());
+    Value nextPromise = TRY(Call(promiseResolve, constructor, {value}));
+    auto* alreadyCalled = make<Record>();
+    Value onFulfilled = Value(closure(combinatorElementFunction, 1,
+                                      {Value(record), Value::number(index), Value(alreadyCalled),
+                                       Value::number(variant == Combinator::All ? 0 : 1)}));
+    Value onRejected = resultCapability->reject;
+    if (variant == Combinator::AllSettled) {
+      onRejected = Value(closure(combinatorElementFunction, 1,
+                                 {Value(record), Value::number(index), Value(alreadyCalled), Value::number(2)}));
+    }
+    record->count++;
+    TRY(Invoke(nextPromise, PropertyKey(u"then"), {onFulfilled, onRejected}));
+    index++;
+  }
+  record->count--;
+  if (record->count == 0) {
+    TRY(Call(resultCapability->resolve, Value::undefined(), {keyedResultObject(record)}));
+  }
+  return resultCapability->promise;
+}
+
+// Promise.allKeyed / Promise.allSettledKeyed (await-dictionary)
+Result<Value> keyedCombinator(NativeCall& call, Combinator variant) {
+  Value C = call.thisValue;
+  PromiseCapability* promiseCapability = TRY(NewPromiseCapability(C));
+  Result<Value> promiseResolve = GetPromiseResolve(C);
+  IF_ABRUPT_REJECT_PROMISE(promiseResolve, promiseCapability);
+  Value promises = call.args[0];
+  if (!promises.isObject()) {
+    Value error = Value(CreateError(currentRealm(), Intrinsic::TypeErrorPrototype, "argument is not an object"));
+    TRY(Call(promiseCapability->reject, Value::undefined(), {error}));
+    return promiseCapability->promise;
+  }
+  Result<Value> result =
+      performPromiseAllKeyed(variant, promises.asObject(), C, promiseCapability, promiseResolve.value());
+  IF_ABRUPT_REJECT_PROMISE(result, promiseCapability);
+  return result;
+}
+
+Result<Value> promiseAllKeyed(NativeCall& call) { return keyedCombinator(call, Combinator::All); }
+Result<Value> promiseAllSettledKeyed(NativeCall& call) { return keyedCombinator(call, Combinator::AllSettled); }
 
 // 27.2.4.5 Promise.race
 Result<Value> performPromiseRace(IteratorRecord& iteratorRecord, Value constructor,
@@ -593,6 +667,8 @@ void installPromise(Realm& realm) {
                                                    PropertyKey(u"Promise"), prototype, Intrinsic::PromisePrototype);
   defineFunction(realm, constructor, PropertyKey(u"all"), 1, promiseAll);
   defineFunction(realm, constructor, PropertyKey(u"allSettled"), 1, promiseAllSettled);
+  defineFunction(realm, constructor, PropertyKey(u"allKeyed"), 1, promiseAllKeyed);
+  defineFunction(realm, constructor, PropertyKey(u"allSettledKeyed"), 1, promiseAllSettledKeyed);
   defineFunction(realm, constructor, PropertyKey(u"any"), 1, promiseAny);
   defineFunction(realm, constructor, PropertyKey(u"race"), 1, promiseRace);
   defineFunction(realm, constructor, PropertyKey(u"reject"), 1, promiseReject);
