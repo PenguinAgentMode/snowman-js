@@ -62,66 +62,84 @@ Result<String*> GetSubstitution(String* matched, String* str, double position, c
                                 Value namedCaptures, String* replacementTemplate) {
   std::u16string_view s = str->view();
   size_t stringLength = s.size();
-  std::u16string result;
   std::u16string_view t = replacementTemplate->view();
-  size_t i = 0;
   auto isDigit = [](char16_t c) { return c >= u'0' && c <= u'9'; };
-  while (i < t.size()) {
-    std::u16string_view rest = t.substr(i);
-    if (rest[0] != u'$' || rest.size() == 1) {
-      result.push_back(rest[0]);
-      i++;
-      continue;
-    }
-    char16_t c = rest[1];
-    if (c == u'$') {
-      result.push_back(u'$');
-      i += 2;
-    } else if (c == u'`') {
-      result.append(s.substr(0, size_t(position)));
-      i += 2;
-    } else if (c == u'&') {
-      result.append(matched->view());
-      i += 2;
-    } else if (c == u'\'') {
-      size_t tailPos = std::min(size_t(position) + matched->length(), stringLength);
-      result.append(s.substr(tailPos));
-      i += 2;
-    } else if (isDigit(c)) {
-      size_t digitCount = rest.size() > 2 && isDigit(rest[2]) ? 2 : 1;
-      size_t index = digitCount == 2 ? size_t((rest[1] - u'0') * 10 + (rest[2] - u'0')) : size_t(rest[1] - u'0');
-      size_t captureLen = captures.size();
-      if (index > captureLen && digitCount == 2) {
-        digitCount = 1;
-        index = size_t(rest[1] - u'0');
+  // Two walks over the template: the first adds up every piece but the named groups (whose Get is observable),
+  // so a result over the string length limit is a RangeError before anything is allocated; the second builds it.
+  std::u16string result;
+  size_t length = 0;
+  constexpr size_t kMaxLength = size_t(1) << 30;
+  auto walk = [&](bool build) -> Result<void> {
+    auto emit = [&](std::u16string_view piece) {
+      if (build) result.append(piece);
+      else length += piece.size();
+    };
+    size_t i = 0;
+    while (i < t.size()) {
+      std::u16string_view rest = t.substr(i);
+      if (rest[0] != u'$' || rest.size() == 1) {
+        emit(rest.substr(0, 1));
+        i++;
+        continue;
       }
-      std::u16string_view ref = rest.substr(0, 1 + digitCount);
-      if (index >= 1 && index <= captureLen) {
-        Value capture = captures[index - 1];
-        if (!capture.isUndefined()) result.append(capture.asString()->view());
-      } else {
-        result.append(ref);
-      }
-      i += ref.size();
-    } else if (c == u'<') {
-      size_t gtPos = rest.find(u'>');
-      if (gtPos == std::u16string_view::npos || namedCaptures.isUndefined()) {
-        result.append(u"$<");
+      char16_t c = rest[1];
+      if (c == u'$') {
+        emit(u"$");
         i += 2;
-      } else {
-        std::u16string_view groupName = rest.substr(2, gtPos - 2);
-        Value capture = TRY(Get(namedCaptures.asObject(), PropertyKey(groupName)));
-        if (!capture.isUndefined()) {
-          String* cs = TRY(ToString(capture));
-          result.append(cs->view());
+      } else if (c == u'`') {
+        emit(s.substr(0, size_t(position)));
+        i += 2;
+      } else if (c == u'&') {
+        emit(matched->view());
+        i += 2;
+      } else if (c == u'\'') {
+        size_t tailPos = std::min(size_t(position) + matched->length(), stringLength);
+        emit(s.substr(tailPos));
+        i += 2;
+      } else if (isDigit(c)) {
+        size_t digitCount = rest.size() > 2 && isDigit(rest[2]) ? 2 : 1;
+        size_t index = digitCount == 2 ? size_t((rest[1] - u'0') * 10 + (rest[2] - u'0')) : size_t(rest[1] - u'0');
+        size_t captureLen = captures.size();
+        if (index > captureLen && digitCount == 2) {
+          digitCount = 1;
+          index = size_t(rest[1] - u'0');
         }
-        i += gtPos + 1;
+        std::u16string_view ref = rest.substr(0, 1 + digitCount);
+        if (index >= 1 && index <= captureLen) {
+          Value capture = captures[index - 1];
+          if (!capture.isUndefined()) emit(capture.asString()->view());
+        } else {
+          emit(ref);
+        }
+        i += ref.size();
+      } else if (c == u'<') {
+        size_t gtPos = rest.find(u'>');
+        if (gtPos == std::u16string_view::npos || namedCaptures.isUndefined()) {
+          emit(u"$<");
+          i += 2;
+        } else {
+          if (build) {
+            std::u16string_view groupName = rest.substr(2, gtPos - 2);
+            Value capture = TRY(Get(namedCaptures.asObject(), PropertyKey(groupName)));
+            if (!capture.isUndefined()) {
+              String* cs = TRY(ToString(capture));
+              if (result.size() + cs->length() > kMaxLength) return ThrowRangeError("Invalid string length");
+              emit(cs->view());
+            }
+          }
+          i += gtPos + 1;
+        }
+      } else {
+        emit(u"$");
+        i++;
       }
-    } else {
-      result.push_back(u'$');
-      i++;
+      if (!build && length > kMaxLength) return ThrowRangeError("Invalid string length");
     }
-  }
+    return {};
+  };
+  TRY(walk(false));
+  result.reserve(length);
+  TRY(walk(true));
   return newString(std::move(result));
 }
 
