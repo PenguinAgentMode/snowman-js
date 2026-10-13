@@ -58,6 +58,9 @@ Not in 317949e37's run:
   ES-core 0, full 0 regressions; full 53,414 → 53,418.
 - 6203fc5 ws/agent3 d995052 ($262.agent step 3: SharedBlock + std::atomic_ref Atomics; arraybuffer.h additive).
   Gate vs 317949e37: ES-core 0, full 0 regressions (neutral with one agent).
+- b84715f ws/staging-date 8d8a20932 (Date.parse legacy grammar; date.cpp). Gate vs 317949e37: 0 / 0; +2 staging.
+- 1c12abb ws/chinese e55fdaf28 (Chinese/Dangi 1900–2100 from astronomy in tools/temporal/gen-calendars.mjs +
+  astro.mjs, ICU outside; regenerated .inc). Gate vs 317949e37: 0 / 0; +9 intl402/Temporal (the ICU data gap).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
@@ -130,11 +133,7 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Known gaps (not regressions)
 
-- intl402/Temporal, 9 Chinese-calendar files (daysInYear 4, monthCode M06L vs M07 5): our tables are generated from
-  node's ICU 78.3, which differs from the official (HKO) Chinese calendar in a few years (CNY 2027 02-07 vs 02-06,
-  2030 02-02 vs 02-03, the 1987 leap month after month 7 vs 6); test262 follows the official calendar. If it's
-  ever fixed, it'll be an astronomical new-moon/solar-term computation cross-checked against ICU (no third-party
-  data). Deferred: 9 files vs $262.agent's 112.
+- (fixed in 1c12abb: the 9 Chinese-calendar files, by an astronomical computation for 1900–2100.)
 - intl402/Temporal/ZonedDateTime/links.js: tzdb 2026d made CST6CDT etc. Zones again; we follow node's data.
 
 ## Waivers

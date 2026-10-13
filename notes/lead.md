@@ -28,7 +28,8 @@ How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort
 | Agent | State | Area | Branch |
 | --- | --- | --- | --- |
 | builtins | LIVE since ~07:10 | $262.agent step 3 (ws/agent3 d995052, gating vs 317949e37), then step 4 | ws/agent3; notes/builtins.md + notes/agent-design.md on ws/builtins5 |
-| chinese | LIVE 16:45 | astronomical Chinese/Dangi tables (9 intl402/Temporal files) | ws/chinese; notes/chinese.md |
+| chinese | done, closed (merged 1c12abb) | — | ws/chinese e55fdaf28 |
+| perf | started 17:35 | interpreter speed (binding caches, env slots, GC roots); flaky DST timeouts | ws/perf; notes/perf.md |
 | decorators2 | started 16:46 | decorators (22 + 2 staging), from ws/decorators fb2d287 | ws/decorators2; notes/decorators2.md |
 | staging | started 16:45 | staging triage (34); fixes + tools/lead/staging-residue.md | ws/staging; notes/staging.md |
 | intlfmt | LIVE 16:45 | non-Gregorian DTF output (~17 intl402), Ramadan (6), tz link (1) | ws/intlfmt; notes/intlfmt.md |
