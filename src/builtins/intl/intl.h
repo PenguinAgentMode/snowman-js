@@ -173,6 +173,10 @@ namespace data {
 std::span<const std::string> locales();
 // The locale's parent as BestAvailableLocale truncates it ("" at the root).
 std::string parentLocale(std::string_view locale);
+// The key a locale's data is stored under (tools/intl/common.mjs dataKey): the likely script inserted when it is
+// not the language's (zh-TW -> zh-Hant-TW); and the lookup chain from it by truncation.
+std::string dataKey(std::string_view locale);
+std::vector<std::string> lookupChain(std::string_view locale);
 std::string defaultNumberingSystem(std::string_view locale);
 std::string defaultCalendar(std::string_view locale);
 std::string defaultHourCycle(std::string_view locale);
@@ -202,6 +206,7 @@ struct WeekData {
 };
 WeekData regionWeek(std::string_view region);
 bool isRtlScript(std::string_view script);
+bool isLtrScript(std::string_view script);
 
 }  // namespace data
 

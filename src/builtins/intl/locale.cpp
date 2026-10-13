@@ -83,6 +83,7 @@ Result<Value> Locale_construct(NativeCall& call) {
   Object* options = TRY(CoerceOptionsToObject(call.args[1]));
   std::optional<LanguageTag> tag = ParseLanguageTag(std::string_view(tagString));
   if (!tag) return ThrowRangeError("Incorrect locale information provided: " + tagString);
+  CanonicalizeUnicodeLocaleId(*tag);
   TRY(UpdateLanguageId(*tag, options));
   CanonicalizeUnicodeLocaleId(*tag);
 
@@ -249,7 +250,17 @@ Result<Value> Locale_getCollations(NativeCall& call) {
 Result<Value> Locale_getHourCycles(NativeCall& call) {
   LocaleObject* loc = TRY(thisLocale(call.thisValue, "Intl.Locale.prototype.getHourCycles"));
   if (loc->hourCycle) return Value(arrayOf({*loc->hourCycle}));
-  return Value(arrayOf(data::regionHourCycles(regionPreference(parsedTag(loc)))));
+  // The language's preference in the region first (fr-CA: h23), then the region's.
+  LanguageTag tag = parsedTag(loc);
+  std::string region = regionPreference(tag);
+  std::vector<std::string> list = data::regionHourCycles(region);
+  if (std::optional<std::string> l = BestAvailableLocale(data::locales(), tag.id.language + "-" + region);
+      l && l->find('-') != std::string::npos) {
+    std::string preferred = data::defaultHourCycle(*l);
+    std::erase(list, preferred);
+    list.insert(list.begin(), preferred);
+  }
+  return Value(arrayOf(list));
 }
 
 Result<Value> Locale_getNumberingSystems(NativeCall& call) {
@@ -271,7 +282,10 @@ Result<Value> Locale_getTextInfo(NativeCall& call) {
   LanguageId max = tag.id;
   if (max.script.empty()) AddLikelySubtags(max);
   Object* info = builtins::newPlainObject();
-  addProperty(info, u"direction", str(data::isRtlScript(max.script) ? u"rtl" : u"ltr"));
+  Value direction;
+  if (data::isRtlScript(max.script)) direction = str(u"rtl");
+  else if (data::isLtrScript(max.script)) direction = str(u"ltr");
+  addProperty(info, u"direction", direction);
   return Value(info);
 }
 
@@ -296,7 +310,6 @@ Result<Value> Locale_getWeekInfo(NativeCall& call) {
   std::sort(days.begin(), days.end());
   for (int d : days) weekend.push_back(num(d));
   addProperty(info, u"weekend", Value(CreateArrayFromList(weekend)));
-  addProperty(info, u"minimalDays", num(w.minimalDays));
   return Value(info);
 }
 

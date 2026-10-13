@@ -9,7 +9,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-import { cmp, header } from './common.mjs';
+import { cmp, dataKey, header } from './common.mjs';
 
 const require = createRequire(import.meta.url);
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -44,12 +44,13 @@ const parentOf = (locale) => {
   if (pos >= 2 && locale[pos - 2] === '-') pos -= 2;
   return locale.slice(0, pos);
 };
-// The entries of `valueOf` that differ from the inherited value (rootValue at the top).
+// The entries of `valueOf` that differ from the inherited value (rootValue at the top), keyed by dataKey.
+const dataLocales = [...new Set(locales.map(dataKey))].sort(cmp);
 function inherited(valueOf, rootValue) {
   const value = new Map();
   const get = (l) => (l === null ? rootValue : value.has(l) ? value.get(l) : get(parentOf(l)));
   const out = [];
-  for (const l of locales) {
+  for (const l of dataLocales) {
     const v = valueOf(l);
     if (v !== get(parentOf(l))) out.push([l, v]);
     value.set(l, v);
@@ -60,8 +61,10 @@ function inherited(valueOf, rootValue) {
 const defaultNu = inherited((l) => new Intl.NumberFormat(l).resolvedOptions().numberingSystem, 'latn');
 const defaultCa = inherited((l) => new Intl.DateTimeFormat(l).resolvedOptions().calendar, 'gregory');
 const defaultHc = inherited((l) => new Intl.DateTimeFormat(l, { hour: 'numeric' }).resolvedOptions().hourCycle, 'h23');
+// A collation is supported when the resolved locale keeps its -u-co- keyword (ICU reports a locale's own default,
+// e.g. zh pinyin, as "default" in resolvedOptions().collation).
 const collations = inherited((l) => Intl.supportedValuesOf('collation')
-  .filter((c) => new Intl.Collator(l, { collation: c }).resolvedOptions().collation === c).join(' '), 'emoji eor');
+  .filter((c) => new Intl.Collator(`${l}-u-co-${c}`).resolvedOptions().locale.endsWith(`-u-co-${c}`)).join(' '), 'emoji eor');
 
 // ---- numbering systems with simple digit mappings ----
 const digits = [];
@@ -75,7 +78,8 @@ for (const nu of Intl.supportedValuesOf('numberingSystem')) {
 
 // ---- supportedValuesOf lists ----
 const listOf = (key) => [...Intl.supportedValuesOf(key)].sort(cmp);
-const calendars = listOf('calendar');
+// The Intl era/monthCode calendars (node also lists "islamic" and "islamic-rgsa", which ECMA-402 no longer has).
+const calendars = listOf('calendar').filter((c) => c !== 'islamic' && c !== 'islamic-rgsa');
 const collationTypes = listOf('collation');
 const currencies = listOf('currency');
 const units = listOf('unit');
@@ -118,6 +122,7 @@ const weekOf = (table, r) => table[r] ?? table['001'];
 const regionWeeks = [...weekRegions].sort(cmp).map((r) =>
   [r, `${dayNumber[weekOf(week.firstDay, r)]}${weekOf(week.minDays, r)}${dayNumber[weekOf(week.weekendStart, r)]}${dayNumber[weekOf(week.weekendEnd, r)]}`]);
 const rtlScripts = [...scripts].filter((sc) => new Intl.Locale(`und-${sc}`).textInfo.direction === 'rtl').sort(cmp);
+const ltrScripts = [...scripts].filter((sc) => !sc.startsWith('Z') && new Intl.Locale(`und-${sc}`).textInfo.direction === 'ltr').sort(cmp);
 
 const stringList = (name, list, comment) =>
   `// ${comment}\nstatic constexpr const char* ${name}[] = {\n` +
@@ -160,6 +165,7 @@ const out = [
   pairs('kRegionHourCycles', regionHourCycles, 'timeData: region -> hour cycles, preferred first.'),
   pairs('kRegionWeeks', regionWeeks, 'weekData: region -> firstDay, minDays, weekendStart, weekendEnd (1 = Monday).'),
   stringList('kRtlScripts', rtlScripts, 'Scripts written right to left.'),
+  stringList('kLtrScripts', ltrScripts, 'Scripts written left to right (others, like Zyyy, have no direction).'),
   '// Numbering systems with a simple digit mapping: the UTF-16 digits 0-9.',
   'struct DigitsEntry {',
   '  const char* name;',

@@ -1,5 +1,7 @@
 // The Intl object (ECMA-402 8): Intl.getCanonicalLocales, Intl.supportedValuesOf and the constructors.
 #include "builtins/intl/intl.h"
+#include "builtins/intl/services.h"
+#include "runtime/symbol.h"
 
 namespace snowman::intl {
 
@@ -31,7 +33,8 @@ Result<Value> Intl_supportedValuesOf(NativeCall& call) {
 }
 
 void installIntl(Realm& realm) {
-  Object* intl = OrdinaryObjectCreate(realm.intrinsic(Intrinsic::ObjectPrototype));
+  IntlObject* intl = make<IntlObject>(realm.intrinsic(Intrinsic::ObjectPrototype));
+  intl->fallbackSymbol = make<Symbol>(Value(newString(std::u16string_view(u"IntlLegacyConstructedSymbol"))));
   realm.setIntrinsic(Intrinsic::Intl, intl);
   defineGlobal(realm, PropertyKey(u"Intl"), intl);
   defineValue(intl, PropertyKey(vm().symbols.toStringTag), str(u"Intl"), Attr::Configurable);
@@ -62,6 +65,13 @@ BuiltinFunction* defineIntlConstructor(Realm& realm, Object* intl, Intrinsic con
   if (prototypeOut) *prototypeOut = proto;
   return ctor;
 }
+
+void IntlObject::trace(Tracer& tracer) {
+  Object::trace(tracer);
+  tracer.visit(reinterpret_cast<Cell*>(fallbackSymbol));
+}
+
+Symbol* fallbackSymbol() { return builtins::intrinsic(Intrinsic::Intl)->as<IntlObject>()->fallbackSymbol; }
 
 std::span<const std::string> commonLocales() { return data::locales(); }
 

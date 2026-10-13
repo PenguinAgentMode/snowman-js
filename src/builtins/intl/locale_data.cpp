@@ -16,13 +16,11 @@ struct AliasEntry {
 // The value for `locale` in an inheritance table, or rootValue.
 template <size_t N>
 std::string inherited(const AliasEntry (&table)[N], std::string_view locale, const char* rootValue) {
-  std::string candidate(locale);
-  while (!candidate.empty()) {
+  for (const std::string& candidate : lookupChain(locale)) {
     const AliasEntry* end = table + N;
     const AliasEntry* it = std::lower_bound(table, end, candidate,
                                             [](const AliasEntry& e, const std::string& k) { return std::string_view(e.from) < k; });
     if (it != end && candidate == it->from) return it->to;
-    candidate = parentLocale(candidate);
   }
   return rootValue;
 }
@@ -39,6 +37,29 @@ std::string parentLocale(std::string_view locale) {
   if (pos == std::string_view::npos) return {};
   if (pos >= 2 && locale[pos - 2] == '-') pos -= 2;
   return std::string(locale.substr(0, pos));
+}
+
+std::string dataKey(std::string_view locale) {
+  static std::vector<std::pair<std::string, std::string>> cache;
+  for (const auto& [l, k] : cache)
+    if (l == locale) return k;
+  std::string key(locale);
+  if (std::optional<LanguageTag> tag = ParseLanguageTag(locale); tag && tag->id.script.empty() && !tag->id.region.empty()) {
+    LanguageId max = tag->id, language;
+    language.language = tag->id.language;
+    if (AddLikelySubtags(max) && AddLikelySubtags(language) && !max.script.empty() && max.script != language.script) {
+      tag->id.script = max.script;
+      key = tag->toString();
+    }
+  }
+  if (cache.size() < 256) cache.emplace_back(std::string(locale), key);
+  return key;
+}
+
+std::vector<std::string> lookupChain(std::string_view locale) {
+  std::vector<std::string> chain;
+  for (std::string c = dataKey(locale); !c.empty(); c = parentLocale(c)) chain.push_back(c);
+  return chain;
 }
 
 std::string defaultNumberingSystem(std::string_view locale) { return inherited(kDefaultNumberingSystems, locale, "latn"); }
@@ -113,6 +134,11 @@ std::vector<std::string> regionHourCycles(std::string_view region) { return spli
 WeekData regionWeek(std::string_view region) {
   std::string_view w = byRegion(kRegionWeeks, region);
   return {w[0] - '0', w[1] - '0', w[2] - '0', w[3] - '0'};
+}
+bool isLtrScript(std::string_view script) {
+  for (const char* s : kLtrScripts)
+    if (script == s) return true;
+  return false;
 }
 bool isRtlScript(std::string_view script) {
   for (const char* s : kRtlScripts)
