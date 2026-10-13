@@ -52,6 +52,25 @@ Shared, read-only once the first agent starts (no change): the builtin registrat
 The symbol registry, well-known symbols and realms list live in the VM, so they are per agent. That's correct: agents
 share no objects, only SharedArrayBuffer data blocks.
 
+### Audit before step 4's gate (function-local and namespace statics in src/)
+
+Made per thread in step 4 (missed by step 2): coroutine.cpp threadStackHigh() (the thread's stack top for conservative
+GC scanning: a process-wide static let the first thread fix it for all, the likely cause of the one crash in 5x
+Atomics); expressions.cpp atomFor() cache (AST string -> atom; a shared unordered_map mutated by every thread);
+analysis.cpp stressCollect() counter; intl/datetimeformat.cpp generatorFor() cache. Hooks written by every realm's
+installer (setRegExpCheck, regExpCreate, arrayIteratorLength) now store only a change, so they are written once by the
+main realm, before any agent thread.
+
+Kept shared, with the reason:
+- immutable: every `static const` table (hex digits, month lengths, option tables, intl/temporal name tables), the
+  regexp CharSets (compiler.cpp, charset.cpp), unicode property lookups (string.cpp, segmenter.cpp), locale_id rules and
+  index, locale_data list, time_zone.cpp tz bytes and index, calendar systems (calendar_*.cpp), temporal.h `iso`,
+  agent.cpp's clock origin, coroutine.cpp page size: all magic statics, initialized thread-safely and never written.
+- read-only after init: realm.cpp's builtin registration list (static initialization), gScriptDirectory and
+  gcStressInterval (set by the CLI before any agent), the three hooks above.
+- atomic: gStackBytes (coroutine stack budget), heap.cpp gProcessCells, agent.cpp gStarted / gRunning / gNextAsyncId.
+- mutex: agent.cpp's agent list, waiter lists, report queue and each mailbox.
+
 ## 2. Shared data blocks
 
 - `SharedBlock { std::atomic<size_t> byteLength; size_t maxByteLength; uint8_t* data; }`: mmap'd once at `maxByteLength`
