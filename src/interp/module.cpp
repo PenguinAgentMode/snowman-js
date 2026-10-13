@@ -754,6 +754,12 @@ Result<Value> evaluateImportCall(const ast::ImportExpression* node) {
   return promiseCapability->promise;
 }
 
+void ImportModuleForRealm(Realm* realm, String* specifier, PromiseCapability* capability) {
+  ast::ModuleRequest request;
+  request.specifier = std::u16string(specifier->view());
+  ContinueDynamicImport(capability, hostLoadImportedModule(realm, gScriptDirectory, request));
+}
+
 // 13.3.12.1 import.meta
 Result<Value> evaluateImportMeta() {
   auto* module = dynamic_cast<ModuleRecord*>(GetActiveScriptOrModule());

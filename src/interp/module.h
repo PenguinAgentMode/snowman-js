@@ -53,4 +53,10 @@ Result<void> runModuleFile(Realm* realm, const std::string& path, std::u16string
 // The directory scripts resolve dynamic import() specifiers against (the main script's).
 void setScriptDirectory(const std::string& directory);
 
+// ShadowRealmImportValue step 7: HostLoadImportedModule(realm, specifier, ~empty~, capability), then the dynamic-import
+// continuation (ContinueDynamicImport): load, link and evaluate in `realm`'s module map, with `realm` as the referrer
+// (relative specifiers resolve against the script directory, as for a Script referrer); `capability` is resolved with
+// the module namespace object or rejected with the error. Call it with an execution context for `realm` running.
+void ImportModuleForRealm(Realm* realm, String* specifier, PromiseCapability* capability);
+
 }  // namespace snowman::interp
