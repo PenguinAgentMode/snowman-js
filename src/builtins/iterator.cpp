@@ -73,7 +73,7 @@ Result<Value> WrapForValid_return(NativeCall& call) {
 }
 
 // An iterator helper (27.1.2.1): the generator-like state machine behind map/filter/take/drop/flatMap.
-enum class HelperKind { Map, Filter, Take, Drop, FlatMap };
+enum class HelperKind { Map, Filter, Take, Drop, FlatMap, Concat };
 enum class HelperState { SuspendedStart, SuspendedYield, Executing, Completed };
 
 class IteratorHelper : public Object {
@@ -89,6 +89,8 @@ class IteratorHelper : public Object {
   bool dropped = false;
   IteratorRecord inner;
   bool innerAlive = false;
+  std::vector<Value> iterables;  // Concat: [openMethod, iterable] pairs
+  size_t nextIterable = 0;
 
   void trace(Tracer& tracer) override {
     Object::trace(tracer);
@@ -97,6 +99,7 @@ class IteratorHelper : public Object {
     tracer.visit(fn);
     tracer.visit(reinterpret_cast<Cell*>(inner.iterator));
     tracer.visit(inner.nextMethod);
+    tracer.visitAll(iterables);
   }
 };
 
@@ -142,6 +145,22 @@ Result<std::optional<Value>> helperStep(IteratorHelper* h) {
       std::optional<Value> value = TRY(IteratorStepValue(iterated));
       if (!value) return std::optional<Value>();
       return std::optional<Value>(*value);
+    }
+    case HelperKind::Concat: {
+      while (true) {
+        if (h->innerAlive) {
+          std::optional<Value> innerValue = TRY(IteratorStepValue(h->inner));
+          if (innerValue) return std::optional<Value>(*innerValue);
+          h->innerAlive = false;
+        }
+        if (h->nextIterable * 2 >= h->iterables.size()) return std::optional<Value>();
+        Value method = h->iterables[h->nextIterable * 2], iterable = h->iterables[h->nextIterable * 2 + 1];
+        h->nextIterable++;
+        Value iter = TRY(Call(method, iterable));
+        if (!iter.isObject()) return ThrowTypeError("Iterator.concat: the iterator method did not return an object");
+        h->inner = TRY(GetIteratorDirect(iter.asObject()));
+        h->innerAlive = true;
+      }
     }
     case HelperKind::FlatMap: {
       while (true) {
@@ -189,22 +208,34 @@ Result<Value> IteratorHelper_next(NativeCall& call) {
   return Value(CreateIteratorResultObject(*r.value(), false));
 }
 
+// The closure's response to a return completion at its Yield: close what it is iterating.
+Result<void> closeHelperIterators(IteratorHelper* h) {
+  if (h->kind == HelperKind::Concat) {
+    if (h->innerAlive) TRY(IteratorClose(h->inner, Result<void>()));
+    return {};
+  }
+  if (h->kind == HelperKind::FlatMap && h->innerAlive) {
+    Result<void> backup = IteratorClose(h->inner, Result<void>());
+    if (backup.isThrow()) return closeIteratorWithThrow(h->underlying, backup.thrown());
+  }
+  return IteratorClose(h->underlying, Result<void>());
+}
+
 // 27.1.2.1.2 %IteratorHelperPrototype%.return ( )
 Result<Value> IteratorHelper_return(NativeCall& call) {
   IteratorHelper* h = TRY(thisHelper(call.thisValue));
   if (h->state == HelperState::SuspendedStart) {
     h->state = HelperState::Completed;
-    TRY(IteratorClose(h->underlying, Result<void>()));
+    if (h->kind != HelperKind::Concat) TRY(IteratorClose(h->underlying, Result<void>()));
     return Value(CreateIteratorResultObject(Value::undefined(), true));
   }
   if (h->state == HelperState::Completed) return Value(CreateIteratorResultObject(Value::undefined(), true));
   if (h->state == HelperState::Executing) return ThrowTypeError("Iterator Helper is already running");
+  // GeneratorResumeAbrupt: the closure runs (closing its iterators) in the executing state.
+  h->state = HelperState::Executing;
+  Result<void> closed = closeHelperIterators(h);
   h->state = HelperState::Completed;
-  if (h->kind == HelperKind::FlatMap && h->innerAlive) {
-    Result<void> backup = IteratorClose(h->inner, Result<void>());
-    if (backup.isThrow()) return closeIteratorWithThrow(h->underlying, backup.thrown());
-  }
-  TRY(IteratorClose(h->underlying, Result<void>()));
+  if (closed.isThrow()) return Throw{closed.thrown()};
   return Value(CreateIteratorResultObject(Value::undefined(), true));
 }
 
@@ -242,6 +273,24 @@ Result<IteratorRecord> eagerStart(NativeCall& call, bool needsCallable) {
   if (needsCallable && !IsCallable(call.args[0]))
     return closeIteratorWithThrow(iterated, ThrowTypeError("callback is not a function").value);
   return GetIteratorDirect(o.asObject());
+}
+
+// Iterator.concat ( ...items )
+Result<Value> Iterator_concat(NativeCall& call) {
+  std::vector<Value> iterables;
+  ValueVector rooted;
+  for (Value item : call.args) {
+    if (!item.isObject()) return ThrowTypeError("Iterator.concat: argument is not an object");
+    Value method = TRY(GetMethod(item, PropertyKey(symbols().iterator)));
+    if (method.isUndefined()) return ThrowTypeError("Iterator.concat: argument is not iterable");
+    iterables.push_back(method);
+    iterables.push_back(item);
+    rooted.push_back(method);
+  }
+  IteratorHelper* gen = make<IteratorHelper>(intrinsic(Intrinsic::IteratorHelperPrototype), HelperKind::Concat,
+                                             IteratorRecord{}, Value::undefined(), 0);
+  gen->iterables = std::move(iterables);
+  return Value(gen);
 }
 
 // 27.1.4.8 Iterator.prototype.reduce ( reducer [ , initialValue ] )
@@ -398,6 +447,7 @@ void installIterator(Realm& realm) {
   defineValue(ctor, PropertyKey(u"prototype"), proto, Attr::None);
   realm.setIntrinsic(Intrinsic::Iterator, ctor);
   defineGlobal(realm, PropertyKey(u"Iterator"), ctor);
+  defineFunction(realm, ctor, PropertyKey(u"concat"), 0, Iterator_concat);
   defineFunction(realm, ctor, PropertyKey(u"from"), 1, Iterator_from);
 
   defineAccessor(realm, proto, PropertyKey(u"constructor"), IteratorPrototype_getConstructor, IteratorPrototype_setConstructor);
