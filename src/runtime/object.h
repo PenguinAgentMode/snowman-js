@@ -77,6 +77,9 @@ class Object : public Cell {
   virtual bool hasParameterMap() const { return false; }
   // True for Date objects ([[DateValue]]), for the same tag.
   virtual bool hasDateValue() const { return false; }
+  // True for objects with an [[IsHTMLDDA]] slot (B.3.6): ToBoolean is false, == null/undefined is true and
+  // typeof is "undefined".
+  virtual bool isHTMLDDA() const { return false; }
 
   // Internal slots live in subclasses; test and downcast with these.
   template <class T>

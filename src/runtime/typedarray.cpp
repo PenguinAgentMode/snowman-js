@@ -170,6 +170,14 @@ Result<bool> TypedArrayObject::Delete(const PropertyKey& key) {
   return Object::Delete(key);
 }
 
+// 10.4.5.2 [[PreventExtensions]]: a length-tracking or resizable-backed TypedArray cannot be made
+// non-extensible (IsTypedArrayFixedLength).
+Result<bool> TypedArrayObject::PreventExtensions() {
+  if (!arrayLength) return false;
+  if (buffer->isResizable() && !buffer->isShared()) return false;
+  return Object::PreventExtensions();
+}
+
 // 10.4.5.7 [[OwnPropertyKeys]]
 Result<std::vector<PropertyKey>> TypedArrayObject::OwnPropertyKeys() {
   std::vector<PropertyKey> keys;

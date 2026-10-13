@@ -124,6 +124,9 @@ std::optional<BigInt*> stringToBigInt(String* s) { return BigInt::fromString(s->
 Result<bool> IsLooselyEqual(Value x, Value y) {
   if (x.type() == y.type()) return IsStrictlyEqual(x, y);
   if (x.isNullish() && y.isNullish()) return true;
+  // B.3.6.2 Changes to IsLooselyEqual
+  if (x.isObject() && x.asObject()->isHTMLDDA() && y.isNullish()) return true;
+  if (x.isNullish() && y.isObject() && y.asObject()->isHTMLDDA()) return true;
   if (x.isNumber() && y.isString()) return x.asNumber() == StringToNumber(y.asString()->view());
   if (x.isString() && y.isNumber()) return StringToNumber(x.asString()->view()) == y.asNumber();
   if (x.isBigInt() && y.isString()) {

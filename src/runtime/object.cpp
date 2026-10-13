@@ -63,6 +63,11 @@ Result<bool> Object::DefineOwnProperty(const PropertyKey& key, const PropertyDes
 
 // 10.1.7.1 OrdinaryHasProperty
 Result<bool> Object::HasProperty(const PropertyKey& key) {
+  if (hasOrdinaryPropertyStorage()) {
+    if (properties_->contains(key)) return true;
+    if (!prototype_) return false;
+    return prototype_->HasProperty(key);
+  }
   auto hasOwn = TRY(GetOwnProperty(key));
   if (hasOwn) return true;
   Object* parent = TRY(GetPrototypeOf());
@@ -72,6 +77,16 @@ Result<bool> Object::HasProperty(const PropertyKey& key) {
 
 // 10.1.8.1 OrdinaryGet
 Result<Value> Object::Get(const PropertyKey& key, Value receiver) {
+  if (hasOrdinaryPropertyStorage()) {
+    std::optional<PropertySlot> slot = properties_->get(key);
+    if (!slot) {
+      if (!prototype_) return Value::undefined();
+      return prototype_->Get(key, receiver);
+    }
+    if (!slot->accessor) return slot->value;
+    if (slot->value.isUndefined()) return Value::undefined();
+    return snowman::Call(slot->value, receiver);
+  }
   auto desc = TRY(GetOwnProperty(key));
   if (!desc) {
     Object* parent = TRY(GetPrototypeOf());

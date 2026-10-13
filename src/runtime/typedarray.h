@@ -20,6 +20,7 @@ class TypedArrayObject : public Object {
   Result<bool> Set(const PropertyKey& key, Value value, Value receiver) override;
   Result<bool> Delete(const PropertyKey& key) override;
   Result<std::vector<PropertyKey>> OwnPropertyKeys() override;
+  Result<bool> PreventExtensions() override;
   void trace(Tracer& tracer) override;
 
   ElementType elementType;             // [[TypedArrayName]] / [[ContentType]]

@@ -26,9 +26,13 @@ PropertyDescriptor PropertySlot::toDescriptor() const {
 }
 
 int PropertyMap::findNamed(const PropertyKey& key) const {
-  if (!namedIndex_.empty()) {
-    auto it = namedIndex_.find(key);
-    return it == namedIndex_.end() ? -1 : int(it->second);
+  if (!table_.empty()) {
+    size_t mask = table_.size() - 1;
+    for (size_t i = key.hash() & mask;; i = (i + 1) & mask) {
+      int32_t slot = table_[i];
+      if (slot == -1) return -1;
+      if (slot >= 0 && named_[size_t(slot)].key == key) return slot;
+    }
   }
   for (size_t i = 0; i < named_.size(); i++) {
     if (!named_[i].deleted && named_[i].key == key) return int(i);
@@ -92,13 +96,31 @@ void PropertyMap::put(const PropertyKey& key, const PropertySlot& slot) {
     return;
   }
   named_.push_back({key, slot, false});
-  if (!namedIndex_.empty()) {
-    namedIndex_[key] = uint32_t(named_.size() - 1);
-  } else if (named_.size() - namedDeleted_ > kIndexThreshold) {
-    for (size_t k = 0; k < named_.size(); k++) {
-      if (!named_[k].deleted) namedIndex_[named_[k].key] = uint32_t(k);
-    }
+  if (!table_.empty()) tableInsert(int32_t(named_.size() - 1));
+  else if (named_.size() - namedDeleted_ > kIndexThreshold) rebuildTable();
+}
+
+void PropertyMap::rebuildTable() {
+  size_t live = named_.size() - namedDeleted_;
+  size_t capacity = 16;
+  while (capacity < live * 2 + 2) capacity *= 2;
+  table_.assign(capacity, -1);
+  tableUsed_ = 0;
+  for (size_t k = 0; k < named_.size(); k++) {
+    if (!named_[k].deleted) tableInsert(int32_t(k));
   }
+}
+
+void PropertyMap::tableInsert(int32_t index) {
+  if ((tableUsed_ + 1) * 2 > table_.size()) {
+    rebuildTable();  // includes index: named_ already holds it
+    return;
+  }
+  size_t mask = table_.size() - 1;
+  size_t i = named_[size_t(index)].key.hash() & mask;
+  while (table_[i] != -1) i = (i + 1) & mask;
+  table_[i] = index;
+  tableUsed_++;
 }
 
 bool PropertyMap::setValue(const PropertyKey& key, Value value) {
@@ -153,7 +175,15 @@ bool PropertyMap::remove(const PropertyKey& key) {
   named_[i].deleted = true;
   named_[i].slot = PropertySlot();
   namedDeleted_++;
-  if (!namedIndex_.empty()) namedIndex_.erase(key);
+  if (!table_.empty()) {
+    size_t mask = table_.size() - 1;
+    for (size_t k = key.hash() & mask;; k = (k + 1) & mask) {
+      if (table_[k] == i) {
+        table_[k] = -2;
+        break;
+      }
+    }
+  }
   if (namedDeleted_ > 16 && namedDeleted_ * 2 > named_.size()) compact();
   return true;
 }
@@ -166,10 +196,9 @@ void PropertyMap::compact() {
   }
   named_ = std::move(live);
   namedDeleted_ = 0;
-  namedIndex_.clear();
-  if (named_.size() > kIndexThreshold) {
-    for (size_t k = 0; k < named_.size(); k++) namedIndex_[named_[k].key] = uint32_t(k);
-  }
+  table_.clear();
+  tableUsed_ = 0;
+  if (named_.size() > kIndexThreshold) rebuildTable();
 }
 
 size_t PropertyMap::size() const { return denseCount_ + sparse_.size() + named_.size() - namedDeleted_; }
