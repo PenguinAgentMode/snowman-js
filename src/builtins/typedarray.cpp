@@ -600,7 +600,8 @@ Result<Value> TypedArrayPrototype_subarray(NativeCall& call) {
   return Value(TRY(TypedArraySpeciesCreate(o, {Value(o->buffer), num(beginByteOffset), num(newLength)})));
 }
 
-// 23.2.3.31 %TypedArray%.prototype.toLocaleString ( [ reserved1 [ , reserved2 ] ] )
+// 23.2.3.31 %TypedArray%.prototype.toLocaleString ( [ reserved1 [ , reserved2 ] ] ), as ECMA-402 22.2.1 specifies
+// it: locales and options are passed on to each element's toLocaleString.
 Result<Value> TypedArrayPrototype_toLocaleString(NativeCall& call) {
   auto [o, len] = TRY(validate(call.thisValue));
   std::u16string r;
@@ -608,7 +609,7 @@ Result<Value> TypedArrayPrototype_toLocaleString(NativeCall& call) {
     if (k > 0) r.push_back(u',');
     Value nextElement = TRY(Get(o, indexKey(k)));
     if (!nextElement.isNullish()) {
-      Value s = TRY(Invoke(nextElement, PropertyKey(u"toLocaleString")));
+      Value s = TRY(Invoke(nextElement, PropertyKey(u"toLocaleString"), {call.args[0], call.args[1]}));
       r.append(TRY(ToString(s))->view());
     }
   }

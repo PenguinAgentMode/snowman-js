@@ -1,6 +1,7 @@
 // BigInt (21.2).
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/util.h"
 #include "runtime/bigint.h"
 #include "runtime/wrappers.h"
@@ -55,9 +56,10 @@ Result<Value> BigIntPrototype_toString(NativeCall& call) {
   return Value(newString(x->toString(int(radix))));
 }
 
+// ECMA-402 21.1 BigInt.prototype.toLocaleString ( [ locales [ , options ] ] )
 Result<Value> BigIntPrototype_toLocaleString(NativeCall& call) {
   BigInt* x = TRY(thisBigIntValue(call.thisValue));
-  return Value(newString(x->toString(10)));
+  return intl::numberToLocaleString(Value(x), call.args[0], call.args[1]);
 }
 
 Result<Value> BigIntPrototype_valueOf(NativeCall& call) { return Value(TRY(thisBigIntValue(call.thisValue))); }

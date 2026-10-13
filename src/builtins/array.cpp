@@ -801,7 +801,8 @@ Result<Value> ArrayPrototype_splice(NativeCall& call) {
   return Value(a);
 }
 
-// 23.1.3.32 Array.prototype.toLocaleString ( [ reserved1 [ , reserved2 ] ] )
+// 23.1.3.32 Array.prototype.toLocaleString ( [ reserved1 [ , reserved2 ] ] ), as ECMA-402 22.1.1 specifies it:
+// locales and options are passed on to each element's toLocaleString.
 Result<Value> ArrayPrototype_toLocaleString(NativeCall& call) {
   auto [array, len] = TRY(thisArrayLike(call.thisValue));
   std::u16string r;
@@ -809,7 +810,7 @@ Result<Value> ArrayPrototype_toLocaleString(NativeCall& call) {
     if (k > 0) r.push_back(u',');
     Value nextElement = TRY(Get(array, indexKey(k)));
     if (!nextElement.isNullish()) {
-      Value s = TRY(Invoke(nextElement, PropertyKey(u"toLocaleString")));
+      Value s = TRY(Invoke(nextElement, PropertyKey(u"toLocaleString"), {call.args[0], call.args[1]}));
       String* str = TRY(ToString(s));
       r.append(str->view());
     }

@@ -2,6 +2,7 @@
 #include <bit>
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/util.h"
 #include "runtime/bigint.h"
 #include "runtime/wrappers.h"
@@ -243,9 +244,10 @@ Result<Value> NumberPrototype_toString(NativeCall& call) {
   return Value(NumberToString(x, int(radix)));
 }
 
+// ECMA-402 20.2.1 Number.prototype.toLocaleString ( [ locales [ , options ] ] )
 Result<Value> NumberPrototype_toLocaleString(NativeCall& call) {
   double x = TRY(thisNumberValue(call.thisValue));
-  return Value(NumberToString(x));
+  return intl::numberToLocaleString(num(x), call.args[0], call.args[1]);
 }
 
 Result<Value> NumberPrototype_valueOf(NativeCall& call) { return num(TRY(thisNumberValue(call.thisValue))); }
