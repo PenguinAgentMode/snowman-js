@@ -418,6 +418,18 @@ Result<ISODateTime> InterpretTemporalDateTimeFields(const CalendarId& calendar, 
 // The month code "Mnn" of an ISO month.
 std::u16string ISOMonthCode(int32_t month);
 
+// The calendar fields of a Calendar Date Record (CalendarISOToDate): era/eraYear are empty for calendars without
+// eras (iso8601, chinese, dangi, ...); year is the arithmetic year (chinese/dangi: the related ISO year).
+struct CalendarDate {
+  std::optional<std::u16string> era;
+  std::optional<int32_t> eraYear;
+  int32_t year;
+  int32_t month;  // 1-based ordinal month
+  std::u16string monthCode;
+  int32_t day;
+};
+CalendarDate CalendarISOToDate(const CalendarId& calendar, const ISODate& isoDate);
+
 // Calendar Date Record accessors (CalendarISOToDate) for the getters every date-bearing class shares.
 // `which` names the property ("year", "monthCode", "dayOfWeek", ...). Returns undefined for era/eraYear.
 Value CalendarDateField(const CalendarId& calendar, const ISODate& isoDate, std::u16string_view which);
