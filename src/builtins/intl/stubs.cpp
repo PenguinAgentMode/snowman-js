@@ -2,7 +2,7 @@
 #include "builtins/intl/intl.h"
 namespace snowman::intl {
 
-void installDateTimeFormat(Realm&, Object*) {}
+
 
 
 
