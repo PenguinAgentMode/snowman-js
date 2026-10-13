@@ -7,9 +7,9 @@ results/317949e37.json (ES-core), results/317949e37-full.json (full). Deliverabl
 
 | Branch | sha | What | State |
 | --- | --- | --- | --- |
-| ws/staging-date | 8d8a20932 | Date.parse SpiderMonkey legacy heuristics (date.cpp only): sm/Date/non-iso.js, two-digit-years.js | full gate running/done |
-| ws/staging-regexp | 41e448c27 | regexp parser reads the pattern in place (no 4 B/char copy): sm/RegExp/unicode-{class-,}braced.js need ~921 MB of address space instead of ~1046 (cap 1024) | slices pass; gate next |
-| ws/staging-caller | WIP | legacy f.caller / f.arguments (lead approved; 2 interface commits: InterpContext.isEval/.args, realm intrinsics %LegacyArgumentsGetter%/%LegacyCallerGetter%) | 12 staging files pass alone; slices + gate next |
+| ws/staging-date | 8d8a20932 | Date.parse SpiderMonkey legacy heuristics (date.cpp only): sm/Date/non-iso.js, two-digit-years.js | MERGED (main b84715f); gate 0/0 regressions, results/8d8a20932/full.jsonl |
+| ws/staging-regexp | 41e448c27 | regexp parser reads the pattern in place (no 4 B/char copy): sm/RegExp/unicode-{class-,}braced.js need ~921 MB of address space instead of ~1046 (cap 1024) | slices pass; full gate running ($HOME/logs/gate-41e448c27.*) |
+| ws/staging-caller | bc68f1d7e | legacy f.caller / f.arguments (lead approved; 2 interface commits: InterpContext.isEval/.args, realm intrinsics %LegacyArgumentsGetter%/%LegacyCallerGetter%) | 12/12 pass; slices running ($HOME/logs/caller.log); gate after regexp (engine copy $HOME/engine-bc68f1d7e) |
 
 ## Gotchas
 
@@ -18,9 +18,11 @@ results/317949e37.json (ES-core), results/317949e37-full.json (full). Deliverabl
 - The tool's foreground limit is ~10 min: slices of built-ins/RegExp take ~10 min under gate load; background them.
 - Memory need: bisect `ulimit -v` ($HOME/vmneed.sh); gVisor /proc has no VmPeak/VmHWM; /usr/bin/time -v gives max RSS.
 
-## Residue (to be written to tools/lead/staging-residue.md)
+## Residue: tools/lead/staging-residue.md on this branch (pushed)
 
 - 13 sm/strict/*: runner artefact (strict prefix on the harness).
 - 2 decorators/*-auto-accessor.js: proposal (decorators2 owns class.cpp).
 - 2 B.3.2 arguments block-function tests: contradict ES-core annexB block-decl-func-skip-arguments.js.
 - sm/regress/regress-610026.js: AST/parser Scope memory for 2^21 blocks in eval (parser/, big change).
+
+- A "perf" agent rebases over InterpContext.isEval/.args: land staging-caller early (lead).
