@@ -776,6 +776,7 @@ Result<void> runModuleFile(Realm* realm, const std::string& path, std::u16string
   TRY(vm().runJobs());
   auto* evaluated = promise.asObject()->as<PromiseObject>();
   if (evaluated->state == PromiseObject::State::Rejected) return Throw{evaluated->result};
+  if (evaluated->state == PromiseObject::State::Pending) return ThrowError(Intrinsic::ErrorPrototype, "module evaluation did not complete");
   return {};
 }
 

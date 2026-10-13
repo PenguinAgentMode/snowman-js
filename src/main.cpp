@@ -25,6 +25,11 @@ std::optional<snowman::CliOptions> parseOptions(int argc, char** argv) {
       options.dumpAst = true;
       continue;
     }
+    if (arg == "--prelude" || arg == "--epilogue") {
+      if (++i == argc) return std::nullopt;
+      (arg == "--prelude" ? options.preludes : options.epilogues).push_back(argv[i]);
+      continue;
+    }
     if (arg.starts_with("--")) return std::nullopt;
     options.file = arg;
   }
@@ -47,7 +52,7 @@ std::optional<std::string> readFile(const std::string& path) {
 int main(int argc, char** argv) {
   auto options = parseOptions(argc, argv);
   if (!options) {
-    std::cerr << "usage: engine [--module] [--parse-only] [--dump-ast] file.js\n";
+    std::cerr << "usage: engine [--prelude h.js]... [--epilogue e.js]... [--module] [--parse-only] [--dump-ast] file.js\n";
     return 64;
   }
 

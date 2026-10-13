@@ -1,5 +1,8 @@
 // run.mjs: run one shard of a test262 suite against an engine, one process per scenario, and write
-// a JSONL line per scenario. Tests run in place, so module specifiers resolve as INTERPRETING.md says.
+// a JSONL line per scenario. Tests run in place, so module specifiers resolve as INTERPRETING.md says: a script
+// test is composed (harness + test + RAN) into a temp file next to it; a module test runs unmodified at its
+// own path (a test that imports itself gets the same module record), with the harness as a --prelude Script
+// and the RAN line as an --epilogue, both temp files in os.tmpdir() (INTERFACES.md section 1).
 //
 //   node runner/run.mjs --engine "<command>" [--suite es-core|full] [--shard k/N] [--jobs J (4)]
 //                       [--parse-only] [--filter <path prefix>] [--out results/shard.jsonl]
@@ -10,6 +13,7 @@
 // has to fit the machine). Each engine also runs under `ulimit -v` --vm-mb, for growth faster than the poll
 // (the engine's 480 MB main stack is reserved address space, most of it never touched).
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -21,6 +25,8 @@ const MEM_POLL_MS = 20;
 const DONOTEVALUATE = 'Test262: This statement should not be evaluated.';
 // RAN is printed after a test's body, so an engine that runs nothing and exits 0 can't pass it.
 const RAN = 'Test262:Ran';
+// The engine's line before an error thrown by a prelude or epilogue: the harness's error, never the test's.
+const HOST_SCRIPT_ERROR = 'Test262:HostScriptError';
 
 function parseArgs(argv) {
   const args = {
@@ -50,21 +56,26 @@ function harness(test262, name) {
   return harnessCache.get(name);
 }
 
-// compose is the source a scenario runs: the harness, the test's includes, then the test.
-function compose(test262, source, metadata, mode) {
-  const strict = mode === 'strict' ? '"use strict";\n' : '';
-  if (metadata.flags.includes('raw')) return strict + source;
-
+// The harness a test runs after: assert.js, sta.js, doneprintHandle.js for async tests, then its includes.
+function harnessOf(test262, metadata) {
   const prelude = [harness(test262, 'assert.js'), harness(test262, 'sta.js')];
   if (metadata.flags.includes('async')) prelude.push(harness(test262, 'doneprintHandle.js'));
   for (const include of metadata.includes) prelude.push(harness(test262, include));
-  return strict + prelude.join('\n') + '\n' + source + `\n;print(${JSON.stringify(RAN)});\n`;
+  return prelude.join('\n') + '\n';
+}
+
+// compose is the source a script scenario runs: the harness, the test's includes, then the test.
+function compose(test262, source, metadata, mode) {
+  const strict = mode === 'strict' ? '"use strict";\n' : '';
+  if (metadata.flags.includes('raw')) return strict + source;
+  return strict + harnessOf(test262, metadata) + source + `\n;print(${JSON.stringify(RAN)});\n`;
 }
 
 // verdict decides a scenario from the engine's exit code and output.
 function verdict({ code, output, timedOut, memoryExceeded }, metadata, parseOnly) {
   if (timedOut) return 'timeout';
   if (memoryExceeded) return 'fail';
+  if (output.includes(HOST_SCRIPT_ERROR)) return 'fail';
   const negative = metadata.negative;
   const expectsParseError = negative && (negative.phase === 'parse' || negative.phase === 'resolution');
 
@@ -92,7 +103,7 @@ function lastError(output) {
 }
 
 // /proc can belong to an outer PID namespace (gVisor sandboxes): there a child's pid names some other process,
-// and the child's entry is the one whose parent is this process's entry and whose command line has `marker`.
+// and the child's entry is the one whose parent is this process's entry and with `marker` among its arguments.
 const SELF_PROC = (() => {
   try {
     return fs.readlinkSync('/proc/self');
@@ -108,7 +119,7 @@ function procEntryOf(child, marker) {
     try {
       const stat = fs.readFileSync(`/proc/${entry}/stat`, 'utf8');
       const ppid = stat.slice(stat.lastIndexOf(')') + 2).split(' ')[1];
-      if (ppid === SELF_PROC && fs.readFileSync(`/proc/${entry}/cmdline`, 'utf8').includes(marker)) return entry;
+      if (ppid === SELF_PROC && fs.readFileSync(`/proc/${entry}/cmdline`, 'utf8').split('\0').includes(marker)) return entry;
     } catch {
       // gone meanwhile
     }
@@ -126,9 +137,16 @@ function rssKb(entry) {
   }
 }
 
+// The harness file that threw and its error (the line after the marker), as one message.
+function hostScriptError(output) {
+  const lines = output.split('\n');
+  const at = lines.findIndex((l) => l.startsWith(HOST_SCRIPT_ERROR));
+  return `${lines[at].slice(HOST_SCRIPT_ERROR.length).trim()}: ${lines[at + 1] ?? ''}`.slice(0, 300);
+}
+
 // Runs the command under an address-space cap of vmLimitKb (0: none); SIGKILLs it after timeoutMs, or once its
-// resident set exceeds memLimitKb. marker is an argument unique to this run among concurrent ones (the
-// composed test's path).
+// resident set exceeds memLimitKb. marker is an argument unique to this run among concurrent ones (a temp
+// file's path).
 function execute(command, args, timeoutMs, memLimitKb, vmLimitKb, marker) {
   return new Promise((resolve) => {
     const started = performance.now();
@@ -173,23 +191,39 @@ async function runScenario(args, engine, scenario, slot) {
   const source = fs.readFileSync(file, 'utf8');
   const metadata = metadataOf(source);
   const isModule = metadata.flags.includes('module');
-  // Written next to the test, so its relative imports and fixtures resolve.
-  const composed = path.join(path.dirname(file), `.t262-${process.pid}-${slot}${isModule ? '.mjs' : '.js'}`);
-  fs.writeFileSync(composed, compose(args.test262, source, metadata, scenario.mode));
-
   const engineArgs = [...engine.slice(1)];
   if (args.parseOnly) engineArgs.push('--parse-only');
-  if (isModule) engineArgs.push('--module');
-  engineArgs.push(composed);
-  const result = await execute(engine[0], engineArgs, TIMEOUT_MS, Number(args.memMb) * 1024, Number(args.vmMb) * 1024, composed);
-  fs.rmSync(composed, { force: true });
+  const temps = [];
+  let entry = file;
+  if (!isModule) {
+    // Written next to the test, so its relative imports and fixtures resolve.
+    entry = path.join(path.dirname(file), `.t262-${process.pid}-${slot}.js`);
+    temps.push(entry);
+    fs.writeFileSync(entry, compose(args.test262, source, metadata, scenario.mode));
+  } else {
+    if (!args.parseOnly && !metadata.flags.includes('raw')) {
+      const base = path.join(os.tmpdir(), `t262-${process.pid}-${slot}`);
+      temps.push(`${base}-prelude.js`, `${base}-epilogue.js`);
+      fs.writeFileSync(temps[0], harnessOf(args.test262, metadata));
+      fs.writeFileSync(temps[1], `print(${JSON.stringify(RAN)});\n`);
+      engineArgs.push('--prelude', temps[0], '--epilogue', temps[1]);
+    }
+    engineArgs.push('--module');
+  }
+  engineArgs.push(entry);
+  // An argument no concurrent scenario has: the temp file, or the module test itself (it runs in one mode).
+  const marker = temps[0] ?? entry;
+  const result = await execute(engine[0], engineArgs, TIMEOUT_MS, Number(args.memMb) * 1024, Number(args.vmMb) * 1024, marker);
+  for (const temp of temps) fs.rmSync(temp, { force: true });
 
   const status = verdict(result, metadata, args.parseOnly);
   const failure = result.memoryExceeded
     ? { error_name: 'MemoryLimit', message: `killed: resident memory above ${args.memMb} MB` }
     : status === 'pass'
       ? {}
-      : lastError(result.output);
+      : result.output.includes(HOST_SCRIPT_ERROR)
+        ? { error_name: 'HostScriptError', message: hostScriptError(result.output) }
+        : lastError(result.output);
   return { file: scenario.file, mode: scenario.mode, status, ms: result.ms, ...failure };
 }
 

@@ -6,7 +6,10 @@
 
 #include <cstdio>
 #include <cstdlib>
+#include <fstream>
 #include <new>
+#include <optional>
+#include <sstream>
 #include <string>
 
 #include "engine.h"
@@ -57,6 +60,32 @@ std::string describeThrown(Value thrown) {
   return "Uncaught: " + description;
 }
 
+std::optional<std::string> readFile(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return std::nullopt;
+  std::ostringstream text;
+  text << in.rdbuf();
+  return text.str();
+}
+
+// A --prelude or --epilogue file, evaluated as a global Script. False when it can't be read, doesn't parse or
+// throws: printed after a Test262:HostScriptError line, so the runner can't take it for the test's own error.
+bool runHostScript(Realm* realm, const std::string& file) {
+  auto fail = [&](const std::string& error) {
+    printLine("Test262:HostScriptError " + file);
+    printLine(error);
+    return false;
+  };
+  std::optional<std::string> source = readFile(file);
+  if (!source) return fail("Error: cannot read " + file);
+  parser::ParseResult parsed = parser::parseProgram(utf8ToUtf16(*source));
+  if (!parsed.ok()) return fail("SyntaxError: " + parsed.error->message);
+  auto* script = snowman::make<interp::ScriptRecord>(realm, parsed.program);
+  Result<Value> result = interp::ScriptEvaluation(script);
+  if (result.isThrow()) return fail(describeThrown(result.thrown()));
+  return true;
+}
+
 struct MainData {
   const CliOptions* options;
   const std::string* source;
@@ -70,28 +99,43 @@ int runProgram(const CliOptions& options, const std::string& source) {
   interp::setUpRealm(realm);
   heap().setCollectorEnabled(true);
   std::u16string text = utf8ToUtf16(source);
+  size_t slash = options.file.rfind('/');
+  interp::setScriptDirectory(slash == std::string::npos ? "." : options.file.substr(0, slash));
+
+  for (const std::string& file : options.preludes) {
+    if (!runHostScript(realm, file)) return 1;
+  }
 
   if (options.module) {
+    // Drains the job queue; a rejected or never-completed evaluation is a throw.
     Result<void> result = interp::runModuleFile(realm, options.file, std::move(text));
     if (result.isThrow()) {
       printLine(describeThrown(result.thrown()));
       return 1;
     }
-    return 0;
+  } else {
+    parser::ParseResult parsed = parser::parseProgram(std::move(text));
+    if (!parsed.ok()) {
+      printLine("SyntaxError: " + parsed.error->message);
+      return 1;
+    }
+    auto* script = snowman::make<interp::ScriptRecord>(realm, parsed.program);
+    Result<Value> result = interp::ScriptEvaluation(script);
+    if (result.isThrow()) {
+      printLine(describeThrown(result.thrown()));
+      return 1;
+    }
+    Result<void> jobs = vm().runJobs();
+    if (jobs.isThrow()) {
+      printLine(describeThrown(jobs.thrown()));
+      return 1;
+    }
   }
 
-  size_t slash = options.file.rfind('/');
-  interp::setScriptDirectory(slash == std::string::npos ? "." : options.file.substr(0, slash));
-  parser::ParseResult parsed = parser::parseProgram(std::move(text));
-  if (!parsed.ok()) {
-    printLine("SyntaxError: " + parsed.error->message);
-    return 1;
-  }
-  auto* script = snowman::make<interp::ScriptRecord>(realm, parsed.program);
-  Result<Value> result = interp::ScriptEvaluation(script);
-  if (result.isThrow()) {
-    printLine(describeThrown(result.thrown()));
-    return 1;
+  // The entry completed normally: the epilogues, then the jobs they queued.
+  if (options.epilogues.empty()) return 0;
+  for (const std::string& file : options.epilogues) {
+    if (!runHostScript(realm, file)) return 1;
   }
   Result<void> jobs = vm().runJobs();
   if (jobs.isThrow()) {
