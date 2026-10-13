@@ -121,6 +121,7 @@ Node* Parser::parseExpression(bool noIn, DestructuringErrors* refErrors) {
 }
 
 Node* Parser::parseMaybeAssign(bool noIn, DestructuringErrors* refErrors) {
+  checkStack();
   if (isKw(K::Yield) && yieldIsKeyword()) return parseYield(noIn);
   bool ownErrors = false;
   int64_t oldParenAssign = -1, oldTrailingComma = -1, oldDoubleProto = -1;
@@ -257,6 +258,7 @@ Node* Parser::buildBinary(Pos start, Node* left, Node* right, T op) {
 }
 
 Node* Parser::parseMaybeUnary(DestructuringErrors* refErrors, bool sawUnary, bool incDec, bool noIn) {
+  checkStack();
   Pos start = here();
   Node* expr;
   if (isKw(K::Await) && canAwait()) {
@@ -936,6 +938,7 @@ Node* Parser::parseProperty(bool isPattern, DestructuringErrors* refErrors) {
 }
 
 Node* Parser::parseBindingAtom() {
+  checkStack();
   if (is(T::LBracket)) {
     auto* node = startNode<ArrayPattern>();
     next();

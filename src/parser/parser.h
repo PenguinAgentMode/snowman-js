@@ -54,6 +54,10 @@ enum class DynamicFunctionKind : uint8_t { Normal, Generator, Async, AsyncGenera
 // the Program's body holds a single ExpressionStatement with the (parenthesized) FunctionExpression.
 ParseResult parseDynamicFunction(DynamicFunctionKind kind, std::u16string params, std::u16string body);
 
+// The parser recurses on nesting. Where *stackLimit is set, it fails with a SyntaxError on a stack below that
+// address instead of overflowing it; the engine points it at vm().stackLimit, which follows the running stack.
+extern const char* const* stackLimit;
+
 // UTF-8 -> UTF-16 (ill-formed sequences become U+FFFD), and back (lone surrogates become U+FFFD).
 std::u16string utf8ToUtf16(std::string_view utf8);
 std::string utf16ToUtf8(std::u16string_view utf16);

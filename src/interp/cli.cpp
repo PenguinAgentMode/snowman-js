@@ -64,6 +64,7 @@ struct MainData {
 };
 
 int runProgram(const CliOptions& options, const std::string& source) {
+  parser::stackLimit = &vm().stackLimit;
   Realm* realm = CreateRealm();
   vm().initialRealm = realm;
   interp::setUpRealm(realm);

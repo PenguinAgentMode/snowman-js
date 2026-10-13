@@ -97,6 +97,7 @@ bool Parser::isAwaitUsing(bool forHead) {
 }
 
 Node* Parser::parseStatement(const char* context, bool topLevel) {
+  checkStack();
   Pos start = here();
   if (isLet(context)) {
     if (context) unexpected();
