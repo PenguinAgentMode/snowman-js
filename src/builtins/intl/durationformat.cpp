@@ -4,6 +4,7 @@
 
 #include "builtins/intl/intl.h"
 #include "builtins/intl/services.h"
+#include "builtins/temporal/temporal.h"
 #include "runtime/bigint.h"
 
 namespace snowman::intl {
@@ -111,8 +112,16 @@ Result<double> toIntegerIfIntegral(Value v) {
   return d == 0 ? 0.0 : d;
 }
 
-// 13.5.3 ToDurationRecord ( input ): the fields in kUnits order.
+// 13.5.3 ToDurationRecord ( input ): the fields in kUnits order. A Temporal.Duration gives its own fields and a
+// String is parsed as an ISO 8601 duration (ToTemporalDuration).
 Result<std::array<double, kUnitCount>> ToDurationRecord(Value input) {
+  temporal::DurationObject* duration = temporal::asTemporal<temporal::DurationObject>(input);
+  if (!duration && input.isString()) duration = TRY(temporal::ToTemporalDuration(input));
+  if (duration) {
+    const temporal::DurationFields& f = duration->fields;
+    return std::array<double, kUnitCount>{f.years, f.months, f.weeks, f.days, f.hours, f.minutes, f.seconds,
+                                          f.milliseconds, f.microseconds, f.nanoseconds};
+  }
   if (!input.isObject()) {
     if (input.isString()) return ThrowRangeError("Intl.DurationFormat: a duration string is not supported");
     return ThrowTypeError("Intl.DurationFormat: duration must be an object");

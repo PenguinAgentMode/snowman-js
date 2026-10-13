@@ -1141,14 +1141,15 @@ std::u16string temporalPattern(const DateTimeFormatObject& dtf, ValueKind kind) 
     return std::find(list.begin(), list.end(), name) != list.end();
   };
   std::vector<std::pair<std::u16string_view, std::string>> options;
-  bool anyPresent = false, needDefaults = true;
+  // Null when components were given but none of them applies to this kind (year for a PlainMonthDay).
+  bool anyPresent = false, anyRelevant = false, needDefaults = true;
   for (const auto& [name, value] : dtf.components) {
     if (name != u"timeZoneName") anyPresent = true;
-    if (contains(relevant, name)) options.emplace_back(name, value);
+    if (contains(relevant, name)) options.emplace_back(name, value), anyRelevant = true;
     if (contains(required, name)) needDefaults = false;
   }
   if (needDefaults) {
-    if (anyPresent) return {};
+    if (anyPresent && !anyRelevant) return {};
     for (std::u16string_view d : defaults) options.emplace_back(d, "numeric");
   }
   Skeleton k;
@@ -1281,38 +1282,32 @@ Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, const 
     formatPatternInto(out, dtf, pattern, x, 0, utc);
     return out;
   }
-  // An interval pattern for the requested skeleton and greatest difference.
-  std::u16string_view interval;
   std::vector<std::u16string_view> list = items(dateField(dtf.dataLocale, FIntervals));
   std::u16string fallback = list.empty() ? u"{0} \u2013 {1}" : std::u16string(list[0]);
-  if (diff != u's' && diff != u'S') {
-    // The skeleton of the format's pattern, in CLDR canonical form.
+  const Generator& g = generatorFor(dtf.dataLocale);
+  // The interval pattern for the pattern's fields (some of them: mask) and the greatest difference, or "".
+  auto intervalFor = [&](unsigned mask) -> std::u16string_view {
+    if (diff == u's' || diff == u'S' || (present & (1u << Zone))) return {};
     Skeleton k = skeletonOf(pattern);
-    const Generator& g = generatorFor(dtf.dataLocale);
-    Best best = getBestRaw(g, k, k.mask() & ~(1u << Zone) & ~(1u << DayPeriod));
-    if (best.match && best.distance.missing == 0 && best.distance.extra == 0) {
-      std::u16string key(best.match->key);
-      char16_t d = diff == u'd' && !(present & (1u << Day)) ? u'd' : diff;
-      for (size_t i = 1; i < list.size(); i++) {
-        std::u16string_view item = list[i];
-        size_t slash = item.find(u'/'), eq = item.find(u'=');
-        if (item.substr(0, slash) == key && item.substr(slash + 1, eq - slash - 1) == std::u16string_view(&d, 1)) {
-          interval = item.substr(eq + 1);
-          break;
-        }
-      }
+    Best best = getBestRaw(g, k, k.mask() & mask & ~(1u << Zone));
+    if (!best.match || best.distance.missing != 0 || best.distance.extra != 0) return {};
+    std::u16string key(best.match->key);
+    for (size_t i = 1; i < list.size(); i++) {
+      std::u16string_view item = list[i];
+      size_t slash = item.find(u'/'), eq = item.find(u'=');
+      if (item.substr(0, slash) == key && item.substr(slash + 1, eq - slash - 1) == std::u16string_view(&diff, 1)) return item.substr(eq + 1);
     }
-  }
-  if (!interval.empty() && !(present & (1u << Zone))) {
-    std::u16string adjusted = applyHourCycle(generatorFor(dtf.dataLocale), interval, dtf.hourCycle.empty() ? "h23" : dtf.hourCycle);
-    // Widen the interval pattern's fields to the format's.
+    return {};
+  };
+  // Formats x and y with an interval pattern: the first part (until a field repeats) with x, the rest with y.
+  auto appendInterval = [&](std::u16string_view interval) {
+    std::u16string adjusted = applyHourCycle(g, interval, dtf.hourCycle.empty() ? "h23" : dtf.hourCycle);
     std::vector<Token> it = parsePattern(adjusted);
     for (Token& t : it) {
       if (!t.field) continue;
       for (const Token& p : tokens)
         if (p.field && fieldOf(p.ch) == fieldOf(t.ch) && fieldOf(t.ch) != Hour) t.count = p.count, t.ch = p.ch;
     }
-    // Split where a field repeats: the first part formats x, the rest y.
     unsigned seen = 0;
     size_t split = it.size();
     for (size_t i = 0; i < it.size(); i++) {
@@ -1324,17 +1319,85 @@ Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, const 
       }
       seen |= bit;
     }
-    // Literals right before the split belong to the shared separator.
     size_t firstEnd = split;
     while (firstEnd > 0 && !it[firstEnd - 1].field) firstEnd--;
     std::vector<Token> first(it.begin(), it.begin() + long(firstEnd)), second(it.begin() + long(split), it.end());
     std::u16string separator;
     for (size_t i = firstEnd; i < split; i++) separator += it[i].text;
-    formatPatternInto(out, dtf, patternString(first), x, 1, utc);
+    // A field that only one half has is shared, and so is a literal unless both its neighbours are in the half.
+    auto fieldsOf = [](const std::vector<Token>& ts) {
+      unsigned m = 0;
+      for (const Token& t : ts)
+        if (t.field && fieldOf(t.ch) >= 0) m |= 1u << fieldOf(t.ch);
+      return m;
+    };
+    unsigned firstFields = fieldsOf(first), secondFields = fieldsOf(second);
+    auto half = [&](const std::vector<Token>& ts, double at, int source, unsigned otherFields) {
+      std::vector<DatePart> parts;
+      formatPatternInto(parts, dtf, patternString(ts), at, source, utc);
+      static const std::pair<const char16_t*, int> kinds[] = {
+          {u"era", Era}, {u"year", Year}, {u"month", Month}, {u"weekday", Weekday}, {u"day", Day}, {u"dayPeriod", DayPeriod},
+          {u"hour", Hour}, {u"minute", Minute}, {u"second", Second}, {u"fractionalSecond", Fraction}, {u"timeZoneName", Zone}};
+      for (DatePart& part : parts) {
+        for (const auto& [name, field] : kinds)
+          if (std::u16string_view(part.type) == name && !(otherFields & (1u << field))) part.source = 0;
+      }
+      for (size_t i = 0; i < parts.size(); i++) {
+        if (std::u16string_view(parts[i].type) != u"literal") continue;
+        bool before = i > 0 && parts[i - 1].source != 0, after = i + 1 < parts.size() && parts[i + 1].source != 0;
+        if (!(before && after)) parts[i].source = 0;
+      }
+      out.insert(out.end(), parts.begin(), parts.end());
+    };
+    half(first, x, 1, secondFields);
     if (!separator.empty()) out.push_back({u"literal", separator, 0});
-    formatPatternInto(out, dtf, patternString(second), y, 2, utc);
-    // Parts shared by both halves: before the first differing field and after the last are marked shared.
+    half(second, y, 2, firstFields);
+  };
+  if (std::u16string_view interval = intervalFor(~0u); !interval.empty()) {
+    appendInterval(interval);
     return out;
+  }
+  // The same day, a difference in the time: the date once, then the time interval (as ICU's DateIntervalFormat).
+  bool timeDiff = diff == u'a' || diff == u'h' || diff == u'H' || diff == u'm' || diff == u's' || diff == u'S';
+  if (timeDiff && (present & kDateMask) && (present & kTimeMask) && sameDay) {
+    std::u16string_view interval = intervalFor(kTimeMask);
+    {
+      Skeleton k = skeletonOf(pattern), dateOnly, timeOnly;
+      for (int f = 0; f < kFieldCount; f++) {
+        if ((kDateMask & (1u << f)) && k.ch[f]) dateOnly.set(k.ch[f], k.len[f]);
+        if ((kTimeMask & (1u << f)) && k.ch[f]) timeOnly.set(k.ch[f], k.len[f]);
+      }
+      int style = 3;
+      if (k.len[Month] == 4) style = k.ch[Weekday] ? 0 : 1;
+      else if (k.len[Month] == 3) style = 2;
+      std::u16string_view glue = g.atTime[style];
+      size_t p0 = glue.find(u"{0}"), p1 = glue.find(u"{1}");
+      for (size_t i = 0; i < glue.size();) {
+        if (i == p1) {
+          formatPatternInto(out, dtf, getBestPattern(g, dateOnly), x, 0, utc);
+          i += 3;
+        } else if (i == p0) {
+          if (!interval.empty()) {
+            appendInterval(interval);
+          } else {
+            // The interval fallback over the time part alone.
+            std::u16string time = getBestPattern(g, timeOnly);
+            size_t f0 = fallback.find(u"{0}"), f1 = fallback.find(u"{1}");
+            formatPatternInto(out, dtf, time, x, 1, utc);
+            out.push_back({u"literal", fallback.substr(f0 + 3, f1 - f0 - 3), 0});
+            formatPatternInto(out, dtf, time, y, 2, utc);
+          }
+          i += 3;
+        } else {
+          size_t next = std::min(p0 > i ? p0 : glue.size(), p1 > i ? p1 : glue.size());
+          std::vector<Token> lit = parsePattern(glue.substr(i, next - i));
+          for (const Token& t : lit)
+            if (!t.field) out.push_back({u"literal", t.text, 0});
+          i = next;
+        }
+      }
+      return out;
+    }
   }
   // FormatDateTimePattern for both, joined by the fallback pattern.
   size_t p0 = fallback.find(u"{0}"), p1 = fallback.find(u"{1}");
