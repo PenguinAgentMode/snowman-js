@@ -17,6 +17,20 @@ namespace {
 
 const std::vector<ast::Node*> kNoParams;
 
+// Atoms of the property names every new function defines (atom() hashes the name on every call).
+struct FunctionKeys {
+  String* arguments = atom(u"arguments");
+  String* caller = atom(u"caller");
+  String* constructor = atom(u"constructor");
+  String* name = atom(u"name");
+  String* prototype = atom(u"prototype");
+};
+
+const FunctionKeys& keys() {
+  thread_local FunctionKeys k;  // atoms are per thread
+  return k;
+}
+
 const ast::VarScope* varScopeOf(const ECMAScriptFunction* F) {
   if (F->codeKind == CodeKind::Function) return F->function;
   if (F->codeKind == CodeKind::StaticBlock) return static_cast<const ast::StaticBlock*>(F->code);
@@ -226,10 +240,10 @@ void MakeConstructor(ECMAScriptFunction* F, bool writablePrototype, Object* prot
   F->hasConstruct = true;
   if (!prototype) {
     prototype = OrdinaryObjectCreate(F->realm()->intrinsic(Intrinsic::ObjectPrototype));
-    defineValue(prototype, PropertyKey(u"constructor"), Value(F),
+    defineValue(prototype, PropertyKey(keys().constructor), Value(F),
                 writablePrototype ? Attr::WritableConfigurable : Attr::Configurable);
   }
-  defineValue(F, PropertyKey(u"prototype"), Value(prototype), writablePrototype ? Attr::Writable : Attr::None);
+  defineValue(F, PropertyKey(keys().prototype), Value(prototype), writablePrototype ? Attr::Writable : Attr::None);
 }
 
 // 10.2.6 MakeClassConstructor
@@ -261,7 +275,7 @@ void SetFunctionName(Object* F, Value name, std::u16string_view prefix) {
     text = newString(std::move(prefixed));
   }
   if (auto* builtin = F->as<BuiltinFunction>()) builtin->initialName = Value(text);
-  defineValue(F, PropertyKey(u"name"), Value(text), Attr::Configurable);
+  defineValue(F, PropertyKey(keys().name), Value(text), Attr::Configurable);
 }
 
 // 10.2.8 DefineMethodProperty (private methods are handled by the class evaluator)
@@ -335,9 +349,9 @@ void AddLegacyFunctionProperties(ECMAScriptFunction* F) {
   Object* argumentsGetter = realm->intrinsic(Intrinsic::LegacyArgumentsGetter);
   Object* callerGetter = realm->intrinsic(Intrinsic::LegacyCallerGetter);
   if (!argumentsGetter || !callerGetter) return;  // a function made while the realm's built-ins are installed
-  (void)F->DefineOwnProperty(PropertyKey(u"arguments"),
+  (void)F->DefineOwnProperty(PropertyKey(keys().arguments),
                              PropertyDescriptor::accessor(Value(argumentsGetter), Value::undefined(), Attr::None));
-  (void)F->DefineOwnProperty(PropertyKey(u"caller"),
+  (void)F->DefineOwnProperty(PropertyKey(keys().caller),
                              PropertyDescriptor::accessor(Value(callerGetter), Value::undefined(), Attr::None));
 }
 
@@ -358,7 +372,7 @@ void finishFunctionObject(ECMAScriptFunction* F, const ast::Function* function) 
     Intrinsic prototypeId =
         function->async ? Intrinsic::AsyncGeneratorPrototype : Intrinsic::GeneratorPrototype;
     Object* prototype = OrdinaryObjectCreate(realm->intrinsic(prototypeId));
-    defineValue(F, PropertyKey(u"prototype"), Value(prototype), Attr::Writable);
+    defineValue(F, PropertyKey(keys().prototype), Value(prototype), Attr::Writable);
     return;
   }
   if (function->async || function->isArrow() || function->kind != ast::FunctionKind::Normal) return;
@@ -417,7 +431,7 @@ Result<ECMAScriptFunction*> DefineMethod(const ast::Function* function, Object* 
     Intrinsic prototypeId =
         function->async ? Intrinsic::AsyncGeneratorPrototype : Intrinsic::GeneratorPrototype;
     Object* instancePrototype = OrdinaryObjectCreate(realm->intrinsic(prototypeId));
-    defineValue(closure, PropertyKey(u"prototype"), Value(instancePrototype), Attr::Writable);
+    defineValue(closure, PropertyKey(keys().prototype), Value(instancePrototype), Attr::Writable);
   }
   return closure;
 }
@@ -496,12 +510,13 @@ const InstantiationPlan* findPlan(const ECMAScriptFunction* func) {
 
 // After the general steps ran for a function the fast path applies to: its plan, from env's bindings.
 void recordPlan(const ECMAScriptFunction* func, DeclarativeEnvironment* env, bool argumentsObjectNeeded) {
-  auto* plan = new InstantiationPlan{func->strict, func->thisMode, env->bindings(),
+  const DeclarativeEnvironment::BindingList& bindings = env->bindings();
+  auto* plan = new InstantiationPlan{func->strict, func->thisMode, {bindings.begin(), bindings.end()},
                                      uint32_t(func->function->parameterNames.size()), argumentsObjectNeeded,
                                      0, {}};
   for (uint32_t i = 0; i < plan->parameterCount; i++) plan->bindings[i].value = Value::empty();
   if (argumentsObjectNeeded) {
-    plan->argumentsSlot = env->slotOf(env->find(atom(u"arguments")));
+    plan->argumentsSlot = env->slotOf(env->find(keys().arguments));
     plan->bindings[plan->argumentsSlot].value = Value::empty();
   }
   for (const ast::FunctionDeclaration* f : func->function->functionsToInitialize) {
@@ -582,7 +597,7 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
     } else {
       ao = CreateMappedArgumentsObject(func, function->parameterNames, args, env);
     }
-    String* argumentsName = atom(u"arguments");
+    String* argumentsName = keys().arguments;
     if (strict) {
       TRY(declEnv->CreateImmutableBinding(argumentsName, false));
     } else {
@@ -628,7 +643,7 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
   auto* varDeclEnv = static_cast<DeclarativeEnvironment*>(varEnv);
   for (ast::FunctionDeclaration* f : code->annexBFunctions) {
     String* F = identifierName(f->id);
-    if (F == atom(u"arguments")) continue;  // never hoisted over the arguments binding
+    if (F == keys().arguments) continue;  // never hoisted over the arguments binding
     if (!containsName(instantiatedVarNames, F)) {
       TRY(varDeclEnv->CreateMutableBinding(F, false));
       TRY(varDeclEnv->InitializeBinding(F, Value::undefined()));
