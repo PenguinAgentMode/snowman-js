@@ -31,7 +31,7 @@ namespace snowman {
   X(IntlNumberFormatPrototype) X(IntlPluralRules) X(IntlPluralRulesPrototype) X(IntlRelativeTimeFormat)          \
   X(IntlRelativeTimeFormatPrototype) X(IntlSegmenter) X(IntlSegmenterPrototype) X(IntlSegmentsPrototype)         \
   X(IntlSegmentIteratorPrototype)                                                                                \
-  X(JSON) X(Map) X(MapPrototype) X(MapIteratorPrototype) X(Math) X(Number) X(NumberPrototype) X(Object)         \
+  X(JSON) X(LegacyArgumentsGetter) X(LegacyCallerGetter) X(Map) X(MapPrototype) X(MapIteratorPrototype) X(Math) X(Number) X(NumberPrototype) X(Object)         \
   X(ObjectPrototype) X(parseFloat) X(parseInt) X(Promise) X(PromisePrototype) X(Proxy) X(RangeError)            \
   X(RangeErrorPrototype) X(ReferenceError) X(ReferenceErrorPrototype) X(Reflect) X(RegExp) X(RegExpPrototype)   \
   X(RegExpStringIteratorPrototype) X(Set) X(SetPrototype) X(SetIteratorPrototype) X(ShadowRealm)            \

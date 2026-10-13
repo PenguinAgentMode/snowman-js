@@ -1,6 +1,8 @@
 // ECMAScript function objects (10.2): [[Call]], [[Construct]], creation, and FunctionDeclarationInstantiation.
 #include "interp/function.h"
 
+#include <typeinfo>
+
 #include "interp/dispose.h"
 #include "interp/interpreter.h"
 #include "runtime/builtins.h"
@@ -109,6 +111,7 @@ Result<Value> ECMAScriptFunction::Call(Value thisArgument, Args args) {
   }
   InterpContext calleeContext;
   PrepareForOrdinaryCall(this, Value::undefined(), calleeContext);
+  calleeContext.args = args;
   ContextScope scope(&calleeContext);
   if (isClassConstructor) return ThrowTypeError("Class constructor cannot be invoked without 'new'");
   OrdinaryCallBindThis(this, calleeContext, thisArgument);
@@ -130,6 +133,7 @@ Result<Object*> ECMAScriptFunction::Construct(Args args, Object* newTarget) {
   if (!derived) thisArgument = TRY(OrdinaryCreateFromConstructor<Object>(newTarget, Intrinsic::ObjectPrototype));
   InterpContext calleeContext;
   PrepareForOrdinaryCall(this, Value(newTarget), calleeContext);
+  calleeContext.args = args;
   auto* constructorEnv = static_cast<FunctionEnvironment*>(calleeContext.lexicalEnvironment);
   Result<Value> result = Value::undefined();
   {
@@ -266,10 +270,74 @@ Result<void> DefineMethodProperty(Object* homeObject, Value key, Object* closure
   return DefinePropertyOrThrow(homeObject, propertyKey, PropertyDescriptor::data(Value(closure), attrs));
 }
 
+namespace {
+
+// The legacy f.arguments and f.caller, an extension 17.1 allows on non-strict functions (SpiderMonkey and V8
+// have it): own accessors whose shared getters read the execution context stack. The most recent active call of
+// f gives f.arguments (a fresh arguments object over that call's argument list) and f.caller (the function that
+// made the call, eval code skipped). 17.1 forbids exposing a strict function: a caller that is script code, a
+// built-in, or a strict, generator or async function reads as null, as does either property while f isn't running.
+ECMAScriptFunction* legacyFunction(Value v) {
+  auto* F = v.isObject() ? v.asObject()->as<ECMAScriptFunction>() : nullptr;
+  if (!F || F->strict || F->codeKind != CodeKind::Function || F->isClassConstructor) return nullptr;
+  if (F->isAsync() || F->isGenerator() || F->function->isArrow() || F->function->kind != ast::FunctionKind::Normal)
+    return nullptr;
+  return F;
+}
+
+InterpContext* asInterp(ExecutionContext* context) {
+  return context && typeid(*context) == typeid(InterpContext) ? static_cast<InterpContext*>(context) : nullptr;
+}
+
+InterpContext* activeCall(Value thisValue) {
+  ECMAScriptFunction* F = legacyFunction(thisValue);
+  if (!F) return nullptr;
+  for (ExecutionContext* context = vm().running; context; context = context->previous) {
+    if (context->function == F) return asInterp(context);
+  }
+  return nullptr;
+}
+
+Result<Value> LegacyArgumentsGetter(NativeCall& call) {
+  InterpContext* active = activeCall(call.thisValue);
+  if (!active) return Value::null();
+  auto* F = static_cast<ECMAScriptFunction*>(active->function);
+  return Value(CreateMappedArgumentsObject(F, {}, active->args, active->variableEnvironment));
+}
+
+Result<Value> LegacyCallerGetter(NativeCall& call) {
+  InterpContext* active = activeCall(call.thisValue);
+  if (!active) return Value::null();
+  ExecutionContext* context = active->previous;
+  while (asInterp(context) && asInterp(context)->isEval) context = context->previous;
+  auto* caller = context && context->function ? context->function->as<ECMAScriptFunction>() : nullptr;
+  if (!caller || caller->strict || caller->codeKind != CodeKind::Function || caller->isAsync() || caller->isGenerator())
+    return Value::null();
+  return Value(caller);
+}
+
+void installLegacyFunctionProperties(Realm& realm) {
+  realm.setIntrinsic(Intrinsic::LegacyArgumentsGetter,
+                     createBuiltinFunction(realm, LegacyArgumentsGetter, 0, PropertyKey(u"arguments"), false, nullptr,
+                                           u"get"));
+  realm.setIntrinsic(Intrinsic::LegacyCallerGetter, createBuiltinFunction(realm, LegacyCallerGetter, 0,
+                                                                          PropertyKey(u"caller"), false, nullptr, u"get"));
+}
+
+}  // namespace
+
+SNOWMAN_BUILTIN(legacyFunctionProperties, kOrderDefault, installLegacyFunctionProperties);
+
 void AddLegacyFunctionProperties(ECMAScriptFunction* F) {
   if (F->strict) return;
-  defineValue(F, PropertyKey(u"arguments"), Value::undefined(), Attr::None);
-  defineValue(F, PropertyKey(u"caller"), Value::undefined(), Attr::None);
+  Realm* realm = F->realm();
+  Object* argumentsGetter = realm->intrinsic(Intrinsic::LegacyArgumentsGetter);
+  Object* callerGetter = realm->intrinsic(Intrinsic::LegacyCallerGetter);
+  if (!argumentsGetter || !callerGetter) return;  // a function made while the realm's built-ins are installed
+  (void)F->DefineOwnProperty(PropertyKey(u"arguments"),
+                             PropertyDescriptor::accessor(Value(argumentsGetter), Value::undefined(), Attr::None));
+  (void)F->DefineOwnProperty(PropertyKey(u"caller"),
+                             PropertyDescriptor::accessor(Value(callerGetter), Value::undefined(), Attr::None));
 }
 
 Object* functionPrototypeFor(Realm* realm, const ast::Function* function) {

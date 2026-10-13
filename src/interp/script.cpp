@@ -110,6 +110,7 @@ Result<Value> PerformEval(Value x, bool strictCaller, bool direct) {
   evalContext.lexicalEnvironment = lexEnv;
   evalContext.privateEnvironment = privateEnv;
   evalContext.strict = strictEval;
+  evalContext.isEval = true;
   if (caller) {
     // Eval code inside a generator / async body suspends with it (await / yield are not allowed in eval
     // code itself, but the context must still say which body it belongs to).
