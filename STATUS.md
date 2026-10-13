@@ -24,6 +24,14 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 - Known ceiling: ~104 module tests import their own file and can't pass under the current runner
   (src/interp/module_test_exclusions.txt; decision with the supervisor).
 
+## Gate baseline
+
+- Until memcap's gated ES-core run lands: `git show origin/results:results/7e957a05a/es-core-estimated.json >
+  /tmp/baseline.json` (43,059 passing files: f294bec1b's passing files plus its failures that pass on 7e957a05a in
+  survey's re-run). Check: `node tools/lead/gate.mjs /tmp/baseline.json /tmp/core.jsonl` (AGENTS.md).
+- Then: memcap's run at its branch sha becomes `results/<sha>.json` on main, the first measured baseline since
+  f294bec1b, followed by the first `tools/lead/measure.sh suite` run on main.
+
 ## Survey interim (main 7e957a05a)
 
 - Extra set (full minus ES-core): 10,311 files, 1,709 pass. Temporal 0 / 4,605; intl402 25 / 3,382 (2,029 are
