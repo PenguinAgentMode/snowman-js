@@ -157,6 +157,7 @@ Object* GetGlobalObject();
 
 // The atom for an identifier node's name (cached on the node).
 String* identifierName(const ast::Identifier* id);
+// The atom for a name held by the AST (cached by address: never pass a string that does not live forever).
 String* atomFor(const std::u16string& name);
 
 // Evaluation followed by GetValue.
