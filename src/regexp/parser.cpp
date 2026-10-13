@@ -10,7 +10,9 @@ namespace snowman::regexp {
 namespace {
 
 constexpr char32_t kEnd = 0xFFFFFFFF;  // peek() past the end
-constexpr int kMaxDepth = 2000;        // nesting of groups and v-mode classes
+// Nested v-mode classes are parsed (and evaluated by the compiler) recursively: their nesting is capped. Groups
+// nest without recursion.
+constexpr int kMaxClassDepth = 64;
 
 bool isDecimalDigit(char32_t c) { return c >= '0' && c <= '9'; }
 bool isOctalDigit(char32_t c) { return c >= '0' && c <= '7'; }
@@ -229,35 +231,51 @@ class Parser {
 
   // ---- Disjunction, Alternative, Term ----
 
+  // The Pattern's Disjunction. Groups nest through an explicit stack of frames, not recursion, so the C stack
+  // doesn't grow with the nesting.
   Node* parseDisjunction() {
-    if (++depth_ > kMaxDepth) return failNode("Regular expression too large");
+    std::vector<GroupFrame> stack(1);
+    stack.back().sequence = make(Node::Kind::Sequence);
     altPath_.emplace_back(disjunctions_++, 0);
-    std::vector<Node*> alternatives;
-    Node* alt = parseAlternative();
-    while (alt) {
-      alternatives.push_back(alt);
-      if (peek() != '|') break;
-      pos_++;
-      altPath_.back().second++;
-      alt = parseAlternative();
+    for (;;) {
+      if (atEnd() || peek() == ')') {
+        if (atEnd() && stack.size() > 1) return failNode("Unterminated group");
+        if (!atEnd() && stack.size() == 1) return failNode("Unmatched ')'");
+        GroupFrame& top = stack.back();
+        top.alternatives.push_back(top.sequence);
+        Node* body = top.alternatives[0];
+        if (top.alternatives.size() > 1) {
+          body = make(Node::Kind::Disjunction);
+          body->children = std::move(top.alternatives);
+        }
+        altPath_.pop_back();
+        if (stack.size() == 1) return body;
+        pos_++;  // the )
+        GroupFrame done = std::move(stack.back());
+        stack.pop_back();
+        mods_ = done.savedMods;
+        done.group->children.push_back(body);
+        done.group->lastCapture = captureCount_ + 1;
+        Node* term = parseQuantifier(done.group, done.quantifiable, done.capturesBefore);
+        if (!term) return nullptr;
+        stack.back().sequence->children.push_back(term);
+      } else if (peek() == '|') {
+        pos_++;
+        GroupFrame& top = stack.back();
+        top.alternatives.push_back(top.sequence);
+        top.sequence = make(Node::Kind::Sequence);
+        altPath_.back().second++;
+      } else if (peek() == '(') {
+        GroupFrame f;
+        if (!openGroup(&f)) return nullptr;
+        stack.push_back(std::move(f));
+        altPath_.emplace_back(disjunctions_++, 0);
+      } else {
+        Node* term = parseTerm();
+        if (!term) return nullptr;
+        stack.back().sequence->children.push_back(term);
+      }
     }
-    altPath_.pop_back();
-    depth_--;
-    if (!alt) return nullptr;
-    if (alternatives.size() == 1) return alternatives[0];
-    Node* n = make(Node::Kind::Disjunction);
-    n->children = std::move(alternatives);
-    return n;
-  }
-
-  Node* parseAlternative() {
-    Node* seq = make(Node::Kind::Sequence);
-    while (!atEnd() && peek() != '|' && peek() != ')') {
-      Node* term = parseTerm();
-      if (!term) return nullptr;
-      seq->children.push_back(term);
-    }
-    return seq;
   }
 
   Node* parseTerm() {
@@ -280,9 +298,6 @@ class Parser {
         } else {
           atom = parseAtomEscape();
         }
-        break;
-      case '(':
-        atom = parseGroup(&quantifiable);
         break;
       case '[':
         atom = parseClass();
@@ -410,7 +425,20 @@ class Parser {
 
   // ---- groups ----
 
-  Node* parseGroup(bool* quantifiable) {
+  // A group being parsed: the main loop in parseDisjunction keeps a stack of them instead of recursing.
+  struct GroupFrame {
+    Node* group = nullptr;  // nullptr: the Pattern itself
+    bool quantifiable = true;
+    uint32_t capturesBefore = 0;  // for the quantifier's ClearCaptures range, which includes the group
+    uint8_t savedMods = 0;        // restored at the )
+    std::vector<Node*> alternatives;
+    Node* sequence = nullptr;
+  };
+
+  // The opener of a group at the `(`, through `(`, `(?:`, `(?=`, `(?<=`, `(?<name>` or `(?ims-ims:`.
+  bool openGroup(GroupFrame* f) {
+    f->capturesBefore = captureCount_;
+    f->savedMods = mods_;
     Node* n;
     if (peek(1) == '?') {
       char32_t c2 = peek(2);
@@ -418,18 +446,18 @@ class Parser {
         pos_ += 3;
         n = make(Node::Kind::Lookahead);
         n->negate = c2 == '!';
-        *quantifiable = !u_;  // Annex B: QuantifiableAssertion
+        f->quantifiable = !u_;  // Annex B: QuantifiableAssertion
       } else if (c2 == '<' && (peek(3) == '=' || peek(3) == '!')) {
         n = make(Node::Kind::Lookbehind);
         n->negate = peek(3) == '!';
         pos_ += 4;
-        *quantifiable = false;
+        f->quantifiable = false;
       } else if (c2 == '<') {
         pos_ += 3;
         std::u32string name;
-        if (!parseGroupName(&name)) return nullptr;
+        if (!parseGroupName(&name)) return false;
         for (const NamedGroup& g : namedGroups_) {
-          if (g.name == name && mightBothParticipate(g.path, altPath_)) return failNode("Duplicate capture group name");
+          if (g.name == name && mightBothParticipate(g.path, altPath_)) return fail("Duplicate capture group name");
         }
         namedGroups_.push_back({name, altPath_});
         n = make(Node::Kind::Group);
@@ -438,7 +466,8 @@ class Parser {
         p_.groupNames.push_back(n->name);
       } else {
         pos_ += 2;
-        return parseModifierGroup();
+        if (!parseModifiers()) return false;
+        n = make(Node::Kind::NonCapturing);
       }
     } else {
       pos_++;
@@ -447,17 +476,14 @@ class Parser {
       p_.groupNames.emplace_back();
     }
     n->firstCapture = captureCount_ + 1;
-    Node* body = parseDisjunction();
-    if (!body) return nullptr;
-    if (peek() != ')') return failNode("Unterminated group");
-    pos_++;
-    n->lastCapture = captureCount_ + 1;
-    n->children.push_back(body);
-    return n;
+    f->group = n;
+    f->sequence = make(Node::Kind::Sequence);
+    return true;
   }
 
-  // (?ims-ims: Disjunction ) after the `(?`; (?: is the case with no modifiers.
-  Node* parseModifierGroup() {
+  // RegularExpressionModifiers (- RegularExpressionModifiers)? `:` after the `(?`, applied to mods_ for the body;
+  // `(?:` is the case with none.
+  bool parseModifiers() {
     uint8_t add = 0;
     uint8_t remove = 0;
     bool dash = false;
@@ -466,7 +492,7 @@ class Parser {
       uint8_t bit = c == 'i' ? kIgnoreCase : c == 'm' ? kMultiline : c == 's' ? kDotAll : 0;
       if (bit) {
         uint8_t& set = dash ? remove : add;
-        if (set & bit) return failNode("Repeated flag in modifiers");
+        if (set & bit) return fail("Repeated flag in modifiers");
         set |= bit;
       } else if (c == '-' && !dash) {
         dash = true;
@@ -474,22 +500,14 @@ class Parser {
         pos_++;
         break;
       } else {
-        return failNode("Invalid group");
+        return fail("Invalid group");
       }
       pos_++;
     }
-    if (dash && !add && !remove) return failNode("Invalid group");
-    if (add & remove) return failNode("Repeated flag in modifiers");
-    uint8_t saved = mods_;
+    if (dash && !add && !remove) return fail("Invalid group");
+    if (add & remove) return fail("Repeated flag in modifiers");
     mods_ = static_cast<uint8_t>((mods_ | add) & ~remove);
-    Node* body = parseDisjunction();
-    mods_ = saved;
-    if (!body) return nullptr;
-    if (peek() != ')') return failNode("Unterminated group");
-    pos_++;
-    Node* n = make(Node::Kind::NonCapturing);
-    n->children.push_back(body);
-    return n;
+    return true;
   }
 
   static bool mightBothParticipate(const AltPath& a, const AltPath& b) {
@@ -707,7 +725,7 @@ class Parser {
   }
 
   // \p{...} / \P{...} after the p.
-  bool parsePropertyEscape(ClassItem* item, bool negated) {
+  [[gnu::noinline]] bool parsePropertyEscape(ClassItem* item, bool negated) {
     if (peek() != '{') return fail("Invalid property name");
     pos_++;
     std::string name;
@@ -845,7 +863,7 @@ class Parser {
 
   // CharacterClass / NestedClass with the v flag, at the `[`.
   const ClassNode* parseClassSetClass() {
-    if (++depth_ > kMaxDepth) return failNode("Regular expression too large");
+    if (++depth_ > kMaxClassDepth) return failNode("Regular expression too large");
     pos_++;
     ClassNode& cls = p_.classes.emplace_back();
     if (peek() == '^') {
@@ -969,7 +987,7 @@ class Parser {
     return true;
   }
 
-  std::optional<char32_t> parseClassSetCharacter() {
+  [[gnu::noinline]] std::optional<char32_t> parseClassSetCharacter() {
     char32_t c = peek();
     if (c == '\\') {
       pos_++;
@@ -998,7 +1016,7 @@ class Parser {
   }
 
   // \q{...} after the `{`.
-  bool parseClassStringDisjunction(ClassItem* item) {
+  [[gnu::noinline]] bool parseClassStringDisjunction(ClassItem* item) {
     item->kind = ClassItem::Kind::Strings;
     std::u32string current;
     for (;;) {
