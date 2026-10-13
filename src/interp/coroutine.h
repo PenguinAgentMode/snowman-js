@@ -68,6 +68,9 @@ class Coroutine {
   const char* resumerStackLimit_ = nullptr;
   Coroutine* resumerCoroutine_ = nullptr;
   size_t usedBelow_ = 0;  // while running: the stack the running coroutines below this one use
+  // AddressSanitizer builds: the resumer's stack, as ASan's fiber annotations report it (coroutine.cpp).
+  const void* asanResumerBottom_ = nullptr;
+  size_t asanResumerSize_ = 0;
   bool started_ = false;
   bool finished_ = false;
   bool running_ = false;

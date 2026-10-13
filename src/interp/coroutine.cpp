@@ -19,6 +19,15 @@
 #include "runtime/heap.h"
 #include "runtime/vm.h"
 
+#if defined(__SANITIZE_ADDRESS__)
+#include <sanitizer/asan_interface.h>
+#include <sanitizer/common_interface_defs.h>
+
+// The collector finds its roots on the real stacks: ASan's fake stacks (detect_stack_use_after_return) would hide
+// them, and the cells left at exit are not leaks. ASAN_OPTIONS can still override these.
+extern "C" const char* __asan_default_options() { return "detect_stack_use_after_return=0:detect_leaks=0"; }
+#endif
+
 // snowman_coroutine_switch(save, next): push the callee-saved registers, store the stack pointer in *save,
 // switch to the stack `next` and pop its registers. A new stack starts in snowman_coroutine_start with the
 // coroutine in rbx.
@@ -98,6 +107,19 @@ const void* threadStackHigh() {
   return high;
 }
 
+// ASan's fiber annotations around a switch: before it, the stack switched to (a null fakeStack: the stack being left is
+// done); after it, the stack switched from. Nothing in other builds.
+void asanStartSwitch([[maybe_unused]] void** fakeStack, [[maybe_unused]] const void* bottom, [[maybe_unused]] size_t size) {
+#if defined(__SANITIZE_ADDRESS__)
+  __sanitizer_start_switch_fiber(fakeStack, bottom, size);
+#endif
+}
+void asanFinishSwitch([[maybe_unused]] void* fakeStack, [[maybe_unused]] const void** bottomOld, [[maybe_unused]] size_t* sizeOld) {
+#if defined(__SANITIZE_ADDRESS__)
+  __sanitizer_finish_switch_fiber(fakeStack, bottomOld, sizeOld);
+#endif
+}
+
 // An address below the caller's frame: everything the caller has spilled lies above it.
 [[gnu::noinline]] const void* approximateStackPointer() { return __builtin_frame_address(0); }
 
@@ -137,6 +159,10 @@ bool Coroutine::mapStack() {
   }
   stackLow_ = mapping_ + guard;
   stackHigh_ = stackLow_ + stackSize_;
+#if defined(__SANITIZE_ADDRESS__)
+  // A reused stack keeps the poisoned redzones of the frames that never returned (the trampoline's).
+  if (stackSize_ == kDefaultStackSize) ASAN_UNPOISON_MEMORY_REGION(stackLow_, stackSize_);
+#endif
   return true;
 }
 
@@ -164,10 +190,12 @@ void Coroutine::releaseStack() {
 }
 
 void Coroutine::trampoline(Coroutine* self) {
+  asanFinishSwitch(nullptr, &self->asanResumerBottom_, &self->asanResumerSize_);
   self->entry_(self, self->data_);
   self->finished_ = true;
   heap().removeStack(self->registeredLow_);
   self->registeredLow_ = nullptr;
+  asanStartSwitch(nullptr, self->asanResumerBottom_, self->asanResumerSize_);
   snowman_coroutine_switch(&self->selfSp_, self->resumerSp_);
   std::abort();  // never resumed
 }
@@ -226,7 +254,10 @@ bool Coroutine::resume() {
   gCurrent = this;
   running_ = true;
 
+  void* fakeStack = nullptr;
+  asanStartSwitch(&fakeStack, stackLow_, stackSize_);
   snowman_coroutine_switch(&resumerSp_, selfSp_);
+  asanFinishSwitch(fakeStack, nullptr, nullptr);
 
   running_ = false;
   gCurrent = resumerCoroutine_;
@@ -246,8 +277,11 @@ void Coroutine::suspend() {
   heap().removeStack(registeredLow_);
   registeredLow_ = static_cast<const char*>(sp) - 128;  // below the registers the switch pushes
   heap().addStack(registeredLow_, stackHigh_);
+  void* fakeStack = nullptr;
+  asanStartSwitch(&fakeStack, asanResumerBottom_, asanResumerSize_);
   snowman_coroutine_switch(&selfSp_, resumerSp_);
-  // resume() registered the whole stack again.
+  // Resumed, maybe from another stack. resume() registered the whole stack again.
+  asanFinishSwitch(fakeStack, &asanResumerBottom_, &asanResumerSize_);
 }
 
 }  // namespace snowman::interp
