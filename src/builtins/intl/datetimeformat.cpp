@@ -3,6 +3,7 @@
 // time zones: UTC and offsets (named zones are accepted and canonicalized, formatted at offset 0 for now).
 #include <algorithm>
 #include <cmath>
+#include <unordered_map>
 
 #include "builtins/intl/hooks.h"
 #include "builtins/intl/intl.h"
@@ -27,7 +28,7 @@ struct AliasEntry {
 enum DateField {
   FMonthsFormatAbbr = 0, FDaysFormatAbbr = 6, FEraAbbr = 14, FDayPeriodsAbbr = 17, FDateFormats = 20, FTimeFormats = 21,
   FDateTimeFormats = 22, FAtTimeFormats = 23, FAvailable = 24, FAppendItems = 25, FZoneFormats = 26, FDayPeriodRules = 27,
-  FUtcNames = 28, FIntervals = 29, FFieldNames = 30
+  FUtcNames = 28, FIntervals = 29, FFieldNames = 30, FMonthPatterns = 31, FCyclicYearsAbbr = 32, FEraCodesAbbr = 35
 };
 
 template <size_t N>
@@ -42,6 +43,46 @@ std::u16string_view dateField(const std::string& locale, int field) {
   for (const std::string& c : data::lookupChain(locale))
     if (const char16_t* v = findEntry(kDateFields, c + suffix)) return v;
   return findEntry(kDateFields, suffix);
+}
+
+// The calendars a calendar's data inherits from (gen-date-data.mjs calendarChain); empty: the Gregorian data.
+std::vector<std::string_view> calendarChain(std::string_view calendar) {
+  if (calendar == "gregory" || calendar == "iso8601" || calendar.empty()) return {};
+  if (calendar == "chinese") return {"chinese"};
+  if (calendar == "dangi") return {"dangi", "chinese"};
+  if (calendar.starts_with("islamic-")) return {calendar, "islamic", "generic"};
+  if (calendar == "ethioaa") return {calendar, "ethiopic", "generic"};
+  return {calendar, "generic"};
+}
+bool gregorianData(std::string_view calendar) { return calendarChain(calendar).empty(); }
+
+// A field of a calendar's data, as gen-date-data.mjs simulates it: for each locale of the chain (the root last), the
+// calendar's chain, then that locale's Gregorian field. Memoized per locale, calendar and field.
+std::u16string_view calendarField(const std::string& locale, const std::string& calendar, int field) {
+  std::vector<std::string_view> calendars = calendarChain(calendar);
+  if (calendars.empty()) return dateField(locale, field);
+  static std::unordered_map<std::string, std::u16string_view> cache;
+  std::string id = locale + ' ' + calendar + ' ' + std::to_string(field);
+  if (auto it = cache.find(id); it != cache.end()) return it->second;
+  std::vector<std::string> chain = data::lookupChain(locale);
+  chain.emplace_back();
+  std::string suffix = "/" + std::to_string(field);
+  std::u16string_view found;
+  for (const std::string& l : chain) {
+    for (std::string_view c : calendars)
+      if (const char16_t* v = findEntry(kCalendarFields, std::string(c) + ":" + l + suffix)) {
+        found = v;
+        break;
+      }
+    if (found.data()) break;
+    if (field <= FFieldNames)
+      if (const char16_t* v = findEntry(kDateFields, l + suffix)) {
+        found = v;
+        break;
+      }
+  }
+  cache.emplace(std::move(id), found);
+  return found;
 }
 
 std::vector<std::u16string_view> items(std::u16string_view s) {
@@ -298,7 +339,7 @@ struct Available {
 
 // A locale's pattern generator data.
 struct Generator {
-  std::string locale;
+  std::string locale, calendar;
   std::vector<Available> available;
   std::vector<std::pair<std::u16string_view, std::u16string_view>> appendItems;
   std::u16string_view atTime[4];
@@ -307,17 +348,18 @@ struct Generator {
   char16_t defaultHourChar = u'h';
 };
 
-const Generator& generatorFor(const std::string& locale) {
+const Generator& generatorFor(const std::string& locale, const std::string& calendar) {
   static std::vector<std::unique_ptr<Generator>> cache;
   for (const auto& g : cache)
-    if (g->locale == locale) return *g;
+    if (g->locale == locale && g->calendar == calendar) return *g;
   auto g = std::make_unique<Generator>();
   g->locale = locale;
+  g->calendar = calendar;
   // ICU's canonical items (one per field), then the locale's availableFormats (replacing equal skeletons). Ties
   // in matching go to the candidate whose leading field is the larger one (year before weekday), as ICU's do.
   static const char16_t* const canonical[] = {u"G", u"y", u"Q", u"M", u"w", u"W", u"E", u"d", u"a", u"H", u"m", u"s", u"S", u"v"};
   for (const char16_t* c : canonical) g->available.push_back({skeletonOf(c), c, c});
-  for (std::u16string_view item : items(dateField(locale, FAvailable))) {
+  for (std::u16string_view item : items(calendarField(locale, calendar, FAvailable))) {
     size_t eq = item.find(u'=');
     if (eq == std::u16string_view::npos) continue;
     std::u16string_view key = item.substr(0, eq);
@@ -331,7 +373,7 @@ const Generator& generatorFor(const std::string& locale) {
     return int(kFieldCount);
   };
   std::stable_sort(g->available.begin(), g->available.end(), [&](const Available& a, const Available& b) { return rank(a) < rank(b); });
-  for (std::u16string_view item : items(dateField(locale, FAppendItems))) {
+  for (std::u16string_view item : items(calendarField(locale, calendar, FAppendItems))) {
     size_t eq = item.find(u'=');
     if (eq != std::u16string_view::npos) g->appendItems.emplace_back(item.substr(0, eq), item.substr(eq + 1));
   }
@@ -339,7 +381,7 @@ const Generator& generatorFor(const std::string& locale) {
   names.resize(12);
   // Era Year Quarter Month Week Weekday Day DayPeriod Hour Minute Second Fraction Zone
   g->fieldNames = {names[0], names[1], names[2], names[3], names[4], names[5], names[6], names[7], names[8], names[9], names[10], {}, names[11]};
-  std::vector<std::u16string_view> at = items(dateField(locale, FAtTimeFormats));
+  std::vector<std::u16string_view> at = items(calendarField(locale, calendar, FAtTimeFormats));
   for (int i = 0; i < 4 && i < int(at.size()); i++) g->atTime[i] = at[size_t(i)];
   std::string hc = data::defaultHourCycle(locale);
   g->defaultHourChar = hc == "h11" ? u'K' : hc == "h12" ? u'h' : hc == "h24" ? u'k' : u'H';
@@ -700,7 +742,7 @@ std::u16string zoneName(const DateTimeFormatObject& dtf, char16_t c, int count, 
 
 // The flexible day period of a time (CLDR dayPeriodRules; midnight is not used, as in ICU).
 std::u16string flexibleDayPeriod(const DateTimeFormatObject& dtf, const LocalTime& t, int width, bool hasMinute, bool hasSecond) {
-  std::vector<std::u16string_view> names = items(dateField(dtf.dataLocale, FDayPeriodsAbbr + (width == 5 ? 1 : width == 4 ? 2 : 0)));
+  std::vector<std::u16string_view> names = items(calendarField(dtf.dataLocale, dtf.calendar, FDayPeriodsAbbr + (width == 5 ? 1 : width == 4 ? 2 : 0)));
   names.resize(12);
   static const char16_t* const keys[] = {u"am", u"pm", u"midnight", u"noon", u"morning1", u"morning2", u"afternoon1", u"afternoon2",
                                          u"evening1", u"evening2", u"night1", u"night2"};
@@ -730,12 +772,65 @@ std::u16string flexibleDayPeriod(const DateTimeFormatObject& dtf, const LocalTim
   return std::u16string(t.hour < 12 ? names[0] : names[1]);
 }
 
+// The date of a local time in the format's calendar (CalendarISOToDate; the Gregorian calendar is proleptic).
+struct CalendarFields {
+  std::u16string era;     // the Temporal era code ("" for chinese and dangi)
+  int64_t eraYear, year;  // year: the arithmetic year (chinese, dangi: the related ISO year)
+  int month;              // ordinal
+  int monthNumber;        // of the month code
+  bool leap;              // the month code is a leap month (M04L)
+  int day;
+};
+
+CalendarFields calendarFieldsOf(const std::string& calendar, const LocalTime& t) {
+  if (gregorianData(calendar))
+    return {t.year > 0 ? u"ce" : u"bce", t.year > 0 ? t.year : 1 - t.year, t.year, t.month, t.month, false, t.day};
+  temporal::CalendarDate d =
+      temporal::CalendarISOToDate(builtins::toU16(calendar), temporal::ISODate{int32_t(t.year), int32_t(t.month), int32_t(t.day)});
+  CalendarFields f;
+  f.era = d.era.value_or(u"");
+  f.year = d.year;
+  f.eraYear = d.eraYear.value_or(d.year);
+  f.month = d.month;
+  f.monthNumber = (d.monthCode.size() >= 3) ? (d.monthCode[1] - u'0') * 10 + (d.monthCode[2] - u'0') : d.month;
+  f.leap = d.monthCode.size() > 3;
+  f.day = d.day;
+  return f;
+}
+
+bool lunisolarCycle(const std::string& calendar) { return calendar == "chinese" || calendar == "dangi"; }
+
+// A month's index into its calendar's month names (hebrew: CLDR order, 7-yeartype-leap last).
+size_t monthNameIndex(const std::string& calendar, const CalendarFields& f) {
+  if (calendar == "hebrew") {
+    if (f.monthNumber == 5 && f.leap) return 5;           // Adar I
+    if (f.monthNumber == 6) return f.month == 7 ? 13 : 6;  // Adar II in a leap year, Adar
+    return size_t(f.monthNumber < 6 ? f.monthNumber - 1 : f.monthNumber);
+  }
+  return size_t(f.monthNumber - 1);
+}
+
+// The era name of a Temporal era code in a width (abbreviated 0, wide 1, narrow 2).
+std::u16string eraName(const DateTimeFormatObject& dtf, const CalendarFields& f, int width) {
+  if (!gregorianData(dtf.calendar)) {
+    for (std::u16string_view item : items(calendarField(dtf.dataLocale, dtf.calendar, FEraCodesAbbr + width))) {
+      size_t eq = item.find(u'=');
+      if (eq != std::u16string_view::npos && item.substr(0, eq) == f.era) return std::u16string(item.substr(eq + 1));
+    }
+  }
+  // The Gregorian eras (and japanese bce/ce).
+  std::vector<std::u16string_view> eras = items(dateField(dtf.dataLocale, FEraAbbr + width));
+  eras.resize(2);
+  return std::u16string(eras[f.era == u"bce" ? 0 : 1]);
+}
+
 // Formats `pattern` at an instant; plain Temporal values (utc) are formatted at offset zero with no zone.
 void formatPatternInto(std::vector<DatePart>& out, const DateTimeFormatObject& dtf, std::u16string_view pattern, double epochMs, int source,
                        bool utc = false) {
   int64_t offset = utc ? 0 : offsetMsAt(dtf, epochMs);
   double local = epochMs + double(offset);
   LocalTime t = toLocalTime(local);
+  CalendarFields cf = calendarFieldsOf(dtf.calendar, t);
   std::vector<Token> tokens = parsePattern(pattern);
   bool hasMinute = false, hasSecond = false;
   for (const Token& tok : tokens) {
@@ -756,34 +851,56 @@ void formatPatternInto(std::vector<DatePart>& out, const DateTimeFormatObject& d
     }
     int n = tok.count;
     switch (tok.ch) {
-      case u'G': {
-        int index = t.year > 0 ? 1 : 0;
-        int field = FEraAbbr + (n == 4 ? 1 : n == 5 ? 2 : 0);
-        std::vector<std::u16string_view> eras = items(dateField(dtf.dataLocale, field));
-        eras.resize(2);
-        out.push_back({u"era", std::u16string(eras[size_t(index)]), source});
+      case u'G':
+        // chinese and dangi have no eras (their patterns have no G).
+        if (!cf.era.empty()) out.push_back({u"era", eraName(dtf, cf, n == 4 ? 1 : n == 5 ? 2 : 0), source});
         break;
-      }
-      case u'y': case u'Y': case u'u': case u'r': {
-        int64_t year = tok.ch == u'y' || tok.ch == u'Y' ? (t.year > 0 ? t.year : 1 - t.year) : t.year;
-        if (n == 2) out.push_back({u"year", digitsOf(nu, ((year % 100) + 100) % 100, 2), source});
-        else out.push_back({u"year", digitsOf(nu, year, n), source});
+      case u'y': case u'Y': case u'u': case u'r': case u'U': {
+        // y: the era year (chinese, dangi: the year of the 60-year cycle); u: the arithmetic year; r: the related
+        // Gregorian year; U: the cyclic year name.
+        bool cycle = lunisolarCycle(dtf.calendar);
+        int64_t cycleIndex = ((cf.year - 4) % 60 + 60) % 60;
+        if (tok.ch == u'U') {
+          std::vector<std::u16string_view> names = items(calendarField(dtf.dataLocale, dtf.calendar, FCyclicYearsAbbr + (n == 4 ? 2 : n == 5 ? 1 : 0)));
+          if (names.size() >= 60) {
+            out.push_back({u"yearName", std::u16string(names[size_t(cycleIndex)]), source});
+            break;
+          }
+        }
+        int64_t year = tok.ch == u'u' ? cf.year : tok.ch == u'r' ? (cycle ? cf.year : t.year) : cycle ? cycleIndex + 1 : cf.eraYear;
+        const char16_t* type = tok.ch == u'r' ? u"relatedYear" : tok.ch == u'U' ? u"yearName" : u"year";
+        if (n == 2) out.push_back({type, digitsOf(nu, ((year % 100) + 100) % 100, 2), source});
+        else out.push_back({type, digitsOf(nu, year, n), source});
         break;
       }
       case u'M': case u'L': {
+        bool cycle = lunisolarCycle(dtf.calendar);
+        std::u16string value;
         if (n <= 2) {
-          out.push_back({u"month", digitsOf(nu, t.month, n), source});
+          // hebrew numbers its months in order (Adar II is 7 in a leap year); chinese and dangi by their month code.
+          value = digitsOf(nu, cycle ? cf.monthNumber : cf.month, n);
         } else {
           int base = tok.ch == u'L' ? 3 : 0;
-          int field = FMonthsFormatAbbr + base + (n == 5 ? 1 : n == 4 ? 2 : 0);
-          std::vector<std::u16string_view> names = items(dateField(dtf.dataLocale, field));
-          names.resize(12);
-          out.push_back({u"month", std::u16string(names[size_t(t.month - 1)]), source});
+          int width = n == 5 ? 1 : n == 4 ? 2 : 0;
+          std::vector<std::u16string_view> names = items(calendarField(dtf.dataLocale, dtf.calendar, FMonthsFormatAbbr + base + width));
+          size_t index = monthNameIndex(dtf.calendar, cf);
+          if (index < names.size()) value = names[index];
+          if (cf.leap && cycle) {
+            std::vector<std::u16string_view> leap = items(calendarField(dtf.dataLocale, dtf.calendar, FMonthPatterns));
+            leap.resize(7);
+            if (!leap[size_t(base + width)].empty()) value = formatPattern(leap[size_t(base + width)], value, {});
+          }
         }
+        if (n <= 2 && cf.leap && cycle) {
+          std::vector<std::u16string_view> leap = items(calendarField(dtf.dataLocale, dtf.calendar, FMonthPatterns));
+          leap.resize(7);
+          if (!leap[6].empty()) value = formatPattern(leap[6], value, {});
+        }
+        out.push_back({u"month", value, source});
         break;
       }
       case u'd':
-        out.push_back({u"day", digitsOf(nu, t.day, n), source});
+        out.push_back({u"day", digitsOf(nu, cf.day, n), source});
         break;
       case u'E': case u'c': case u'e': {
         if (tok.ch != u'E' && n <= 2) {
@@ -792,13 +909,13 @@ void formatPatternInto(std::vector<DatePart>& out, const DateTimeFormatObject& d
         }
         int base = tok.ch == u'c' ? 4 : 0;
         int width = n == 4 ? 3 : n == 5 ? 1 : n == 6 ? 2 : 0;
-        std::vector<std::u16string_view> names = items(dateField(dtf.dataLocale, FDaysFormatAbbr + base + width));
+        std::vector<std::u16string_view> names = items(calendarField(dtf.dataLocale, dtf.calendar, FDaysFormatAbbr + base + width));
         names.resize(7);
         out.push_back({u"weekday", std::u16string(names[size_t(t.weekday)]), source});
         break;
       }
       case u'a': case u'b': {
-        std::vector<std::u16string_view> names = items(dateField(dtf.dataLocale, FDayPeriodsAbbr + (n == 5 ? 1 : n == 4 ? 2 : 0)));
+        std::vector<std::u16string_view> names = items(calendarField(dtf.dataLocale, dtf.calendar, FDayPeriodsAbbr + (n == 5 ? 1 : n == 4 ? 2 : 0)));
         names.resize(4);
         std::u16string_view name = t.hour < 12 ? names[0] : names[1];
         if (tok.ch == u'b' && t.hour == 12 && t.minute == 0 && t.second == 0 && !names[3].empty()) name = names[3];
@@ -961,15 +1078,15 @@ Result<DateTimeFormatObject*> CreateDateTimeFormat(Object* newTarget, Value loca
   TRY(GetStringOption(options, u"formatMatcher", {"basic", "best fit"}, "best fit"));
   dtf->dateStyle = TRY(GetStringOption(options, u"dateStyle", {"full", "long", "medium", "short"}));
   dtf->timeStyle = TRY(GetStringOption(options, u"timeStyle", {"full", "long", "medium", "short"}));
-  const Generator& g = generatorFor(r.dataLocale);
+  const Generator& g = generatorFor(r.dataLocale, dtf->calendar);
   std::u16string pattern;
   if (dtf->dateStyle || dtf->timeStyle) {
     if (hasExplicitFormatComponents) return ThrowTypeError("Intl.DateTimeFormat: dateStyle/timeStyle cannot be combined with components");
     if (required == DateRequired2::Date && dtf->timeStyle) return ThrowTypeError("Intl.DateTimeFormat: timeStyle is not allowed here");
     if (required == DateRequired2::Time && dtf->dateStyle) return ThrowTypeError("Intl.DateTimeFormat: dateStyle is not allowed here");
     std::u16string date, time;
-    if (dtf->dateStyle) date = std::u16string(items(dateField(r.dataLocale, FDateFormats))[size_t(styleIndex(*dtf->dateStyle))]);
-    if (dtf->timeStyle) time = applyHourCycle(g, items(dateField(r.dataLocale, FTimeFormats))[size_t(styleIndex(*dtf->timeStyle))], hc);
+    if (dtf->dateStyle) date = std::u16string(items(calendarField(r.dataLocale, dtf->calendar, FDateFormats))[size_t(styleIndex(*dtf->dateStyle))]);
+    if (dtf->timeStyle) time = applyHourCycle(g, items(calendarField(r.dataLocale, dtf->calendar, FTimeFormats))[size_t(styleIndex(*dtf->timeStyle))], hc);
     if (!date.empty() && !time.empty()) pattern = formatPattern(g.atTime[styleIndex(*dtf->dateStyle)], time, date);
     else pattern = date.empty() ? time : date;
   } else {
@@ -1106,11 +1223,11 @@ std::u16string restrictedPattern(const Generator& g, std::u16string_view pattern
 // formats with the format its own CreateDateTimeFormat made for the type, so there options the type has no field
 // for (era on a PlainTime) are dropped instead of nulling the format.
 std::u16string temporalPattern(const DateTimeFormatObject& dtf, ValueKind kind, bool toLocaleString) {
-  const Generator& g = generatorFor(dtf.dataLocale);
+  const Generator& g = generatorFor(dtf.dataLocale, dtf.calendar);
   if (dtf.dateStyle || dtf.timeStyle) {
     std::u16string date, time;
-    if (dtf.dateStyle) date = std::u16string(items(dateField(dtf.dataLocale, FDateFormats))[size_t(styleIndex(*dtf.dateStyle))]);
-    if (dtf.timeStyle) time = withoutZone(applyHourCycle(g, items(dateField(dtf.dataLocale, FTimeFormats))[size_t(styleIndex(*dtf.timeStyle))], dtf.formatHourCycle));
+    if (dtf.dateStyle) date = std::u16string(items(calendarField(dtf.dataLocale, dtf.calendar, FDateFormats))[size_t(styleIndex(*dtf.dateStyle))]);
+    if (dtf.timeStyle) time = withoutZone(applyHourCycle(g, items(calendarField(dtf.dataLocale, dtf.calendar, FTimeFormats))[size_t(styleIndex(*dtf.timeStyle))], dtf.formatHourCycle));
     switch (kind) {
       case ValueKind::PlainDate: return date;
       case ValueKind::PlainYearMonth: return date.empty() ? date : restrictedPattern(g, date, (1u << Era) | (1u << Year) | (1u << Month));
@@ -1156,7 +1273,8 @@ std::u16string temporalPattern(const DateTimeFormatObject& dtf, ValueKind kind, 
   // Null when components were given but none of them applies to this kind (year for a PlainMonthDay).
   bool anyPresent = false, anyRelevant = false, needDefaults = true;
   for (const auto& [name, value] : dtf.components) {
-    if (name != u"timeZoneName") anyPresent = true;
+    // era alone does not null a format (the type is then formatted with its defaults).
+    if (name != u"timeZoneName" && name != u"era") anyPresent = true;
     if (contains(relevant, name)) options.emplace_back(name, value), anyRelevant = true;
     if (contains(required, name)) needDefaults = false;
   }
@@ -1178,7 +1296,7 @@ std::u16string instantPattern(const DateTimeFormatObject& dtf) {
   for (const auto& [name, value] : dtf.components)
     for (std::u16string_view c : {u"weekday", u"year", u"month", u"day", u"dayPeriod", u"hour", u"minute", u"second", u"fractionalSecondDigits"})
       if (name == c) return dtf.pattern;
-  const Generator& g = generatorFor(dtf.dataLocale);
+  const Generator& g = generatorFor(dtf.dataLocale, dtf.calendar);
   Skeleton k;
   for (const auto& [name, value] : dtf.components) skeletonAdd(k, name, value, hourCharFor(dtf.formatHourCycle));
   for (const char16_t* p : {u"year", u"month", u"day", u"hour", u"minute", u"second"}) skeletonAdd(k, p, "numeric", hourCharFor(dtf.formatHourCycle));
@@ -1294,10 +1412,12 @@ Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, const 
   char16_t diff = 0;
   bool twelve = false;
   for (const Token& t : tokens) twelve |= t.field && twelveHour(t.ch);
-  if ((present & (1u << Era)) && ((a.year > 0) != (b.year > 0))) diff = u'G';
-  else if ((present & (1u << Year)) && a.year != b.year) diff = u'y';
-  else if ((present & (1u << Month)) && (a.year != b.year || a.month != b.month)) diff = u'M';
-  else if ((present & ((1u << Day) | (1u << Weekday))) && (a.year != b.year || a.month != b.month || a.day != b.day)) diff = u'd';
+  CalendarFields ca = calendarFieldsOf(dtf.calendar, a), cb = calendarFieldsOf(dtf.calendar, b);
+  bool sameMonth = ca.year == cb.year && ca.monthNumber == cb.monthNumber && ca.leap == cb.leap;
+  if ((present & (1u << Era)) && ca.era != cb.era) diff = u'G';
+  else if ((present & (1u << Year)) && ca.year != cb.year) diff = u'y';
+  else if ((present & (1u << Month)) && !sameMonth) diff = u'M';
+  else if ((present & ((1u << Day) | (1u << Weekday))) && (!sameMonth || ca.day != cb.day)) diff = u'd';
   else if ((present & (1u << Hour)) && twelve && (a.hour < 12) != (b.hour < 12)) diff = u'a';
   else if ((present & (1u << Hour)) && a.hour != b.hour) diff = twelve ? u'h' : u'H';
   else if ((present & (1u << Minute)) && a.minute != b.minute) diff = u'm';
@@ -1311,9 +1431,9 @@ Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, const 
     formatPatternInto(out, dtf, pattern, x, 0, utc);
     return out;
   }
-  std::vector<std::u16string_view> list = items(dateField(dtf.dataLocale, FIntervals));
+  std::vector<std::u16string_view> list = items(calendarField(dtf.dataLocale, dtf.calendar, FIntervals));
   std::u16string fallback = list.empty() ? u"{0} \u2013 {1}" : std::u16string(list[0]);
-  const Generator& g = generatorFor(dtf.dataLocale);
+  const Generator& g = generatorFor(dtf.dataLocale, dtf.calendar);
   // The interval pattern for the pattern's fields (some of them: mask) and the greatest difference, or "".
   auto intervalFor = [&](unsigned mask) -> std::u16string_view {
     if (diff == u's' || diff == u'S' || (present & (1u << Zone))) return {};
