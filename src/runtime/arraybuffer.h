@@ -2,7 +2,9 @@
 // Atomics share. Shared memory is single-agent here, so SharedArrayBuffer is a buffer that cannot detach.
 #pragma once
 
+#include <atomic>
 #include <cstdint>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -10,18 +12,48 @@
 
 namespace snowman {
 
+// A Shared Data Block: a SharedArrayBuffer's data, mapped once at its maximum byte length so its address never moves,
+// and refcounted so that every agent that received the buffer keeps it alive ($262.agent; notes/agent-design.md).
+class SharedBlock {
+ public:
+  SharedBlock(size_t byteLength, size_t maxByteLength);
+  ~SharedBlock();
+  SharedBlock(const SharedBlock&) = delete;
+  SharedBlock& operator=(const SharedBlock&) = delete;
+
+  bool mapped() const { return data_ != nullptr; }
+  uint8_t* data() const { return data_; }
+  size_t byteLength() const { return byteLength_.load(); }
+  size_t maxByteLength() const { return maxByteLength_; }
+  // Grows to newByteLength (<= maxByteLength); false if another agent made it longer first.
+  bool grow(size_t newByteLength);
+
+ private:
+  uint8_t* data_ = nullptr;
+  size_t mapping_ = 0;
+  size_t maxByteLength_;
+  std::atomic<size_t> byteLength_;
+};
+
 class ArrayBufferObject : public Object {
  public:
   ArrayBufferObject(Object* prototype, bool shared, size_t byteLength, std::optional<size_t> maxByteLength);
+  // A SharedArrayBuffer over an existing block (another agent's buffer, received by broadcast).
+  ArrayBufferObject(Object* prototype, std::shared_ptr<SharedBlock> block, std::optional<size_t> maxByteLength);
 
   bool isShared() const { return shared_; }
   bool isDetached() const { return detached_; }
   // Resizable (ArrayBuffer) or growable (SharedArrayBuffer): [[ArrayBufferMaxByteLength]] is present.
   bool isResizable() const { return maxByteLength_.has_value(); }
-  size_t maxByteLength() const { return maxByteLength_.value_or(data_.size()); }
-  size_t byteLength() const { return detached_ ? 0 : data_.size(); }
-  uint8_t* data() { return data_.data(); }
-  void resize(size_t newByteLength) { data_.resize(newByteLength, 0); }
+  size_t maxByteLength() const { return maxByteLength_.value_or(byteLength()); }
+  size_t byteLength() const { return detached_ ? 0 : sharedBlock_ ? sharedBlock_->byteLength() : data_.size(); }
+  uint8_t* data() { return sharedBlock_ ? sharedBlock_->data() : data_.data(); }
+  void resize(size_t newByteLength) {
+    if (sharedBlock_) sharedBlock_->grow(newByteLength);
+    else data_.resize(newByteLength, 0);
+  }
+  // A SharedArrayBuffer's block (nullptr for an ArrayBuffer); nullptr data() if it could not be mapped.
+  const std::shared_ptr<SharedBlock>& sharedBlock() const { return sharedBlock_; }
 
   // [[ArrayBufferIsImmutable]] (immutable-arraybuffer): set once, by AllocateImmutableArrayBuffer. An immutable
   // buffer is fixed-length and can't be detached; nothing writes to its data after allocation.
@@ -42,6 +74,7 @@ class ArrayBufferObject : public Object {
   bool immutable_ = false;
   std::optional<size_t> maxByteLength_;
   std::vector<uint8_t> data_;
+  std::shared_ptr<SharedBlock> sharedBlock_;
 };
 
 // A DataView (25.3): [[ViewedArrayBuffer]], [[ByteLength]] (nullopt = ~auto~), [[ByteOffset]].

@@ -1,7 +1,10 @@
 // ArrayBuffer / SharedArrayBuffer storage and raw element access (25.1.3).
 #include "runtime/arraybuffer.h"
 
+#include <sys/mman.h>
+
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 
@@ -16,7 +19,31 @@ constexpr double kMaxByteLength = double(1u << 30);
 }  // namespace
 
 ArrayBufferObject::ArrayBufferObject(Object* prototype, bool shared, size_t byteLength, std::optional<size_t> maxByteLength)
-    : Object(prototype), shared_(shared), maxByteLength_(maxByteLength), data_(byteLength, 0) {}
+    : Object(prototype), shared_(shared), maxByteLength_(maxByteLength), data_(shared ? 0 : byteLength, 0) {
+  if (shared) sharedBlock_ = std::make_shared<SharedBlock>(byteLength, maxByteLength.value_or(byteLength));
+}
+
+ArrayBufferObject::ArrayBufferObject(Object* prototype, std::shared_ptr<SharedBlock> block, std::optional<size_t> maxByteLength)
+    : Object(prototype), shared_(true), maxByteLength_(maxByteLength), sharedBlock_(std::move(block)) {}
+
+SharedBlock::SharedBlock(size_t byteLength, size_t maxByteLength) : maxByteLength_(maxByteLength), byteLength_(byteLength) {
+  // Anonymous pages read as zero; MAP_NORESERVE leaves the untouched part of a growable buffer's reservation free.
+  mapping_ = maxByteLength ? maxByteLength : 1;
+  void* p = mmap(nullptr, mapping_, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+  if (p != MAP_FAILED) data_ = static_cast<uint8_t*>(p);
+}
+
+SharedBlock::~SharedBlock() {
+  if (data_) munmap(data_, mapping_);
+}
+
+bool SharedBlock::grow(size_t newByteLength) {
+  size_t current = byteLength_.load();
+  while (current <= newByteLength) {
+    if (byteLength_.compare_exchange_weak(current, newByteLength)) return true;
+  }
+  return false;
+}
 
 void ArrayBufferObject::trace(Tracer& tracer) {
   Object::trace(tracer);
@@ -32,7 +59,9 @@ Result<ArrayBufferObject*> AllocateArrayBuffer(Object* constructor, double byteL
   if (maxByteLength && *maxByteLength > kMaxByteLength) return ThrowRangeError("Array buffer allocation failed");
   std::optional<size_t> max;
   if (maxByteLength) max = size_t(*maxByteLength);
-  return make<ArrayBufferObject>(prototype, shared, size_t(byteLength), max);
+  ArrayBufferObject* buffer = make<ArrayBufferObject>(prototype, shared, size_t(byteLength), max);
+  if (shared && !buffer->sharedBlock()->mapped()) return ThrowRangeError("Array buffer allocation failed");
+  return buffer;
 }
 
 Result<void> DetachArrayBuffer(ArrayBufferObject* arrayBuffer, Value key) {
@@ -107,10 +136,51 @@ double Float16BitsToDouble(uint16_t bits) {
   return (bits & 0x8000) ? -value : value;
 }
 
+namespace {
+
+// An element of a shared block is read and written with relaxed atomics (whole, when it is naturally aligned, as
+// TypedArray elements are; else byte by byte), so a concurrent agent's access is not a data race.
+template <class T>
+void copyAtomic(void* to, const void* from, bool load) {
+  T v;
+  if (load) {
+    v = std::atomic_ref<T>(*const_cast<T*>(static_cast<const T*>(from))).load(std::memory_order_relaxed);
+    std::memcpy(to, &v, sizeof(T));
+  } else {
+    std::memcpy(&v, from, sizeof(T));
+    std::atomic_ref<T>(*static_cast<T*>(to)).store(v, std::memory_order_relaxed);
+  }
+}
+
+void copyShared(uint8_t* to, const uint8_t* from, size_t size, bool load) {
+  const uint8_t* block = load ? from : to;
+  if (reinterpret_cast<uintptr_t>(block) % size == 0) {
+    switch (size) {
+      case 1: return copyAtomic<uint8_t>(to, from, load);
+      case 2: return copyAtomic<uint16_t>(to, from, load);
+      case 4: return copyAtomic<uint32_t>(to, from, load);
+      case 8: return copyAtomic<uint64_t>(to, from, load);
+    }
+  }
+  for (size_t i = 0; i < size; i++) copyAtomic<uint8_t>(to + i, from + i, load);
+}
+
+void copyFromBlock(uint8_t* to, ArrayBufferObject* buffer, size_t byteIndex, size_t size) {
+  if (buffer->isShared()) return copyShared(to, buffer->data() + byteIndex, size, true);
+  std::memcpy(to, buffer->data() + byteIndex, size);
+}
+
+void copyToBlock(ArrayBufferObject* buffer, size_t byteIndex, const uint8_t* from, size_t size) {
+  if (buffer->isShared()) return copyShared(buffer->data() + byteIndex, from, size, false);
+  std::memcpy(buffer->data() + byteIndex, from, size);
+}
+
+}  // namespace
+
 Value GetValueFromBuffer(ArrayBufferObject* buffer, size_t byteIndex, ElementType type, bool isLittleEndian) {
   uint8_t raw[8];
   size_t size = ElementSize(type);
-  std::memcpy(raw, buffer->data() + byteIndex, size);
+  copyFromBlock(raw, buffer, byteIndex, size);
   if (!isLittleEndian) std::reverse(raw, raw + size);
   switch (type) {
     case ElementType::Int8: return Value::number(int8_t(raw[0]));
@@ -155,7 +225,7 @@ void SetValueInBuffer(ArrayBufferObject* buffer, size_t byteIndex, ElementType t
     case ElementType::BigUint64: { uint64_t v = value.asBigInt()->toUint64(); std::memcpy(raw, &v, 8); break; }
   }
   if (!isLittleEndian) std::reverse(raw, raw + size);
-  std::memcpy(buffer->data() + byteIndex, raw, size);
+  copyToBlock(buffer, byteIndex, raw, size);
 }
 
 Result<Value> ToElementValue(ElementType type, Value value) {
