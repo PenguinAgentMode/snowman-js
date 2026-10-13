@@ -282,6 +282,7 @@ Formatted formatNumber(const NumberFormatObject& nf, const Decimal& input) {
     f.number.push_back({u"fraction", transliterate(r.fraction, digits)});
   }
   if (nf.notation == "scientific" || nf.notation == "engineering") {
+    f.compactExponent = exponent;
     f.number.push_back({u"exponentSeparator", sym.exponential});
     if (exponent < 0) f.number.push_back({u"exponentMinusSign", sym.exponentMinus});
     f.number.push_back({u"exponentInteger", transliterate(std::to_string(std::abs(exponent)), digits)});
@@ -352,9 +353,9 @@ void NumberFormatObject::trace(Tracer& tracer) {
   tracer.visit(boundFormat);
 }
 
-char numberFormatPluralCategory(const NumberFormatObject& nf, const Decimal& x) {
+char numberFormatPluralCategory(const NumberFormatObject& nf, const Decimal& x, bool ordinal) {
   Formatted f = formatNumber(nf, x);
-  return pluralCategory(pluralRulesFor(nf.dataLocale, false), f.integer, f.fraction, f.compactExponent);
+  return pluralCategory(pluralRulesFor(nf.dataLocale, ordinal), f.integer, f.fraction, f.compactExponent);
 }
 
 std::vector<NumberPart> PartitionNumberPattern(const NumberFormatObject& nf, const Decimal& x) {
