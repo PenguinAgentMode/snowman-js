@@ -5,19 +5,18 @@ Owner: survey (took over intl after intl's agent died of a context overflow). Le
 ## Branch / state
 
 - **Branch: `ws/survey-intl` only** (lead, 2026-10-13: never push to ws/intl-dev or ws/intl; the old intl agent
-  may still be alive on stale state. If ws/intl-dev moves to a sha that isn't ours, tell the lead and ignore it).
-- DateTimeFormat batch (old ws/intl-dev b086e3d..ccdf619) rebased onto main 46746ad as faae9a2..80243d8. The
-  rebase was clean: no file it changes was changed on main since its old base 797c7f7. 32879c42e adds this note.
-- **Gated sha: 32879c42e**. Full suite, 4 jobs, 2,210 s; JSONL + gate output on the results branch,
-  `results/32879c42e/`.
-  - `gate.mjs results/c21bcd82e.json`: regressions 0.
-  - `gate.mjs results/c21bcd82e-full.json`: regressions 0.
-  - Branch run: 51,272 / 53,616 files (ES-core 43,166, the same as e535e4b's gate).
-- Files outside `src/builtins/intl/`: `src/builtins/date.cpp` (toLocale* → `intl::dateToLocaleString`, own commit
-  7a51505); `tools/intl/{check-dtf,gen-casing-data,gen-date-data,gen-locale-data}.mjs`, `tools/intl/package.json`.
-  It reads `src/builtins/temporal/{temporal.h,time_zone.h}` read-only.
+  may still be alive on stale state. If ws/intl-dev moves to a sha that is not ours, tell the lead and ignore it).
+- Merged: 32879c42e (DTF batch) as main 68e8bb7; the Intl staging waivers were dropped.
+- Current batch on main ec34f4f: a1452bb intl hooks for Temporal toLocaleString (CreateDateTimeFormat
+  toLocaleStringTimeZone, CreateDurationFormat; an Instant formats with date+time defaults; zero offsets print
+  gmtZeroFormat "GMT"), then 55400c3, the 8-file temporal commit approved by the lead (only the toLocaleString bodies + the
+  hooks.h include in src/builtins/temporal/{duration,instant,plain_date,plain_date_time,plain_month_day,plain_time,
+  plain_year_month,zoned_date_time}.cpp). Gate: pending, vs c21bcd82e (lead: until the next post-merge run).
+- Slice (intl402, before the gate): non-Temporal 1,318 / 1,353 (unchanged); intl402/Temporal 197 → 254 / 2,029;
+  */toLocaleString/ 67 / 97 (28 of the 30 left are "unknown calendar: gregory", 1 islamic month names, 1 Instant
+  dateStyle Ramadan).
 
-## Numbers (32879c42e vs main c21bcd82e)
+## Numbers of the merged DTF batch (32879c42e vs main c21bcd82e)
 
 - intl402 non-Temporal: 1,069 → 1,318 / 1,353. DateTimeFormat 3 → 210 / 245; String 15 → 19; Date 9 → 12;
   DurationFormat 105 → 110; Intl 63 → 66; top-level 2 → 22; FallbackSymbol 0 → 2; Collator, DisplayNames,
