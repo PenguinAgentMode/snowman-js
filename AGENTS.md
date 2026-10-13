@@ -45,5 +45,8 @@
   gate it and ask to merge. Don't hold it for the rest of your area; later batches get their own gate.
 - **Machines**: 4 GB enforced, shared by the build and the run: `make -j4`, `--jobs 4`. Push after every
   meaningful step; a killed machine loses everything unpushed.
+- **Push WIP at least every 20 minutes of coding**, not only at gate points: a `wip:` commit on your own branch
+  is fine (squash or reword before the merge request; the gated sha is what merges). The stack can drop a turn
+  at any time (a GS restart lost survey's unpushed calendar code).
 - **Never** edit `t262/` or test262 to make a test pass, and never special-case a test file.
 - **Report numbers, not impressions:** "test/language/literals 812 → 1,003 of 1,041 (`make slice`)".
