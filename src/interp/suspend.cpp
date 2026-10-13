@@ -258,7 +258,7 @@ Result<Value> startAsyncFunctionBody(ECMAScriptFunction* F, InterpContext* conte
   return promiseCapability->promise;
 }
 
-void AsyncNativeBlockStart(PromiseCapability* capability, SuspendableObject::NativeBody body, Value data,
+void AsyncNativeBlockStart(PromiseCapability* capability, SuspendableObject::NativeBody body, Cell* data,
                            InterpContext& context) {
   auto* state = snowman::make<AsyncState>(SuspendableObject::Kind::Module);
   copyContext(state->context, context);

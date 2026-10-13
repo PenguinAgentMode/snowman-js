@@ -2,6 +2,7 @@
 #include <cstdio>
 
 #include "interp/interpreter.h"
+#include "runtime/arraybuffer.h"
 #include "runtime/builtins.h"
 #include "runtime/errors.h"
 #include "runtime/heap.h"
@@ -39,8 +40,13 @@ Result<Value> hostEvalScript(NativeCall& call) {
   return ScriptEvaluation(script);
 }
 
-Result<Value> hostDetachArrayBuffer(NativeCall&) {
-  return ThrowTypeError("$262.detachArrayBuffer: ArrayBuffer is not supported");
+// $262.detachArrayBuffer(buffer, key): DetachArrayBuffer(buffer, key).
+Result<Value> hostDetachArrayBuffer(NativeCall& call) {
+  Value b = call.args[0];
+  auto* buf = b.isObject() ? b.asObject()->as<ArrayBufferObject>() : nullptr;
+  if (!buf) return ThrowTypeError("$262.detachArrayBuffer: not an ArrayBuffer");
+  TRY(DetachArrayBuffer(buf, call.args[1]));
+  return Value::null();
 }
 
 Result<Value> hostGc(NativeCall&) {

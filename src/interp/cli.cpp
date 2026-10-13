@@ -73,6 +73,8 @@ int runProgram(const CliOptions& options, const std::string& source) {
     return 0;
   }
 
+  size_t slash = options.file.rfind('/');
+  interp::setScriptDirectory(slash == std::string::npos ? "." : options.file.substr(0, slash));
   parser::ParseResult parsed = parser::parseProgram(std::move(text));
   if (!parsed.ok()) {
     printLine("SyntaxError: " + parsed.error->message);
