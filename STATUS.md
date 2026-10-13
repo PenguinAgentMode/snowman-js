@@ -3,9 +3,10 @@
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
 | memcap | memcap | `ws/memcap` | `src/interp/coroutine.{h,cpp}`, stack-size users; `t262/runner/run.mjs` (authorized) | watchdog merged (8e39780); engine stack budgets + `ulimit -v` in progress |
-| temporal | temporal | `ws/temporal` | `src/builtins/temporal/`; additive Intrinsics in realm.h; Date.prototype.toTemporalInstant | started: foundation + Duration first |
+| temporal | temporal | `ws/temporal` | `src/builtins/temporal/` core (temporal.h, parser, options) + Duration, Plain* (3,166 files); additive Intrinsics in realm.h; Date.prototype.toTemporalInstant | started: shared core first |
+| temporal2 | temporal2 | `ws/temporal2` | `src/builtins/temporal/{instant,zoned_date_time,now,time_zone}.cpp`, `time_zone.h`, `tz*`, `tools/temporal/` (1,434 files + tz data for intl402/Temporal) | started: time_zone.h first |
 | intl | intl | `ws/intl` | `src/builtins/intl/`, `tools/intl/`; additive Intrinsics in realm.h | started: plumbing for all constructors first |
-| survey | survey | `ws/survey` | `tools/lead/survey-full.md` (analysis only) | running the 10,311 non-ES-core files of the full suite; failure clusters |
+| survey | survey | `ws/survey` | `tools/lead/survey-full.md` (analysis only) | interim: extra set 1,709 / 10,311 pass (results branch results/7e957a05a/extra.jsonl); report pending |
 | parser, regexp, interp, modules | (closed) | | | merged before M8 |
 | runtime, interp2 | (closed; previous team) | `ws/runtime` (+1), `ws/interp2` (+4) | | unmerged perf/IsHTMLDDA commits; to gate on ES-core before merging |
 
@@ -22,6 +23,15 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 - Command: `node t262/runner/milestones.mjs results/f294bec1b.json --parse-only results/2551c6978-parse.json`
 - Known ceiling: ~104 module tests import their own file and can't pass under the current runner
   (src/interp/module_test_exclusions.txt; decision with the supervisor).
+
+## Survey interim (main 7e957a05a)
+
+- Extra set (full minus ES-core): 10,311 files, 1,709 pass. Temporal 0 / 4,605; intl402 25 / 3,382 (2,029 are
+  intl402/Temporal); proposals 243 / 815 (242 of those passes are negative-syntax tests, likely passing by
+  accident); staging 1,432 / 1,483.
+- ES-core: of f294bec1b's 872 failing files, 626 pass on 7e957a05a. Estimate ≈ 43,059 / 43,305 (99.43%), not
+  measured. The remaining 246: 104 self-import (runner), 114 Atomics `$262.agent`/CanBlock (host), 25 IsHTMLDDA
+  (host; ws/runtime has the runtime part), 3 engine bugs.
 
 ## Memory (incident 2026-10-13: the lead's machine was OOM-killed)
 
