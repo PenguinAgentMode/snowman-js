@@ -25,6 +25,11 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
   ~44,770 / 53,616 (~83.5%).
 - Known ceiling: 104 module tests import their own file (runner change approved: INTERFACES.md §1).
 
+## Merges awaiting a post-merge measurement
+
+- 5b81747 (ws/builtins a87b211, gated on 6d73e90, no file overlap with memcap's 5ff85e8). Not covered by the
+  first full-suite run if that started before it.
+
 ## Decisions
 
 - 2026-10-13, supervisor: no ICU. Locale data (intl) and tz data (temporal2) are generated from node by checked-in
