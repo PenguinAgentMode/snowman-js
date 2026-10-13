@@ -16,21 +16,16 @@ Updated: 2026-10-13, after the c21bcd8 measurement.
   quote-string-for-nul-character}.js) + flaky staging/sm/Date/dst-offset-caching-* timeouts (7-10 s each).
 
 ## In progress (lead's queue, in order)
-1. DONE ws/interp2-r 7b89bae -> main 23c2b86 (gate vs c21bcd82e: 0 regressions, 43,166; GC stress=10 clean).
-   ws/runtime-r: 416792a gated clean on base e535e4b (43,191, 0 regressions) but overlaps main in
-   src/interp/{expressions,host}.cpp, so rebased on main ec34f4f as 44d3159 (host.cpp: kept both lines);
-   its ES-core gate vs results/c21bcd82e.json runs at /tmp/runtime2-core.jsonl. Then merge request.
-2. After runtime-r merges: post-merge `tools/lead/measure.sh suite results/c21bcd82e.json` on main (detach
-   at the exact sha), gate.mjs ES-core vs c21bcd82e and full vs c21bcd82e-full, clusters.mjs vs
-   c21bcd82e-full, publish (ws/measure + results branch), send milestones verbatim.
-3. Then a fresh-start brief from the lead for the next area. Pending items that brief may cover:
-   - kStackBytesBudget vs the 700 MB watchdog (staging/sm/extensions/recursion.js): part 1 (infinite
-     plain recursion) leaves ~480 MB of main stack resident; part 2 starts one 256 KB coroutine per level.
-     A 128 MB coroutine budget alone may not suffice: measure; option madvise(DONTNEED) of dead main stack.
-   - Memory root causes, to confirm by measurement: unicode-{class-,}braced build a 16M-char pattern
-     ("0".repeat(2**24)) through eval/new RegExp, so several 32 MB UTF-16 copies + M_TRIM_THRESHOLD 1 GB keep
-     address space growing; regress-610026 evals ~2M then ~4M "{}" blocks (~380 B/block: AST + scope + env).
-   - tools/lead/es-core-residue.md (ws/measure 4f999b1) is written; section 4 (memory) still to add.
+- DONE/handed off: interp2-r -> main 23c2b86; runtime-r 44d3159 gated clean (43,191, 0 regressions), the lead
+  merges it after survey 5aba3f349 and the lead's own post-merge measurement (the lead now runs measurements).
+- (a) ws/stacktrim 6b67bbf: coroutine budget main + 128 MB, madvise(DONTNEED) of the dead main stack before
+  mapping a fresh coroutine stack; recursion.js 929 -> 657 MB, passes. ES-core gate vs results/c21bcd82e.json
+  running (/tmp/stacktrim-core.jsonl); then merge request.
+- (b) DONE: memory root causes in tools/lead/es-core-residue.md (ws/measure).
+- (c) ws/canblock f2a0138 WIP (approved): vm().canBlock, CLI --can-block=false (INTERFACES.md §1), run.mjs
+  passes it for flags: [CanBlockIsFalse], 1-line AgentCanSuspend check in builtins/atomics.cpp. Gate: old vs
+  new runner, same binary, over the 9 CanBlockIs{True,False} files of the full suite (/tmp/canblock.txt),
+  plus the ES-core gate. Squash the wip commit before the merge request.
 
 ## Machine / gotchas
 - Worktrees: ~/repo/snowman-js (measuring checkout: keep clean, detach at the exact main sha so the label
