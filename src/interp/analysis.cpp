@@ -163,6 +163,17 @@ bool mayCaptureEnvironment(const Node* node) {
   }
 }
 
+unsigned gcStressInterval = 0;
+
+void stressCollect() {
+  static unsigned count = 0;
+  if (++count % gcStressInterval == 0) {
+    heap().collect();
+  } else {
+    heap().maybeCollect();
+  }
+}
+
 bool loopMayCaptureEnvironment(const Node* loop) {
   // interpCache: nullptr until analysed, then 1 (no capture) or 2 (may capture).
   if (!loop->interpCache) loop->interpCache = reinterpret_cast<void*>(mayCaptureEnvironment(loop) ? 2 : 1);
