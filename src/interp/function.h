@@ -33,6 +33,9 @@ struct PrivateElement {
 
 enum class ThisMode : uint8_t { Lexical, Strict, Global };
 
+// FunctionDeclarationInstantiation's precomputed binding layout for one function (function.cpp).
+struct InstantiationPlan;
+
 // What [[ECMAScriptCode]] is.
 enum class CodeKind : uint8_t {
   Function,            // `function`: an ast::Function (params + body)
@@ -70,6 +73,7 @@ class ECMAScriptFunction final : public FunctionObject {
   std::vector<PrivateElement> privateMethods;    // [[PrivateMethods]]
   Value classFieldInitializerName;               // [[ClassFieldInitializerName]]: empty, or the field name
   std::u16string_view sourceTextView;            // [[SourceText]]
+  const InstantiationPlan* plan = nullptr;       // set by the first FunctionDeclarationInstantiation
 };
 
 // The [[HomeObject]] of an ECMAScript function (nullptr for anything else).

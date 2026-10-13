@@ -455,9 +455,14 @@ Result<Reference> evaluateMember(const MemberExpression* node, bool* shortCircui
     Value propertyNameValue = TRY(evaluate(node->property));
     return makeSuperPropertyReference(actualThis, propertyNameValue, std::nullopt);
   }
-  Reference baseRef = TRY(evaluateChainBase(node->object, shortCircuit));
-  if (shortCircuit && *shortCircuit) return baseRef;
-  Value baseValue = TRY(GetValue(baseRef));
+  Value baseValue;
+  if (shortCircuit) {
+    Reference baseRef = TRY(evaluateChainBase(node->object, shortCircuit));
+    if (*shortCircuit) return baseRef;
+    baseValue = TRY(GetValue(baseRef));
+  } else {
+    baseValue = TRY(evaluate(node->object));
+  }
   if (node->optional && baseValue.isNullish()) {
     *shortCircuit = true;
     return valueReference(Value::undefined());
@@ -546,6 +551,45 @@ Result<Reference> evaluateChainReference(const Node* node, bool* shortCircuit) {
   return evaluateCallLink(node->as<CallExpression>(), shortCircuit);
 }
 
+// Evaluation + GetValue of a call outside an optional chain, without materializing the References of the
+// callee (`base.name(...)` / `base[key](...)`) or of the result.
+Result<Value> evaluateCallValue(const CallExpression* node) {
+  const Node* callee = node->callee;
+  if (callee->type == NodeType::MemberExpression && !node->optional) {
+    auto* member = callee->as<MemberExpression>();
+    if (member->object->type != NodeType::Super && member->property->type != NodeType::PrivateIdentifier &&
+        !member->optional) {
+      Value baseValue = TRY(evaluate(member->object));
+      Value propertyName;
+      std::optional<PropertyKey> key;
+      if (!member->computed) {
+        key = PropertyKey(identifierName(member->property->as<Identifier>()));
+      } else {
+        propertyName = TRY(evaluate(member->property));
+      }
+      if (baseValue.isNullish()) {
+        Reference ref;
+        ref.kind = Reference::Kind::Property;
+        ref.base = baseValue;
+        ref.propertyName = propertyName;
+        ref.key = key;
+        return throwNullishBase(baseValue, ref, "read");
+      }
+      if (!key) key = TRY(ToPropertyKey(propertyName));
+      Value func;
+      if (baseValue.isObject()) {
+        func = TRY(baseValue.asObject()->Get(*key, baseValue));
+      } else {
+        Object* baseObj = TRY(ToObject(baseValue));
+        func = TRY(baseObj->Get(*key, baseValue));
+      }
+      return EvaluateCall(func, baseValue, node->arguments);
+    }
+  }
+  Reference ref = TRY(evaluateCallLink(node, nullptr));
+  return GetValue(ref);
+}
+
 }  // namespace
 
 Result<Reference> evaluateReference(const Node* node) {
@@ -594,6 +638,22 @@ Result<Value> evaluateNamed(const Node* node, Value name) {
 
 // ---- Calls ----
 
+namespace {
+
+// An argument list of at most kStackArguments arguments and no spread element is evaluated into an array on
+// the C stack, which the collector scans (no ValueVector to allocate and register).
+constexpr size_t kStackArguments = 8;
+
+bool fitsStackArguments(const std::vector<Node*>& arguments) {
+  if (arguments.size() > kStackArguments) return false;
+  for (const Node* argument : arguments) {
+    if (argument->type == NodeType::SpreadElement) return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 Result<ValueVector> ArgumentListEvaluation(const std::vector<Node*>& arguments) {
   ValueVector list;
   list.reserve(arguments.size());
@@ -614,6 +674,13 @@ Result<ValueVector> ArgumentListEvaluation(const std::vector<Node*>& arguments) 
 }
 
 Result<Value> EvaluateCall(Value func, Value thisValue, const std::vector<Node*>& arguments) {
+  if (fitsStackArguments(arguments)) {
+    Value argList[kStackArguments];
+    size_t count = arguments.size();
+    for (size_t i = 0; i < count; i++) argList[i] = TRY(evaluate(arguments[i]));
+    if (!func.isObject() || !func.asObject()->isCallable()) return ThrowTypeError("not a function");
+    return func.asObject()->Call(thisValue, Args(argList, count));
+  }
   ValueVector argList = TRY(ArgumentListEvaluation(arguments));
   if (!func.isObject() || !func.asObject()->isCallable()) return ThrowTypeError("not a function");
   return func.asObject()->Call(thisValue, argList);
@@ -966,6 +1033,13 @@ Result<Value> evaluateAssignment(const AssignmentExpression* node) {
 
 Result<Value> evaluateNew(const NewExpression* node) {
   Value constructor = TRY(evaluate(node->callee));
+  if (fitsStackArguments(node->arguments)) {
+    Value argList[kStackArguments];
+    size_t count = node->arguments.size();
+    for (size_t i = 0; i < count; i++) argList[i] = TRY(evaluate(node->arguments[i]));
+    if (!IsConstructor(constructor)) return ThrowTypeError("not a constructor");
+    return Value(TRY(Construct(constructor.asObject(), Args(argList, count))));
+  }
   ValueVector argList = TRY(ArgumentListEvaluation(node->arguments));
   if (!IsConstructor(constructor)) return ThrowTypeError("not a constructor");
   return Value(TRY(Construct(constructor.asObject(), argList)));
@@ -1036,6 +1110,8 @@ Result<Value> evaluate(const Node* node) {
       return GetValue(ref);
     }
     case NodeType::CallExpression:
+      TRY(CheckStack());
+      return evaluateCallValue(node->as<CallExpression>());
     case NodeType::ChainExpression: {
       TRY(CheckStack());
       Reference ref = TRY(evaluateReference(node));
