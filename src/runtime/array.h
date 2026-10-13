@@ -14,6 +14,8 @@ class ArrayObject : public Object {
   ArrayObject(Object* prototype, uint32_t length = 0);
 
   Result<bool> DefineOwnProperty(const PropertyKey& key, const PropertyDescriptor& desc) override;
+  Result<bool> Set(const PropertyKey& key, Value value, Value receiver) override;
+  bool hasOrdinaryPropertyStorage() const override { return true; }
 
   // The current "length" value and whether it is writable (unobservable reads).
   uint32_t length() const;

@@ -43,6 +43,27 @@ Result<bool> ArrayObject::DefineOwnProperty(const PropertyKey& key, const Proper
   return Object::DefineOwnProperty(key, desc);
 }
 
+// [[Set]] is OrdinarySet. "length" always takes the full path (ArraySetLength); a new element whose
+// prototype chain is ordinary and has no such index goes straight to CreateDataProperty, as OrdinarySet
+// would after finding nothing up the chain.
+Result<bool> ArrayObject::Set(const PropertyKey& key, Value value, Value receiver) {
+  if (key == lengthKey()) {
+    auto ownDesc = TRY(Object::GetOwnProperty(key));
+    return OrdinarySetWithOwnDescriptor(this, key, value, receiver, ownDesc);
+  }
+  if (key.isIndex() && receiver.isObject() && receiver.asObject() == this && !properties_->contains(key)) {
+    bool chainIsPlain = true;
+    for (Object* p = prototype_; p; p = p->prototype()) {
+      if (!p->hasOrdinaryPropertyStorage() || p->properties().contains(key)) {
+        chainIsPlain = false;
+        break;
+      }
+    }
+    if (chainIsPlain) return DefineOwnProperty(key, PropertyDescriptor::data(value, Attr::All));
+  }
+  return Object::Set(key, value, receiver);
+}
+
 // 10.4.2.4 ArraySetLength
 Result<bool> ArraySetLength(ArrayObject* array, const PropertyDescriptor& desc) {
   if (!desc.value) return array->Object::DefineOwnProperty(lengthKey(), desc);

@@ -69,6 +69,9 @@ class Object : public Cell {
   // False for objects whose [[GetPrototypeOf]] is not the ordinary one (Proxy): OrdinarySetPrototypeOf's
   // cycle check stops there.
   virtual bool hasOrdinaryGetPrototypeOf() const { return true; }
+  // True when [[GetOwnProperty]], [[DefineOwnProperty]] and [[Set]] are the ordinary ones over properties()
+  // (exactly Object by default; Array overrides): lets [[Set]] update a writable data property in place.
+  virtual bool hasOrdinaryPropertyStorage() const;
   // True for arguments objects (a [[ParameterMap]] slot, mapped or not): Object.prototype.toString's
   // "Arguments" tag. Overridden by src/interp/'s arguments objects.
   virtual bool hasParameterMap() const { return false; }

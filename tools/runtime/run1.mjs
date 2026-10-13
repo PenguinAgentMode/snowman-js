@@ -24,7 +24,7 @@ composed += source;
 const out = path.join(path.dirname(path.join(root, file)), `.run1-${process.pid}.${flags.includes('module') ? 'mjs' : 'js'}`);
 fs.writeFileSync(out, composed);
 const args = flags.includes('module') ? ['--module', out] : [out];
-const r = spawnSync('./engine', args, { encoding: 'utf8', timeout: 20000 });
+const r = spawnSync(process.env.ENGINE || './engine', args, { encoding: 'utf8', timeout: 20000 });
 fs.rmSync(out, { force: true });
 process.stdout.write((r.stdout || '') + (r.stderr || ''));
 console.log(`[exit ${r.status}${r.signal ? ' ' + r.signal : ''}]`);

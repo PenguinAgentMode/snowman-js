@@ -152,14 +152,6 @@ Result<Value> Atomics_wait(NativeCall& call) {
   return str(u"timed-out");
 }
 
-// 25.4.15 Atomics.notify ( typedArray, index, count )
-Result<Value> Atomics_notify(NativeCall& call) {
-  TypedArrayObject* ta = TRY(ValidateIntegerTypedArray(call.args[0], true));
-  TRY(ValidateAtomicAccess(ta, call.args[1]));
-  if (!call.args[2].isUndefined()) TRY(ToIntegerOrInfinity(call.args[2]));
-  return num(0);
-}
-
 // Atomics.pause ( [ N ] )
 Result<Value> Atomics_pause(NativeCall& call) {
   Value n = call.args[0];
@@ -177,7 +169,7 @@ void installAtomics(Realm& realm) {
   defineFunction(realm, atomics, PropertyKey(u"exchange"), 3, readModifyWrite<Op::Exchange>);
   defineFunction(realm, atomics, PropertyKey(u"isLockFree"), 1, Atomics_isLockFree);
   defineFunction(realm, atomics, PropertyKey(u"load"), 2, Atomics_load);
-  defineFunction(realm, atomics, PropertyKey(u"notify"), 3, Atomics_notify);
+  // Atomics.notify is installed by atomics_wait_async.cpp (it also wakes async waiters).
   defineFunction(realm, atomics, PropertyKey(u"or"), 3, readModifyWrite<Op::Or>);
   defineFunction(realm, atomics, PropertyKey(u"pause"), 0, Atomics_pause);
   defineFunction(realm, atomics, PropertyKey(u"store"), 3, Atomics_store);

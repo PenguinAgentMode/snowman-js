@@ -12,14 +12,23 @@ namespace snowman::builtins {
 
 namespace {
 
+// A JSON Parse Record (json-parse-with-source): the parsed value, the source text of a primitive, and
+// the records of an array's elements or an object's entries (the last one for a duplicated key).
+struct ParseRecord {
+  Value value;
+  std::u16string_view source;
+  std::vector<ParseRecord> elements;
+  std::vector<std::pair<PropertyKey, ParseRecord>> entries;
+};
+
 // A recursive-descent parser for the JSON grammar (ECMA-404), building values as JSON.parse's
-// evaluation of the text as an ECMAScript literal would.
+// evaluation of the text as an ECMAScript literal would; with a record, it also builds the parse records.
 class JSONParser {
  public:
   explicit JSONParser(std::u16string_view text) : s_(text) {}
 
-  Result<Value> parseText() {
-    Value v = TRY(parseValue());
+  Result<Value> parseText(ParseRecord* record = nullptr) {
+    Value v = TRY(parseValue(record));
     skipWhitespace();
     if (pos_ != s_.size()) return error();
     return v;
@@ -38,13 +47,24 @@ class JSONParser {
     return true;
   }
 
-  Result<Value> parseValue() {
+  Result<Value> parseValue(ParseRecord* record) {
     TRY(CheckStack());
     skipWhitespace();
     if (pos_ >= s_.size()) return error();
+    size_t start = pos_;
+    Value v = TRY(parseValueAt(record));
+    if (record) {
+      record->value = v;
+      if (!v.isObject()) record->source = s_.substr(start, pos_ - start);
+      keepAlive_.push_back(v);
+    }
+    return v;
+  }
+
+  Result<Value> parseValueAt(ParseRecord* record) {
     char16_t c = s_[pos_];
-    if (c == u'{') return parseObject();
-    if (c == u'[') return parseArray();
+    if (c == u'{') return parseObject(record);
+    if (c == u'[') return parseArray(record);
     if (c == u'"') return Value(TRY(parseString()));
     if (c == u'-' || (c >= u'0' && c <= u'9')) return parseNumber();
     if (consume(u"true")) return Value::boolean(true);
@@ -134,7 +154,7 @@ class JSONParser {
     return newString(std::move(out));
   }
 
-  Result<Value> parseArray() {
+  Result<Value> parseArray(ParseRecord* record) {
     pos_++;  // [
     ValueVector elements;
     skipWhitespace();
@@ -143,7 +163,9 @@ class JSONParser {
       return Value(CreateArrayFromList(elements));
     }
     while (true) {
-      elements.push_back(TRY(parseValue()));
+      ParseRecord* child = nullptr;
+      if (record) child = &record->elements.emplace_back();
+      elements.push_back(TRY(parseValue(child)));
       skipWhitespace();
       if (pos_ >= s_.size()) return error();
       if (s_[pos_] == u',') {
@@ -158,7 +180,7 @@ class JSONParser {
     }
   }
 
-  Result<Value> parseObject() {
+  Result<Value> parseObject(ParseRecord* record) {
     pos_++;  // {
     Object* obj = newPlainObject();
     skipWhitespace();
@@ -173,8 +195,15 @@ class JSONParser {
       skipWhitespace();
       if (pos_ >= s_.size() || s_[pos_] != u':') return error();
       pos_++;
-      Value v = TRY(parseValue());
-      TRY(CreateDataProperty(obj, PropertyKey(key), v));
+      PropertyKey propertyKey(key);
+      ParseRecord childRecord;
+      Value v = TRY(parseValue(record ? &childRecord : nullptr));
+      if (record) {
+        auto it = std::find_if(record->entries.begin(), record->entries.end(), [&](auto& e) { return e.first == propertyKey; });
+        if (it != record->entries.end()) record->entries.erase(it);
+        record->entries.emplace_back(propertyKey, std::move(childRecord));
+      }
+      TRY(CreateDataProperty(obj, propertyKey, v));
       skipWhitespace();
       if (pos_ >= s_.size()) return error();
       if (s_[pos_] == u',') {
@@ -191,12 +220,21 @@ class JSONParser {
 
   std::u16string_view s_;
   size_t pos_ = 0;
+  ValueVector keepAlive_;  // the records' values
 };
 
-// 25.5.1.1 InternalizeJSONProperty ( holder, name, reviver )
-Result<Value> InternalizeJSONProperty(Object* holder, const PropertyKey& name, Value reviver) {
+// 25.5.1.1 InternalizeJSONProperty ( holder, name, reviver, parseRecord ): parseRecord may be null (empty).
+Result<Value> InternalizeJSONProperty(Object* holder, const PropertyKey& name, Value reviver, const ParseRecord* parseRecord) {
   TRY(CheckStack());
   Value val = TRY(Get(holder, name));
+  Object* context = newPlainObject();
+  const std::vector<ParseRecord>* elementRecords = nullptr;
+  const std::vector<std::pair<PropertyKey, ParseRecord>>* entryRecords = nullptr;
+  if (parseRecord && SameValue(parseRecord->value, val)) {
+    if (!val.isObject()) TRY(CreateDataPropertyOrThrow(context, PropertyKey(u"source"), Value(newString(parseRecord->source))));
+    elementRecords = &parseRecord->elements;
+    entryRecords = &parseRecord->entries;
+  }
   if (val.isObject()) {
     Object* o = val.asObject();
     bool isArray = TRY(IsArray(val));
@@ -204,7 +242,8 @@ Result<Value> InternalizeJSONProperty(Object* holder, const PropertyKey& name, V
       double len = TRY(LengthOfArrayLike(o));
       for (double i = 0; i < len; i++) {
         PropertyKey prop = indexKey(i);
-        Value newElement = TRY(InternalizeJSONProperty(o, prop, reviver));
+        const ParseRecord* elementRecord = elementRecords && i < double(elementRecords->size()) ? &(*elementRecords)[size_t(i)] : nullptr;
+        Value newElement = TRY(InternalizeJSONProperty(o, prop, reviver, elementRecord));
         if (newElement.isUndefined()) TRY(o->Delete(prop));
         else TRY(CreateDataProperty(o, prop, newElement));
       }
@@ -212,28 +251,61 @@ Result<Value> InternalizeJSONProperty(Object* holder, const PropertyKey& name, V
       ValueVector keys = TRY(EnumerableOwnProperties(o, EnumerableOwnKind::Key));
       for (Value p : keys) {
         PropertyKey prop(p.asString());
-        Value newElement = TRY(InternalizeJSONProperty(o, prop, reviver));
+        const ParseRecord* entryRecord = nullptr;
+        if (entryRecords) {
+          for (auto& [key, record] : *entryRecords) {
+            if (key == prop) entryRecord = &record;
+          }
+        }
+        Value newElement = TRY(InternalizeJSONProperty(o, prop, reviver, entryRecord));
         if (newElement.isUndefined()) TRY(o->Delete(prop));
         else TRY(CreateDataProperty(o, prop, newElement));
       }
     }
   }
-  return Call(reviver, holder, {name.toValue(), val});
+  return Call(reviver, holder, {name.toValue(), val, Value(context)});
 }
 
 // 25.5.1 JSON.parse ( text [ , reviver ] )
 Result<Value> JSON_parse(NativeCall& call) {
   String* jsonString = TRY(ToString(call.args[0]));
   JSONParser parser(jsonString->view());
-  Value unfiltered = TRY(parser.parseText());
   Value reviver = call.args[1];
+  ParseRecord record;
+  Value unfiltered = TRY(parser.parseText(IsCallable(reviver) ? &record : nullptr));
   if (IsCallable(reviver)) {
     Object* root = newPlainObject();
     PropertyKey rootName(u"");
     TRY(CreateDataPropertyOrThrow(root, rootName, unfiltered));
-    return InternalizeJSONProperty(root, rootName, reviver);
+    return InternalizeJSONProperty(root, rootName, reviver, &record);
   }
   return unfiltered;
+}
+
+// Objects made by JSON.rawJSON ([[IsRawJSON]]).
+class RawJSONObject : public Object {
+ public:
+  RawJSONObject() : Object(nullptr) {}
+};
+
+// JSON.rawJSON ( text )
+Result<Value> JSON_rawJSON(NativeCall& call) {
+  String* jsonString = TRY(ToString(call.args[0]));
+  std::u16string_view v = jsonString->view();
+  auto bad = [](char16_t c) { return c == 0x09 || c == 0x0A || c == 0x0D || c == 0x20; };
+  if (v.empty() || bad(v.front()) || bad(v.back())) return ThrowSyntaxError("JSON.rawJSON: invalid JSON text");
+  if (v.front() == u'{' || v.front() == u'[') return ThrowSyntaxError("JSON.rawJSON: text must be a primitive JSON value");
+  JSONParser parser(v);
+  TRY(parser.parseText());
+  RawJSONObject* obj = make<RawJSONObject>();
+  TRY(CreateDataPropertyOrThrow(obj, PropertyKey(u"rawJSON"), Value(jsonString)));
+  TRY(SetIntegrityLevel(obj, IntegrityLevel::Frozen));
+  return Value(obj);
+}
+
+// JSON.isRawJSON ( O )
+Result<Value> JSON_isRawJSON(NativeCall& call) {
+  return boolean(call.args[0].isObject() && call.args[0].asObject()->is<RawJSONObject>());
 }
 
 // 25.5.2.3 QuoteJSONString ( value )
@@ -382,6 +454,7 @@ Result<std::optional<std::u16string>> SerializeJSONProperty(SerializationState& 
   if (!state.replacerFunction.isUndefined()) value = TRY(Call(state.replacerFunction, holder, {key.toValue(), value}));
   if (value.isObject()) {
     Object* o = value.asObject();
+    if (o->is<RawJSONObject>()) return std::optional<std::u16string>(std::u16string(TRY(Get(o, PropertyKey(u"rawJSON"))).asString()->view()));
     if (o->is<NumberObject>()) value = num(TRY(ToNumber(value)));
     else if (o->is<StringObject>()) value = Value(TRY(ToString(value)));
     else if (auto* b = o->as<BooleanObject>()) value = Value::boolean(b->booleanData);
@@ -457,7 +530,9 @@ void installJSON(Realm& realm) {
   Object* json = OrdinaryObjectCreate(realm.intrinsic(Intrinsic::ObjectPrototype));
   realm.setIntrinsic(Intrinsic::JSON, json);
   defineGlobal(realm, PropertyKey(u"JSON"), json);
+  defineFunction(realm, json, PropertyKey(u"isRawJSON"), 1, JSON_isRawJSON);
   defineFunction(realm, json, PropertyKey(u"parse"), 2, JSON_parse);
+  defineFunction(realm, json, PropertyKey(u"rawJSON"), 1, JSON_rawJSON);
   defineFunction(realm, json, PropertyKey(u"stringify"), 3, JSON_stringify);
   defineValue(json, PropertyKey(vm().symbols.toStringTag), str(u"JSON"), Attr::Configurable);
 }
