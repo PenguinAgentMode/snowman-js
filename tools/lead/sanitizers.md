@@ -14,6 +14,14 @@ Owner: hardening. The full suite under an ASan+UBSan engine, triaged by top fram
   --vm-mb 0 --mem-mb 1500`, with `ASAN_OPTIONS=log_path=$HOME/logs/asan/a` and
   `UBSAN_OPTIONS=log_path=$HOME/logs/ubsan/u:print_stacktrace=1` (one report file per process with a finding).
 
+## Gotcha: UBSan reports in a combined ASan+UBSan build (GCC) go to stderr
+
+- Probed with a 1-line shift overflow: with `-fsanitize=address,undefined`, UBSan ignores `log_path` (ASAN_OPTIONS
+  or UBSAN_OPTIONS) and prints to stderr; a passing test's stderr is not kept, so the combined run's "0 UBSan
+  reports" says nothing. `halt_on_error=1` would turn each into a failing scenario. A UBSan-only build
+  (`-fsanitize=undefined`) honours `UBSAN_OPTIONS=log_path`: the UBSan sweep is a separate run with that engine.
+- ASan reports do go to the log file (and abort the engine, failing the scenario); the combined run covers ASan.
+
 ## Findings
 
 | Top frame | Kind | Tests (example) | Status |
