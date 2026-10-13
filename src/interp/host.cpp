@@ -68,6 +68,7 @@ void installHostBindings(Realm* realm) {
   defineFunction(r, host, PropertyKey(u"detachArrayBuffer"), 1, hostDetachArrayBuffer);
   defineFunction(r, host, PropertyKey(u"gc"), 0, hostGc);
   defineValue(host, PropertyKey(u"global"), Value(realm->globalObject()));
+  defineValue(host, PropertyKey(u"AbstractModuleSource"), Value(realm->intrinsic(Intrinsic::AbstractModuleSource)));
   realmState(realm)->host262 = host;
   defineGlobal(r, PropertyKey(u"$262"), Value(host));
 }
