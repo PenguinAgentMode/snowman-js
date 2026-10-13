@@ -4,8 +4,8 @@
 | --- | --- | --- | --- | --- |
 | memcap | memcap (reopened: measurement + runner) | `ws/memcap`, `ws/runner`, `ws/measure` | `t262/`, `src/main.cpp`, `src/interp/cli.cpp` for the runner change | runner change gated: module tests 613 → 719 (+106, 0 newly failing); full-suite script check running; then post-merge measurement, then ws/interp2 + ws/runtime. Earlier: merged 5ff85e8: 480 MB main stack, 256 KB coroutine stacks + budgets (RangeError), parser depth guard, `ulimit -v` 1024 MB; 0 regressions. Open: dropped suspended generators keep their stack until exit (cap ~1,000; needs 2 heap.h methods); no CheckStack on nested array/object literals (SIGSEGV past ~400 levels in a generator; no test hits it) |
 | temporal | temporal | `ws/temporal` | `src/builtins/temporal/` core (temporal.h, parser, options, calendar) + Duration, Plain*; Intrinsics in realm.h; Date.prototype.toTemporalInstant | merged 00dc9d9 (built-ins/Temporal 3,047 alone; 4,605 / 4,605 with ws/temporal2 in a trial merge). Next: non-ISO calendars for intl402/Temporal |
-| temporal2 | temporal2 | `ws/temporal2` | `src/builtins/temporal/{instant,zoned_date_time,now,time_zone}.cpp`, `time_zone.h`, `tz*`, `tools/temporal/` | merge request next (Instant 467/467, ZonedDateTime 899/901, Now 66/66). Next: module proposals (import defer/source/text/bytes; owns `src/parser/`, `src/interp/module.*` for it) + CoverInitializedName |
-| intl | intl | `ws/intl` | `src/builtins/intl/`, `tools/intl/`; additive Intrinsics in realm.h | started: plumbing for all constructors first |
+| temporal2 | temporal2 | `ws/temporal2`, `ws/modules2` | Temporal tz layer (merged 9f1e7e5); now `src/parser/`, `src/interp/module.*`, `builtins/abstract_module_source.cpp`, realm.h AbstractModuleSource, `$262.AbstractModuleSource` | module proposals: import defer/source/text/bytes (516 files incl. 242 negative), ShadowRealm loader hook, CoverInitializedName; later parser B.3.2 hoisting + AST size |
+| intl | intl | `ws/intl`, `ws/intl-dev` | `src/builtins/intl/`, `tools/intl/`; Intl intrinsics in realm.h; toLocale* in number/bigint/string/array/typedarray/date.cpp | merged 9a1a42b (intl402 non-Temporal 1,069 / 1,353). Next: DateTimeFormat (3/245) |
 | builtins | builtins | `ws/builtins` | promise/error/iterator/regexp/arraybuffer/typedarray/dataview/atomics/uint8array_base64 built-ins; additive `runtime/arraybuffer.h`, `runtime/typedarray.h` | merged 5b81747 (allKeyed 89/89, Error.stack 35/35, Iterator.join 18/18); gating legacy RegExp (26/26) and immutable ArrayBuffer (61/66). Next: ShadowRealm (importValue's loader hook after temporal2), 3 ES-core bugs, staging engine bugs + Annex B |
 | survey | survey (IDLE; closes but stays listed: agent-system fault, reported) | `ws/survey` | | report merged d44aba3. Holds a machine: reopen it with agent_send for the next area instead of spawning; first wait for its orphaned node run (2 × 768 MB heap) to finish |
 | parser, regexp, interp, modules | (closed) | | | merged before M8 |
@@ -41,13 +41,21 @@ First measured full-suite run: **main 8a5df0b93** (`tools/lead/measure.sh suite 
 
 ## Merges awaiting a post-merge measurement
 
-Not in 8a5df0b93's run; the next `measure.sh suite` on main covers them:
+Not in 8a5df0b93's run; memcap's `measure.sh suite` on main c21bcd8 covers them all:
 - 5b81747 ws/builtins a87b211 (allKeyed, Error.stack, Iterator.join), gated on 6d73e90.
 - 00dc9d9 ws/temporal 7526397 (Temporal core + Duration + Plain*), gated on 8a5df0b.
-- 8e85e96 ws/builtins d0423a1 (legacy RegExp statics 26/26 + Function.prototype.toString fix in
-  builtins/function_prototype.cpp), gated on cfb908c (cf26874 alone: 1 regression, fixed by d0423a1; Function
-  893/893 on the fix). Merged before d0423a1's own full gate (a rule slip): builtins' tip gate 996500e (a
-  superset) is the confirming gate; any regression from it reverts 8e85e96.
+- 8e85e96 ws/builtins d0423a1 (legacy RegExp statics + Function.prototype.toString fix). Merged before d0423a1's
+  own gate (a rule slip); confirmed by builtins' 996500e gate (a superset): 0 regressions.
+- 9f1e7e5 ws/temporal2 99a40ae (Instant, ZonedDateTime, Now, tz data; built-ins/Temporal 4,605/4,605), gated on
+  src-identical b2c4f03.
+- 9a1a42b ws/intl b48382d (ECMA-402 without ICU: intl402 non-Temporal 1,069 / 1,353; node 1,051), gated.
+- c21bcd8 ws/runner 43f03e9, a RUNNER change: module tests run in place (`--prelude`/`--epilogue`). Module-flagged
+  files of the full suite, old vs new runner on the same binary: 613 → 719 (+106, 0 newly failing); parse-only
+  733 → 733. The +106 is the runner's, not the engine's: the 104 self-importing tests
+  (src/interp/module_test_exclusions.txt, now obsolete), 1 staging self-import, and 1 accidental pass
+  (import-defer-of-missing-module-fails.js, on temporal2's expected list). Full suite vs 8a5df0b93: +106, -4
+  flaky timeouts (staging/sm/Date/dst-offset-caching-{5..8}-of-8.js, pass alone). Report:
+  results branch `results/43f03e9/MERGE_REQUEST.md`.
 
 ## Decisions
 
