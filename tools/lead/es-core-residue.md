@@ -44,3 +44,14 @@ Size: about 800-1,200 lines, one workstream, touching runtime (vm/heap/string si
 atomics) and interp (host, coroutine globals). Risks: thread-safety of the singletons (a missed global is a
 data race, not a crash, until it is), and timing flakiness: the agent tests sleep and use timeouts, and run 4
 jobs at once. Gain: up to 112 files (+2 with the runner flag), which node's host does not pass either.
+
+## The memory-hungry staging tests (full suite, not ES-core)
+
+Measured with scaled-down inputs under `ulimit -v 1 GB` (per-unit costs; base engine 16.6 MB).
+
+| Test | Peak | Root cause | Fix |
+| --- | --- | --- | --- |
+| sm/extensions/recursion.js | 929 MB (MemoryLimit) | infinite plain recursion leaves 480 MB of main stack resident after unwinding (656 MB alone with its frames' heap), then a generator recursion maps one 256 KB stack per level (1,024 = 256 MB) | ws/stacktrim 6b67bbf: coroutine budget 128 MB + madvise(DONTNEED) of the dead main stack before mapping a new stack: 657 MB, passes |
+| sm/regress/regress-610026.js | 2.3 GB (out of memory) | ~400 B per empty `{}` block, almost all in the parser (parse-only 398 B/block, evaluation +10): every block opens a parser `Scope` (280 B: 4 hash containers + 2 vectors) that `scopePool_` keeps until the parse ends, plus the 88 B BlockStatement; the test evals ~2M then ~4M blocks | parser: free or reuse a Scope at exitScope (live scopes are only the nesting depth): ~100 B/block |
+| sm/RegExp/unicode-braced.js, unicode-class-braced.js | 444 MB resident, > 1 GB address space | a 16M-character pattern (`"0".repeat(2**24)`) through `eval` of a regex literal costs ~20 B per character (`new RegExp` ~10 B; the string itself 2 B): ~10 full copies (eval source, lexer token, AST, the validator's and regexp parser's code-point arrays at 4 B/char, the RegExp source); freed 32-64 MB blocks stay mapped (M_TRIM_THRESHOLD 1 GB), so the address space passes the 1 GB cap | fewer copies on the eval/RegExp path (pass views; validate and compile from UTF-16 without a code-point copy) |
+| sm/String/replace-math.js | 1.3 GB (out of memory at 3 GB too) | a replacement over the 2^30 string length limit was built before the check | fixed on main by builtins (GetSubstitution checks the length first: RangeError) |
