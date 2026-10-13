@@ -54,7 +54,14 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-None: 29a14dfdd covers cefe44c (runner safety), f5ad13c (runtime-r), e935740 (stacktrim), 29a14df (builtins8).
+Not in 29a14dfdd's run:
+- 7f86ee9 ws/builtins7 520764a: $262.agent step 2, per-thread engine state (thread_local), no behaviour change.
+  ES-core gate 0 regressions; speed A/B vs main 32179d1 (CPU-heavy files alone, 3 rounds): ratios 0.90–0.99,
+  within the ±15% run-to-run noise.
+- ws/canblock-r 7205b4d (memcap's, rebased and gated by the lead), a RUNNER + CLI change: `--can-block=false` for
+  `flags: [CanBlockIsFalse]` (INTERFACES.md §1), VM canBlock, AgentCanSuspend in Atomics.wait. Old vs new runner,
+  same binary, over the 9 CanBlock-flagged files: 14 → 18 of 18 scenarios, 0 newly failing (the +2 files are the
+  runner's). Full-suite gate on 7205b4d: ES-core 43,196, full 51,641, 0 regressions.
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
