@@ -2,16 +2,21 @@
 // a JSONL line per scenario. Tests run in place, so module specifiers resolve as INTERPRETING.md says: a script
 // test is composed (harness + test + RAN) into a temp file next to it; a module test runs unmodified at its
 // own path (a test that imports itself gets the same module record), with the harness as a --prelude Script
-// and the RAN line as an --epilogue, both temp files in os.tmpdir() (INTERFACES.md section 1).
+// and the RAN line as an --epilogue, both temp files in $TMPDIR (below; INTERFACES.md section 1).
 //
 //   node runner/run.mjs --engine "<command>" [--suite es-core|full] [--shard k/N] [--jobs J (4)]
 //                       [--parse-only] [--filter <path prefix>] [--out results/shard.jsonl]
 //                       [--mem-mb M (env T262_MEM_MB, 700)] [--vm-mb V (env T262_VM_MB, 1024; 0: none)]
+//                       [--machine-mb T (env T262_MACHINE_MB, 4096; 0: no machine guard)]
 //
 // Memory: a watchdog polls each engine's VmRSS and SIGKILLs one above --mem-mb; the scenario fails with
 // error_name MemoryLimit. A runaway test then fails alone instead of taking the machine down (4 jobs x the cap
 // has to fit the machine). Each engine also runs under `ulimit -v` --vm-mb, for growth faster than the poll
-// (the engine's 480 MB main stack is reserved address space, most of it never touched).
+// (the engine's 480 MB main stack is reserved address space, most of it never touched). A machine guard reads
+// /proc/meminfo (MemTotal - MemAvailable: the whole sandbox on gVisor, tmpfs included) every 200 ms: above 78%
+// of --machine-mb it starts no new scenario; above 86% it SIGKILLs the engine with the largest resident set
+// (MemoryLimit). Temp files go to $TMPDIR, or $HOME/tmp when that is unset or /tmp: on these sandboxes /tmp is a
+// tmpfs inside the machine's memory.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,8 +25,24 @@ import { fileURLToPath } from 'node:url';
 import { listScenarios, metadataOf, shardOf } from './scenarios.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const TMP = process.env.TMPDIR && process.env.TMPDIR !== '/tmp' ? process.env.TMPDIR : path.join(os.homedir(), 'tmp');
+fs.mkdirSync(TMP, { recursive: true });
+// Temp files of running scenarios, removed on every exit path.
+const liveTemps = new Set();
+function removeLiveTemps() {
+  for (const temp of liveTemps) fs.rmSync(temp, { force: true });
+  liveTemps.clear();
+}
+process.on('exit', removeLiveTemps);
+for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
+  process.on(signal, () => {
+    removeLiveTemps();
+    process.exit(128 + os.constants.signals[signal]);
+  });
+}
 const TIMEOUT_MS = 10_000;
 const MEM_POLL_MS = 20;
+const MACHINE_POLL_MS = 200;
 const DONOTEVALUATE = 'Test262: This statement should not be evaluated.';
 // RAN is printed after a test's body, so an engine that runs nothing and exits 0 can't pass it.
 const RAN = 'Test262:Ran';
@@ -36,6 +57,7 @@ function parseArgs(argv) {
     parseOnly: false,
     test262: path.join(KIT, 'test262'),
     memMb: process.env.T262_MEM_MB || 700,
+    machineMb: process.env.T262_MACHINE_MB ?? 4096,
     vmMb: process.env.T262_VM_MB || 1024,
   };
   for (let i = 0; i < argv.length; i++) {
@@ -147,11 +169,43 @@ function hostScriptError(output) {
 // Runs the command under an address-space cap of vmLimitKb (0: none); SIGKILLs it after timeoutMs, or once its
 // resident set exceeds memLimitKb. marker is an argument unique to this run among concurrent ones (a temp
 // file's path).
+// The machine guard: the sandbox's memory in use (on gVisor MemTotal is the host's, and MemTotal - MemAvailable
+// is this sandbox, tmpfs included), and the running engines' resident sets, largest first.
+const running = new Set(); // { kb, kill() } per running engine
+const machine = { high: false, lastKill: 0 };
+function machineUsedKb() {
+  try {
+    const text = fs.readFileSync('/proc/meminfo', 'utf8');
+    const total = Number(/^MemTotal:\s+(\d+)/m.exec(text)[1]);
+    const available = Number((/^MemAvailable:\s+(\d+)/m.exec(text) ?? /^MemFree:\s+(\d+)/m.exec(text))[1]);
+    return total - available;
+  } catch {
+    return 0;
+  }
+}
+function startMachineGuard(machineMb) {
+  if (!Number(machineMb)) return () => {};
+  const pauseKb = Number(machineMb) * 1024 * 0.78;
+  const killKb = Number(machineMb) * 1024 * 0.86;
+  const timer = setInterval(() => {
+    const used = machineUsedKb();
+    machine.high = used > pauseKb;
+    if (used <= killKb || performance.now() - machine.lastKill < 1000) return;
+    let largest = null;
+    for (const run of running) if (!largest || run.kb > largest.kb) largest = run;
+    if (!largest) return;
+    machine.lastKill = performance.now();
+    largest.kill();
+    console.error(`run.mjs: machine memory ${Math.round(used / 1024)} MB > ${Math.round(killKb / 1024)} MB: killed the largest engine (${Math.round(largest.kb / 1024)} MB)`);
+  }, MACHINE_POLL_MS);
+  return () => clearInterval(timer);
+}
+
 function execute(command, args, timeoutMs, memLimitKb, vmLimitKb, marker) {
   return new Promise((resolve) => {
     const started = performance.now();
     const capped = vmLimitKb ? ['/bin/sh', ['-c', 'ulimit -v "$0" && exec "$@"', String(vmLimitKb), command, ...args]] : [command, args];
-    const child = spawn(capped[0], capped[1], { stdio: ['ignore', 'pipe', 'pipe'] });
+    const child = spawn(capped[0], capped[1], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, TMPDIR: TMP } });
     let output = '';
     let timedOut = false;
     let memoryExceeded = false;
@@ -161,11 +215,22 @@ function execute(command, args, timeoutMs, memLimitKb, vmLimitKb, marker) {
     }, timeoutMs);
     let entry = null;
     let peakKb = 0;
+    let machineKilled = false;
+    const run = {
+      kb: 0,
+      kill() {
+        memoryExceeded = true;
+        machineKilled = true;
+        child.kill('SIGKILL');
+      },
+    };
+    running.add(run);
     const watchdog = setInterval(() => {
       if (child.exitCode !== null || child.signalCode !== null) return;
       entry ??= procEntryOf(child, marker);
       if (!entry) return;
       const kb = rssKb(entry);
+      run.kb = kb;
       if (kb > peakKb) peakKb = kb;
       if (kb > memLimitKb) {
         memoryExceeded = true;
@@ -175,6 +240,7 @@ function execute(command, args, timeoutMs, memLimitKb, vmLimitKb, marker) {
     const stop = () => {
       clearTimeout(timer);
       clearInterval(watchdog);
+      running.delete(run);
     };
     child.stdout.on('data', (d) => (output += d));
     child.stderr.on('data', (d) => (output += d));
@@ -184,7 +250,7 @@ function execute(command, args, timeoutMs, memLimitKb, vmLimitKb, marker) {
       // rssMb: the largest resident set the watchdog saw (null if it never found the process: a short run, or a
       // lookup miss, which leaves the process capped by ulimit -v only).
       const rssMb = entry ? Math.round(peakKb / 1024) : null;
-      resolve({ code: code ?? 1, output, timedOut, memoryExceeded, rssMb, ms: Math.round(performance.now() - started) });
+      resolve({ code: code ?? 1, output, timedOut, memoryExceeded, machineKilled, rssMb, ms: Math.round(performance.now() - started) });
     });
     child.on('error', (error) => {
       stop();
@@ -206,11 +272,13 @@ async function runScenario(args, engine, scenario, slot) {
     // Written next to the test, so its relative imports and fixtures resolve.
     entry = path.join(path.dirname(file), `.t262-${process.pid}-${slot}.js`);
     temps.push(entry);
+    liveTemps.add(entry);
     fs.writeFileSync(entry, compose(args.test262, source, metadata, scenario.mode));
   } else {
     if (!args.parseOnly && !metadata.flags.includes('raw')) {
-      const base = path.join(os.tmpdir(), `t262-${process.pid}-${slot}`);
+      const base = path.join(TMP, `t262-${process.pid}-${slot}`);
       temps.push(`${base}-prelude.js`, `${base}-epilogue.js`);
+      for (const temp of temps) liveTemps.add(temp);
       fs.writeFileSync(temps[0], harnessOf(args.test262, metadata));
       fs.writeFileSync(temps[1], `print(${JSON.stringify(RAN)});\n`);
       engineArgs.push('--prelude', temps[0], '--epilogue', temps[1]);
@@ -221,10 +289,15 @@ async function runScenario(args, engine, scenario, slot) {
   // An argument no concurrent scenario has: the temp file, or the module test itself (it runs in one mode).
   const marker = temps[0] ?? entry;
   const result = await execute(engine[0], engineArgs, TIMEOUT_MS, Number(args.memMb) * 1024, Number(args.vmMb) * 1024, marker);
-  for (const temp of temps) fs.rmSync(temp, { force: true });
+  for (const temp of temps) {
+    fs.rmSync(temp, { force: true });
+    liveTemps.delete(temp);
+  }
 
   const status = verdict(result, metadata, args.parseOnly);
-  const failure = result.memoryExceeded
+  const failure = result.machineKilled
+    ? { error_name: 'MemoryLimit', message: `killed: machine memory above 86% of ${args.machineMb} MB (largest engine)` }
+    : result.memoryExceeded
     ? { error_name: 'MemoryLimit', message: `killed: resident memory above ${args.memMb} MB` }
     : status === 'pass'
       ? {}
@@ -245,8 +318,21 @@ async function main() {
   let next = 0;
   let passed = 0;
   const started = performance.now();
+  const stopGuard = startMachineGuard(args.machineMb);
+  let pausedSince = 0;
   async function worker(slot) {
     while (next < mine.length) {
+      // The machine guard says memory is high: start nothing new until it drops.
+      while (machine.high) {
+        if (!pausedSince) pausedSince = performance.now();
+        if (performance.now() - pausedSince > 30_000) {
+          console.error(`run.mjs: paused 30 s: machine memory ${Math.round(machineUsedKb() / 1024)} MB (check /tmp and other processes)`);
+          pausedSince = performance.now();
+        }
+        await new Promise((resolve) => setTimeout(resolve, MACHINE_POLL_MS));
+      }
+      pausedSince = 0;
+      if (next >= mine.length) break;
       const scenario = mine[next++];
       const line = await runScenario(args, engine, scenario, slot);
       if (line.status === 'pass') passed++;
@@ -254,6 +340,7 @@ async function main() {
     }
   }
   await Promise.all(Array.from({ length: Number(args.jobs) }, (_, slot) => worker(slot)));
+  stopGuard();
   if (args.out) await new Promise((resolve) => out.end(resolve));
 
   const seconds = ((performance.now() - started) / 1000).toFixed(1);

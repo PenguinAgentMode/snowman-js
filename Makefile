@@ -7,6 +7,9 @@
 CXXFLAGS ?= -std=c++20 -O2 -g -Wall -Wextra
 CPPFLAGS += -Isrc
 JOBS ?= 4
+# /tmp is a tmpfs inside the machine's 4 GB on our sandboxes: compilers and the runner write temp files here.
+export TMPDIR := $(if $(filter-out /tmp,$(TMPDIR)),$(TMPDIR),$(HOME)/tmp)
+$(shell mkdir -p $(TMPDIR))
 SOURCES := $(shell find src -name '*.cpp')
 OBJECTS := $(SOURCES:src/%.cpp=build/%.o)
 RUN := node t262/runner/run.mjs --engine ./engine --jobs $(JOBS) $(if $(PARSE),--parse-only)
