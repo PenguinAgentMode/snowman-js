@@ -463,11 +463,11 @@ Result<void> SetTypedArrayFromTypedArray(TypedArrayObject* target, double target
                                 source->buffer->data() + size_t(source->byteOffset) + size_t(srcLength) * srcElementSize);
   size_t targetByteIndex = size_t(targetOffset) * targetElementSize + size_t(target->byteOffset);
   if (source->elementType == target->elementType) {
-    std::memcpy(target->buffer->data() + targetByteIndex, srcBytes.data(), srcBytes.size());
+    if (!srcBytes.empty()) std::memcpy(target->buffer->data() + targetByteIndex, srcBytes.data(), srcBytes.size());
     return {};
   }
   ArrayBufferObject scratch(nullptr, false, srcBytes.size(), std::nullopt);
-  std::memcpy(scratch.data(), srcBytes.data(), srcBytes.size());
+  if (!srcBytes.empty()) std::memcpy(scratch.data(), srcBytes.data(), srcBytes.size());
   for (size_t i = 0; i < size_t(srcLength); i++) {
     Value value = GetValueFromBuffer(&scratch, i * srcElementSize, source->elementType);
     SetValueInBuffer(target->buffer, targetByteIndex + i * targetElementSize, target->elementType, value);
