@@ -263,7 +263,7 @@ InternalDuration DifferenceISODateTime(const ISODateTime& isoDateTime1, const IS
   int timeSign = TimeDurationSign(timeDuration);
   int dateSign = CompareISODate(isoDateTime2.isoDate, isoDateTime1.isoDate);
   ISODate adjustedDate = isoDateTime2.isoDate;
-  if (timeSign == dateSign) {
+  if (timeSign == -dateSign) {
     adjustedDate = AddDaysToISODate(adjustedDate, timeSign);
     timeDuration -= Int128(timeSign) * nsPerDay;
   }
@@ -289,58 +289,76 @@ struct CalendarNudge {
   double total;
 };
 
+struct NudgeWindow {
+  int64_t r1, r2;
+  EpochNanoseconds startEpochNs, endEpochNs;
+  DateDuration startDuration, endDuration;
+};
+
+// ComputeNudgeWindow(sign, duration, originEpochNs, isoDateTime, timeZone, calendar, increment, unit, additionalShift)
+Result<NudgeWindow> ComputeNudgeWindow(int sign, const InternalDuration& duration, EpochNanoseconds originEpochNs,
+                                       const ISODateTime& isoDateTime, const TimeZone* timeZone, const CalendarId& calendar,
+                                       int64_t increment, Unit unit, bool additionalShift) {
+  NudgeWindow w;
+  auto bracket = [&](int64_t value) {
+    int64_t truncated = value / increment * increment;
+    w.r1 = additionalShift ? truncated + increment * sign : truncated;
+    w.r2 = w.r1 + increment * sign;
+  };
+  if (unit == Unit::Year) {
+    bracket(duration.date.years);
+    w.startDuration = TRY(CreateDateDurationRecord(w.r1, 0, 0, 0));
+    w.endDuration = TRY(CreateDateDurationRecord(w.r2, 0, 0, 0));
+  } else if (unit == Unit::Month) {
+    bracket(duration.date.months);
+    w.startDuration = TRY(AdjustDateDurationRecord(duration.date, 0, 0, w.r1));
+    w.endDuration = TRY(AdjustDateDurationRecord(duration.date, 0, 0, w.r2));
+  } else if (unit == Unit::Week) {
+    DateDuration yearsMonths = TRY(AdjustDateDurationRecord(duration.date, 0, 0));
+    ISODate weeksStart = TRY(CalendarDateAdd(calendar, isoDateTime.isoDate, yearsMonths, Overflow::Constrain));
+    ISODate weeksEnd = AddDaysToISODate(weeksStart, duration.date.days);
+    DateDuration untilResult = CalendarDateUntil(calendar, weeksStart, weeksEnd, Unit::Week);
+    bracket(duration.date.weeks + untilResult.weeks);
+    w.startDuration = TRY(AdjustDateDurationRecord(duration.date, 0, w.r1));
+    w.endDuration = TRY(AdjustDateDurationRecord(duration.date, 0, w.r2));
+  } else {
+    bracket(duration.date.days);
+    w.startDuration = TRY(AdjustDateDurationRecord(duration.date, w.r1));
+    w.endDuration = TRY(AdjustDateDurationRecord(duration.date, w.r2));
+  }
+  // The reference implementation starts from the origin whenever the start duration is zero.
+  if (DateDurationSign(w.startDuration) == 0) {
+    w.startEpochNs = originEpochNs;
+  } else {
+    ISODate start = TRY(CalendarDateAdd(calendar, isoDateTime.isoDate, w.startDuration, Overflow::Constrain));
+    w.startEpochNs = TRY(epochNsFor(timeZone, CombineISODateAndTimeRecord(start, isoDateTime.time)));
+  }
+  ISODate end = TRY(CalendarDateAdd(calendar, isoDateTime.isoDate, w.endDuration, Overflow::Constrain));
+  w.endEpochNs = TRY(epochNsFor(timeZone, CombineISODateAndTimeRecord(end, isoDateTime.time)));
+  return w;
+}
+
 // NudgeToCalendarUnit
 Result<CalendarNudge> NudgeToCalendarUnit(int sign, const InternalDuration& duration, EpochNanoseconds originEpochNs,
                                           EpochNanoseconds destEpochNs, const ISODateTime& isoDateTime,
                                           const TimeZone* timeZone, const CalendarId& calendar, int64_t increment,
                                           Unit unit, RoundingMode roundingMode) {
   bool didExpandCalendarUnit = false;
-  int64_t r1, r2;
-  DateDuration startDuration, endDuration;
-  auto truncToIncrement = [&](int64_t v) { return v / increment * increment; };
-  if (unit == Unit::Year) {
-    int64_t years = truncToIncrement(duration.date.years);
-    r1 = years;
-    r2 = years + increment * sign;
-    startDuration = TRY(CreateDateDurationRecord(r1, 0, 0, 0));
-    endDuration = TRY(CreateDateDurationRecord(r2, 0, 0, 0));
-  } else if (unit == Unit::Month) {
-    int64_t months = truncToIncrement(duration.date.months);
-    r1 = months;
-    r2 = months + increment * sign;
-    startDuration = TRY(AdjustDateDurationRecord(duration.date, 0, 0, r1));
-    endDuration = TRY(AdjustDateDurationRecord(duration.date, 0, 0, r2));
-  } else if (unit == Unit::Week) {
-    DateDuration yearsMonths = TRY(AdjustDateDurationRecord(duration.date, 0, 0));
-    ISODate weeksStart = TRY(CalendarDateAdd(calendar, isoDateTime.isoDate, yearsMonths, Overflow::Constrain));
-    ISODate weeksEnd = AddDaysToISODate(weeksStart, duration.date.days);
-    DateDuration untilResult = CalendarDateUntil(calendar, weeksStart, weeksEnd, Unit::Week);
-    int64_t weeks = truncToIncrement(duration.date.weeks + untilResult.weeks);
-    r1 = weeks;
-    r2 = weeks + increment * sign;
-    startDuration = TRY(AdjustDateDurationRecord(duration.date, 0, r1));
-    endDuration = TRY(AdjustDateDurationRecord(duration.date, 0, r2));
-  } else {
-    int64_t days = truncToIncrement(duration.date.days);
-    r1 = days;
-    r2 = days + increment * sign;
-    startDuration = TRY(AdjustDateDurationRecord(duration.date, r1));
-    endDuration = TRY(AdjustDateDurationRecord(duration.date, r2));
+  NudgeWindow w = TRY(ComputeNudgeWindow(sign, duration, originEpochNs, isoDateTime, timeZone, calendar, increment, unit, false));
+  auto inWindow = [&](const NudgeWindow& nw) {
+    return sign == 1 ? (nw.startEpochNs <= destEpochNs && destEpochNs <= nw.endEpochNs)
+                     : (nw.endEpochNs <= destEpochNs && destEpochNs <= nw.startEpochNs);
+  };
+  if (!inWindow(w)) {
+    w = TRY(ComputeNudgeWindow(sign, duration, originEpochNs, isoDateTime, timeZone, calendar, increment, unit, true));
+    if (!inWindow(w)) return ThrowRangeError("rounding is out of range");
+    didExpandCalendarUnit = true;
   }
-  EpochNanoseconds startEpochNs;
-  if (r1 == 0) {
-    startEpochNs = originEpochNs;
-  } else {
-    ISODate start = TRY(CalendarDateAdd(calendar, isoDateTime.isoDate, startDuration, Overflow::Constrain));
-    startEpochNs = TRY(epochNsFor(timeZone, CombineISODateAndTimeRecord(start, isoDateTime.time)));
-  }
-  ISODate end = TRY(CalendarDateAdd(calendar, isoDateTime.isoDate, endDuration, Overflow::Constrain));
-  EpochNanoseconds endEpochNs = TRY(epochNsFor(timeZone, CombineISODateAndTimeRecord(end, isoDateTime.time)));
-  if (sign == 1) {
-    if (startEpochNs > destEpochNs || destEpochNs >= endEpochNs) return ThrowRangeError("rounding is out of range");
-  } else {
-    if (endEpochNs >= destEpochNs || destEpochNs > startEpochNs) return ThrowRangeError("rounding is out of range");
-  }
+  int64_t r1 = w.r1;
+  EpochNanoseconds startEpochNs = w.startEpochNs, endEpochNs = w.endEpochNs;
+  const DateDuration& startDuration = w.startDuration;
+  const DateDuration& endDuration = w.endDuration;
+  if (startEpochNs == endEpochNs) return ThrowRangeError("rounding is out of range");
   // progress = (dest − start) / (end − start), exactly; total = r1 + progress × increment × sign.
   Int128 num = destEpochNs - startEpochNs, den = endEpochNs - startEpochNs;
   if (den < 0) {
@@ -742,20 +760,9 @@ Result<Value> DurationPrototype_subtract(NativeCall& call) {
   return AddDurations(ArithmeticOperation::Subtract, d, call.args[0]);
 }
 
-// A string argument becomes { [key]: string } on a null-prototype object; otherwise GetOptionsObject.
-Result<Object*> optionsOrUnitString(Value arg, const char16_t* key) {
-  if (arg.isString()) {
-    Object* o = OrdinaryObjectCreate(nullptr);
-    TRY(CreateDataPropertyOrThrow(o, PropertyKey(key), arg));
-    return o;
-  }
-  return GetOptionsObject(arg);
-}
-
 Result<Value> DurationPrototype_round(NativeCall& call) {
   DurationObject* duration = TRY(thisDuration(call, "Temporal.Duration.prototype.round"));
-  if (call.args[0].isUndefined()) return ThrowTypeError("Temporal.Duration.prototype.round requires options");
-  Object* roundTo = TRY(optionsOrUnitString(call.args[0], u"smallestUnit"));
+  Object* roundTo = TRY(GetRoundingOptionsArgument(call.args[0], u"smallestUnit", "Temporal.Duration.prototype.round"));
   bool smallestUnitPresent = true, largestUnitPresent = true;
   Unit largestUnit = TRY(GetTemporalUnitValuedOption(roundTo, u"largestUnit"));
   RelativeTo relativeTo = TRY(GetTemporalRelativeToOption(roundTo));
@@ -821,8 +828,7 @@ Result<Value> DurationPrototype_round(NativeCall& call) {
 
 Result<Value> DurationPrototype_total(NativeCall& call) {
   DurationObject* duration = TRY(thisDuration(call, "Temporal.Duration.prototype.total"));
-  if (call.args[0].isUndefined()) return ThrowTypeError("Temporal.Duration.prototype.total requires options");
-  Object* totalOf = TRY(optionsOrUnitString(call.args[0], u"unit"));
+  Object* totalOf = TRY(GetRoundingOptionsArgument(call.args[0], u"unit", "Temporal.Duration.prototype.total"));
   RelativeTo relativeTo = TRY(GetTemporalRelativeToOption(totalOf));
   Unit unit = TRY(GetTemporalUnitValuedOption(totalOf, u"unit", true));
   TRY(ValidateTemporalUnitValue(unit, UnitGroup::DateTime));

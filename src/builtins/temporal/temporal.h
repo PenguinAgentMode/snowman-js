@@ -311,6 +311,16 @@ struct SecondsStringPrecision {
 };
 Result<SecondsStringPrecision> ToSecondsStringPrecisionRecord(Unit smallestUnit, int fractionalDigitCount);
 
+// Shared method helpers (options.cpp)
+// GetOptionsObject(options) then GetTemporalOverflowOption.
+Result<Overflow> GetTemporalOverflowOptionFrom(Value options);
+// The roundTo/totalOf argument of round()/total(): TypeError for undefined, a String becomes
+// { [key]: string } on a null-prototype object, otherwise GetOptionsObject.
+Result<Object*> GetRoundingOptionsArgument(Value argument, const char16_t* key, const char* method);
+// IsPartialTemporalObject(value)
+Result<bool> IsPartialTemporalObject(Value value);
+inline bool CalendarEquals(const CalendarId& one, const CalendarId& two) { return one == two; }
+
 // ---------------------------------------------------------------------------------------------------------
 // ISO 8601 / RFC 9557 parsing (parse.cpp). Every failure is a RangeError.
 

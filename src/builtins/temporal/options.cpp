@@ -214,4 +214,32 @@ Result<SecondsStringPrecision> ToSecondsStringPrecisionRecord(Unit smallestUnit,
   return SecondsStringPrecision{fractionalDigitCount, Unit::Nanosecond, pow10[9 - fractionalDigitCount]};
 }
 
+Result<Overflow> GetTemporalOverflowOptionFrom(Value options) {
+  Object* resolvedOptions = TRY(GetOptionsObject(options));
+  return GetTemporalOverflowOption(resolvedOptions);
+}
+
+Result<Object*> GetRoundingOptionsArgument(Value argument, const char16_t* key, const char* method) {
+  if (argument.isUndefined()) return ThrowTypeError(std::string(method) + " requires an options argument");
+  if (argument.isString()) {
+    Object* o = OrdinaryObjectCreate(nullptr);
+    TRY(CreateDataPropertyOrThrow(o, PropertyKey(key), argument));
+    return o;
+  }
+  return GetOptionsObject(argument);
+}
+
+Result<bool> IsPartialTemporalObject(Value value) {
+  if (!value.isObject()) return false;
+  Object* o = value.asObject();
+  if (o->is<PlainDateObject>() || o->is<PlainDateTimeObject>() || o->is<PlainMonthDayObject>() || o->is<PlainTimeObject>() ||
+      o->is<PlainYearMonthObject>() || o->is<ZonedDateTimeObject>())
+    return false;
+  Value calendarProperty = TRY(Get(o, PropertyKey(u"calendar")));
+  if (!calendarProperty.isUndefined()) return false;
+  Value timeZoneProperty = TRY(Get(o, PropertyKey(u"timeZone")));
+  if (!timeZoneProperty.isUndefined()) return false;
+  return true;
+}
+
 }  // namespace snowman::temporal
