@@ -5,6 +5,7 @@
 #include "builtins/util.h"
 #include "runtime/bound_function.h"
 #include "runtime/function.h"
+#include "unicode/unicode.h"
 
 namespace snowman::builtins {
 
@@ -56,6 +57,40 @@ Result<Value> FunctionPrototype_call(NativeCall& call) {
   return Call(func, call.args[0], call.args.slice(1));
 }
 
+bool isIdentifierName(std::u16string_view name) {
+  if (name.empty()) return false;
+  for (size_t i = 0; i < name.size();) {
+    char32_t cp = name[i++];
+    if (cp >= 0xD800 && cp <= 0xDBFF && i < name.size() && name[i] >= 0xDC00 && name[i] <= 0xDFFF)
+      cp = 0x10000 + ((cp - 0xD800) << 10) + (name[i++] - 0xDC00);
+    bool ok = cp == u'$' || cp == u'_' || (i == 1 ? unicode::isIDStart(cp) : (unicode::isIDContinue(cp) || cp == 0x200C || cp == 0x200D));
+    if (!ok) return false;
+  }
+  return true;
+}
+
+// The NativeFunction text for a built-in's [[InitialName]]: "get "/"set " stay the NativeFunctionAccessor; a name
+// that is neither an IdentifierName nor already [computed] (RegExp's legacy "get $&") becomes a computed string
+// literal, so the text stays valid NativeFunction syntax.
+std::u16string nativeFunctionName(std::u16string_view name) {
+  std::u16string out;
+  if (name.starts_with(u"get ") || name.starts_with(u"set ")) {
+    out.append(name.substr(0, 4));
+    name.remove_prefix(4);
+  }
+  if (name.empty() || name.starts_with(u"[") || isIdentifierName(name)) {
+    out.append(name);
+    return out;
+  }
+  out.append(u"[\"");
+  for (char16_t c : name) {
+    if (c == u'"' || c == u'\\') out.push_back(u'\\');
+    out.push_back(c);
+  }
+  out.append(u"\"]");
+  return out;
+}
+
 // 20.2.3.5 Function.prototype.toString ( )
 Result<Value> FunctionPrototype_toString(NativeCall& call) {
   Value func = call.thisValue;
@@ -64,7 +99,7 @@ Result<Value> FunctionPrototype_toString(NativeCall& call) {
       if (String* source = f->sourceText()) return Value(source);
     }
     if (auto* b = func.asObject()->as<BuiltinFunction>()) {
-      std::u16string_view name = b->initialName.isString() ? b->initialName.asString()->view() : u"";
+      std::u16string name = nativeFunctionName(b->initialName.isString() ? b->initialName.asString()->view() : u"");
       return Value(concatStrings({u"function ", name, u"() { [native code] }"}));
     }
     if (IsCallable(func)) return str(u"function () { [native code] }");
