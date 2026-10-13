@@ -19,23 +19,18 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   IsTypedArrayFixedLength.
 - runtime/realm.h: Intrinsic::ShadowRealm, ShadowRealmPrototype.
 
-## Current batch: $262.agent (ws/builtins5)
+## Current batch: $262.agent
 
-- Step 1 (gating): $262.agent.sleep / monotonicNow / getReport (null) on the main agent in src/interp/host.cpp, no threads.
-  Atomics slice vs results/c21bcd82e.json: +3 (waitAsync/{,bigint/}true-for-timeout,
-  returns-result-object-value-is-promise-resolves-to-timed-out), 0 regressions. No `start`, so tests that need agents fail
-  fast at start() instead of spinning in the helper's getReport loop.
-- Step 2: notes/agent-design.md before any threading code (lead reviews, then approves files). Hard constraints from the
-  supervisor: agent stacks 8-16 MB inside kStackBytesBudget; one process-wide memory budget (700 MB RSS watchdog is per
-  process); test under the real runner with the max agent count any Atomics test uses; join/kill agents on exit, uncaught
-  error and timeout, nothing outlives a SIGKILL, normal exit doesn't hang on a blocked agent.
-- Step 2 design: notes/agent-design.md (pushed efe9ee3); waiting for the lead's review and per-file approval.
-- nonextensible-applies-to-private: ws/builtins6 dd70aa8 (src/interp/class.cpp, IsExtensible check after the duplicate
-  check in PrivateFieldAdd / PrivateMethodOrAccessorAdd): 2 class files + staging/sm/PrivateName pass;
-  import-defer/evaluation-triggers/ignore-private-name-access.js needs `import defer` (temporal2). Gate after step 1's.
-- importValue: the change is saved as ~/tools/importvalue.patch (also on local branch proto-import in ~/repo/wt2, on
-  e535e4b + ec0f102); apply on main once temporal2's module work is there.
-- Baselines now: results/c21bcd82e.json (ES-core 43,163), results/c21bcd82e-full.json (full 50,887).
+- ws/builtins5 d55e14b on main ec34f4f: $262.agent step 1 (host.cpp; conflict with $262.AbstractModuleSource resolved,
+  both kept) + notes + importValue through ImportModuleForRealm (ShadowRealm full slice 64/64). Full ES-core gate of
+  d55e14b running (vs results/c21bcd82e.json). Step 1 alone (6ce8f3e) was gated clean: 43,169, +3.
+- ws/builtins6 dd70aa8: nonextensible-applies-to-private, gated clean (43,166, 0 regressions; full slice +3), sent alone.
+- Step 2 APPROVED (notes/agent-design.md): thread_local conversion, no behaviour change. Conditions: mechanical, small
+  commits by area (runtime / builtins / interp / parser / intl / temporal); rebase right before gating and tell the lead
+  first (he warns temporal2: parser + module.cpp, survey: intl/*, temporal/temporal2: temporal/time_zone.cpp); measure the
+  speed cost (sum of ms over the ES-core run + CPU-heavy files alone vs main); heap.h/vm.h keep their signatures, list any
+  change. TSan only on 1-2 small agent tests, one at a time, stop past ~1.5 GB RSS.
+- Baselines: results/c21bcd82e.json (ES-core 43,163), results/c21bcd82e-full.json (full 50,887).
 
 ## Earlier batch
 
