@@ -26,7 +26,8 @@ Owner: hardening. The full suite under an ASan+UBSan engine, triaged by top fram
 
 | Top frame | Kind | Tests (example) | Status |
 | --- | --- | --- | --- |
-| builtins/typedarray.cpp:90 InitializeTypedArrayFromTypedArray | UBSan nonnull-attribute: memcpy with a null pointer (a zero-length buffer's data()), size 0 | UBSan sweep shard 0 (4 reports) | real (UB; GCC may drop later null checks); fix: skip the copy when empty. Open |
+| builtins/typedarray.cpp:90 InitializeTypedArrayFromTypedArray; arraybuffer.cpp:113 (slice), :149 (transfer); typedarray.cpp:465, :469 (%TypedArray%.prototype.set) | UBSan nonnull-attribute: memcpy/memmove with a null pointer (an empty buffer's data()), 0 bytes | UBSan shard 0: 27 reports in 9 processes | real (UB: GCC may assume the pointers non-null and drop later null checks). Fixed: guard each copy with its size (4747623, and the commit after it) |
+| interp/class.cpp ClassDefinitionEvaluation -> DefineField | ASan heap-use-after-free: the ClassElements cell was collected mid-evaluation (only references into it were live; the conservative scan matches exact cell starts) | ASan + SNOWMAN_GC_STRESS=1, 1/40 sample: 16 class-field tests (e.g. language/statements/class/elements/intercalated-static-non-static-computed-fields.js) | real GC bug (any optimization level). Fixed: Rooted<ClassElements> (3dbab65); decorators2's file, sent to the lead |
 
 ## Runs
 
@@ -34,4 +35,7 @@ Owner: hardening. The full suite under an ASan+UBSan engine, triaged by top fram
 - Shard 1/4 (--jobs 3, --mem-mb 1200): 25,638 scenarios, 25,550 pass, 1,888 s, machine guard 0, 0 ASan / 0 UBSan reports.
 - Shard 2/4 (--jobs 3, --mem-mb 1200): 25,829 scenarios, 25,728 pass, 1,831 s, machine guard 0, 0 ASan reports.
 - Shard 3/4 (--jobs 3, --mem-mb 1200): 25,662 scenarios, 25,572 pass, 2,805 s, machine guard 0, 0 ASan reports.
-- ASan total: 0 reports over 102,994 scenarios (the full suite). UBSan-only sweep: running.
+- ASan total: 0 reports over 102,994 scenarios (the full suite) at the normal GC budget.
+- ASan + SNOWMAN_GC_STRESS=1, full-suite shard 0/40 (2,555 scenarios, 1 job, 1,952 s): 16 reports, one cluster (class.cpp
+  below). The normal budget rarely collects inside a test, so missing roots need the stress mode to show.
+- UBSan-only shard 0/4: 25,865 scenarios, 9 report files (the memcpy cluster below).
