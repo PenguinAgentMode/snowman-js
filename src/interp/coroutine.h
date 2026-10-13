@@ -23,8 +23,9 @@ class Coroutine {
   // tail-call-optimization tests' 100,000 calls (300-505 MB at 3-5 KB a call); it can shrink once the
   // interpreter has proper tail calls.
   static constexpr size_t kMainStackSize = size_t(480) << 20;
-  // Every stack mapped at once (the main one included): the main stack plus 1,024 default stacks.
-  static constexpr size_t kStackBytesBudget = kMainStackSize + (size_t(256) << 20);
+  // Every stack mapped at once (the main one included): the main stack plus 512 default stacks, so that
+  // both used up (480 + 128 MB) stay under the runner's 700 MB resident limit.
+  static constexpr size_t kStackBytesBudget = kMainStackSize + (size_t(128) << 20);
 
   // Nothing runs until the first resume().
   Coroutine(Entry entry, void* data, size_t stackSize = kDefaultStackSize);
@@ -53,6 +54,7 @@ class Coroutine {
  private:
   bool mapStack();
   void releaseStack();
+  void releaseDeadStack(const void* liveLow);
 
   Entry entry_;
   void* data_;
