@@ -48,3 +48,9 @@
   islamic-umalqura from tools/temporal/gen-calendars.mjs tables.
 - Watch: survey's toLocaleString batch (ws/survey-intl 5aba3f349) lands soon: rebase onto it. builtins7's
   thread_local conversion touches temporal/time_zone.cpp (one cache).
+- Spec text: `python3 /tmp/spec2txt2.py proposal-intl-era-monthcode/spec.emu` (tc39 repo); ops by line: era table +
+  CalendarSupportsEra 97, CanonicalizeEraInCalendar 255, month codes 280-372, era year/arithmetic year + epoch ISO
+  years 386-472, BalanceNonISODate 555, NonISODateSurpasses 596 (CompareSurpasses: temporal spec plaindate.html),
+  NonISODateAdd 628, NonISODateUntil 655 (loops: compute days/weeks arithmetically), NonISOCalendarDateToISO 694,
+  NonISOMonthDayToISOReferenceDate 724 (+ chinese/dangi reference-year table), CalendarExtraFields 843,
+  NonISOFieldKeysToIgnore 855, NonISOResolveFields 875.
