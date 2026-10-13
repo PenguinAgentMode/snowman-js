@@ -80,21 +80,33 @@ std::optional<std::string> readFile(const std::string& path) {
   return text.str();
 }
 
-bool isJsonRequest(const ast::ModuleRequest& request) {
+// The module type a request's `type` import attribute names: JSON modules, text modules (import text);
+// anything else loads as JavaScript.
+enum class ModuleType : uint8_t { JavaScript, Json, Text };
+
+ModuleType moduleTypeOf(const ast::ModuleRequest& request) {
   for (const auto& attribute : request.attributes) {
-    if (attribute.key == u"type" && attribute.value == u"json") return true;
+    if (attribute.key != u"type") continue;
+    if (attribute.value == u"json") return ModuleType::Json;
+    if (attribute.value == u"text") return ModuleType::Text;
   }
-  return false;
+  return ModuleType::JavaScript;
 }
 
-// ParseModule for a file's text, or a JSON module (CreateDefaultExportSyntheticModule of ParseJSONModule).
-Result<ModuleRecord*> createModule(Realm* realm, const std::string& path, std::u16string source, bool json) {
+// ParseModule for a file's text, a JSON module (CreateDefaultExportSyntheticModule of ParseJSONModule) or a text
+// module (CreateTextModule: the text as the default export).
+Result<ModuleRecord*> createModule(Realm* realm, const std::string& path, std::u16string source, ModuleType type) {
   auto* module = snowman::make<ModuleRecord>(realm, path);
-  if (json) {
+  if (type == ModuleType::Json) {
     Object* jsonObject = realm->intrinsic(Intrinsic::JSON);
     if (!jsonObject) return ThrowSyntaxError("JSON modules need the JSON built-in");
     Value parse = TRY(Get(jsonObject, PropertyKey(u"parse")));
     module->syntheticDefault = TRY(Call(parse, Value::undefined(), {Value(newString(std::move(source)))}));
+    module->status = ModuleRecord::Status::Unlinked;
+    return module;
+  }
+  if (type == ModuleType::Text) {
+    module->syntheticDefault = Value(newString(std::move(source)));
     module->status = ModuleRecord::Status::Unlinked;
     return module;
   }
@@ -109,21 +121,22 @@ Result<ModuleRecord*> createModule(Realm* realm, const std::string& path, std::u
   return module;
 }
 
-// HostLoadImportedModule + FinishLoadingImportedModule: one module per resolved path (and type) per realm.
+// HostLoadImportedModule + FinishLoadingImportedModule: one module per resolved path (and type) per realm, the
+// same for every import phase.
 Result<ModuleRecord*> hostLoadImportedModule(Realm* realm, const std::string& directory,
                                              const ast::ModuleRequest& request) {
   std::string specifier = utf16ToUtf8(request.specifier);
   std::optional<std::string> path = resolveSpecifier(directory, specifier);
   if (!path) return ThrowTypeError("Cannot resolve module specifier '" + specifier + "'");
-  bool json = isJsonRequest(request);
-  std::string key = json ? *path + "#json" : *path;
+  ModuleType type = moduleTypeOf(request);
+  std::string key = type == ModuleType::Json ? *path + "#json" : type == ModuleType::Text ? *path + "#text" : *path;
   RealmState* state = realmState(realm);
   for (auto& [loadedPath, module] : state->moduleMap) {
     if (loadedPath == key) return module;
   }
   std::optional<std::string> text = readFile(*path);
   if (!text) return ThrowTypeError("Cannot find module '" + *path + "'");
-  ModuleRecord* module = TRY(createModule(realm, *path, utf8ToUtf16(*text), json));
+  ModuleRecord* module = TRY(createModule(realm, *path, utf8ToUtf16(*text), type));
   state->moduleMap.emplace_back(key, module);
   return module;
 }
@@ -964,7 +977,7 @@ Result<Value> evaluateImportMeta() {
 Result<void> runModuleFile(Realm* realm, const std::string& path, std::u16string source) {
   std::string resolved = resolveSpecifier(".", path.starts_with("/") ? path : "./" + path).value();
   setScriptDirectory(directoryOf(resolved));
-  ModuleRecord* module = TRY(createModule(realm, resolved, std::move(source), false));
+  ModuleRecord* module = TRY(createModule(realm, resolved, std::move(source), ModuleType::JavaScript));
   realmState(realm)->moduleMap.emplace_back(resolved, module);
   ExecutionContext context;
   context.realm = realm;
