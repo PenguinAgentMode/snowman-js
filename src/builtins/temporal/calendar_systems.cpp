@@ -1,6 +1,7 @@
 // The non-ISO calendar systems (calendar_systems.h).
 #include "builtins/temporal/calendar_systems.h"
 
+#include "builtins/temporal/calendar_isolike.h"
 #include "builtins/temporal/temporal.h"
 
 namespace snowman::temporal {
@@ -47,32 +48,6 @@ std::u16string CreateMonthCode(MonthCodeParts parts) {
 
 namespace {
 
-// Calendars with ISO 8601 months and days and an arithmetic year offset from the ISO year (gregory, buddhist,
-// roc, japanese): arithmetic year = ISO year - epoch ISO year.
-class IsoLikeCalendar : public CalendarSystem {
- public:
-  IsoLikeCalendar(int64_t epochISOYear, std::span<const EraRow> eras) : epochISOYear_(epochISOYear), eras_(eras) {}
-
-  Date fromEpochDays(int64_t epochDays) const override {
-    ISODate d = EpochDaysToISODate(epochDays);
-    return {d.year - epochISOYear_, d.month, d.day};
-  }
-  int64_t toEpochDays(int64_t year, int32_t month, int32_t day) const override {
-    return ISODateToEpochDays(year + epochISOYear_, month - 1, day);
-  }
-  int32_t monthsInYear(int64_t) const override { return 12; }
-  int32_t daysInMonth(int64_t year, int32_t month) const override {
-    return ISODaysInMonth(double(year + epochISOYear_), month);
-  }
-  bool inLeapYear(int64_t year) const override { return MathematicalInLeapYear(double(year + epochISOYear_)); }
-  int32_t maxDaysInMonthCode(MonthCodeParts code) const override { return ISODaysInMonth(1972, code.number); }
-  std::span<const EraRow> eras() const override { return eras_; }
-
- private:
-  int64_t epochISOYear_;
-  std::span<const EraRow> eras_;
-};
-
 const EraRow kGregoryEras[] = {
     {u"ce", u"ad", EraRow::Kind::Epoch, 0},
     {u"bce", u"bc", EraRow::Kind::Negative, 0},
@@ -80,10 +55,26 @@ const EraRow kGregoryEras[] = {
 
 const IsoLikeCalendar kGregory(0, kGregoryEras);
 
+const EraRow kBuddhistEras[] = {
+    {u"be", nullptr, EraRow::Kind::Epoch, 0},
+};
+// Buddhist Era year 1 is 543 BCE (ISO year -542).
+const IsoLikeCalendar kBuddhist(-543, kBuddhistEras);
+
+const EraRow kRocEras[] = {
+    {u"roc", nullptr, EraRow::Kind::Epoch, 0},
+    {u"broc", nullptr, EraRow::Kind::Negative, 0},
+};
+// Minguo year 1 is ISO 1912.
+const IsoLikeCalendar kRoc(1911, kRocEras);
+
 }  // namespace
 
 const CalendarSystem* GetCalendarSystem(std::u16string_view calendar) {
   if (calendar == u"gregory") return &kGregory;
+  if (calendar == u"buddhist") return &kBuddhist;
+  if (calendar == u"roc") return &kRoc;
+  if (calendar == u"japanese") return JapaneseCalendarSystem();
   if (calendar == u"chinese") return ChineseCalendarSystem();
   if (calendar == u"dangi") return DangiCalendarSystem();
   if (calendar == u"islamic-umalqura") return IslamicUmalquraCalendarSystem();
