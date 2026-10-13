@@ -38,6 +38,9 @@ node t262/runner/milestones.mjs results/<sha>.json --parse-only results/<sha>-pa
 - `--baseline results/<old>.json` adds newly passing files and regressions.
 - `--filter test/language/literals` runs a slice; use it for an owner's own directories before merging.
 - `--parse-only` runs the M1 measurement: aggregate it separately into `results/<sha>-parse.json`.
+- One full-suite run gives both numbers: aggregate its JSONL with `--suite full` into `results/<sha>-full.json` and
+  with `--suite es-core --subset` (lines outside ES-core left out) into `results/<sha>.json`, then
+  `milestones.mjs results/<sha>.json --full results/<sha>-full.json`. `tools/lead/measure.sh suite` does all three.
 - `--jobs` defaults to 4. A watchdog SIGKILLs an engine whose resident memory passes `--mem-mb` (env
   `T262_MEM_MB`, default 700); the scenario fails with `error_name` `MemoryLimit`. Jobs x the cap must fit the machine.
 

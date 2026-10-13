@@ -1,7 +1,10 @@
 // milestones.mjs: which rungs of the ladder a results file reaches. Parse-only results (from
 // run.mjs --parse-only) are checked for M1; full-run results for M2 onwards.
 //
-//   node runner/milestones.mjs results/<sha>.json [--parse-only results/<sha>-parse.json]
+//   node runner/milestones.mjs results/<sha>.json [--parse-only results/<sha>-parse.json] [--full results/<sha>-full.json]
+//
+// results/<sha>.json is ES-core (from an es-core run, or a full run aggregated with --suite es-core --subset);
+// --full adds the full suite's pass rate (aggregate.mjs --suite full).
 import fs from 'node:fs';
 
 const percent = (group) => (group && group.files ? (100 * group.passed) / group.files : 0);
@@ -29,6 +32,8 @@ function rungs(full, parse) {
 const args = process.argv.slice(2);
 const parseIndex = args.indexOf('--parse-only');
 const parseFile = parseIndex >= 0 ? args.splice(parseIndex, 2)[1] : null;
+const fullSuiteIndex = args.indexOf('--full');
+const fullSuiteFile = fullSuiteIndex >= 0 ? args.splice(fullSuiteIndex, 2)[1] : null;
 const full = args[0] ? JSON.parse(fs.readFileSync(args[0], 'utf8')) : null;
 const parse = parseFile ? JSON.parse(fs.readFileSync(parseFile, 'utf8')) : null;
 
@@ -39,3 +44,10 @@ for (const rung of rungs(full, parse)) {
   if (rung.reached) highest = rung.id;
 }
 console.log(`highest: ${highest}`);
+if (full) console.log(`ES-core: ${full.files.passed} / ${full.files.total} files (${full.files.percent}%)`);
+if (fullSuiteFile) {
+  const suite = JSON.parse(fs.readFileSync(fullSuiteFile, 'utf8'));
+  if (suite.suite !== 'full') console.log(`WARNING: ${fullSuiteFile} is suite ${suite.suite}, not full`);
+  if (!suite.complete) console.log('WARNING: the full-suite run is incomplete');
+  console.log(`full suite: ${suite.files.passed} / ${suite.files.total} files (${suite.files.percent}%)`);
+}

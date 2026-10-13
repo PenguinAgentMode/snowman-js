@@ -2,7 +2,10 @@
 // was run exactly once. A file passes only if all its scenarios pass (test262.fyi's rule).
 //
 //   node runner/aggregate.mjs --suite es-core --label <engine sha> [--baseline results/<old>.json]
-//                             --out results/<sha>.json shard-0.jsonl shard-1.jsonl ...
+//                             [--subset] --out results/<sha>.json shard-0.jsonl shard-1.jsonl ...
+//
+// --subset: the JSONL comes from a larger suite (e.g. a full run aggregated as es-core); lines of scenarios
+// outside --suite are left out instead of making the run incomplete.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +16,10 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 function parseArgs(argv) {
   const args = { suite: 'es-core', test262: path.join(KIT, 'test262'), shards: [] };
   for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === '--subset') {
+      args.subset = true;
+      continue;
+    }
     if (argv[i].startsWith('--')) {
       args[argv[i].slice(2)] = argv[++i];
       continue;
@@ -98,7 +105,9 @@ function diff(baseline, fileStatus) {
 
 const args = parseArgs(process.argv.slice(2));
 const expected = listScenarios(args.test262, args.suite);
-const lines = readLines(args.shards);
+const allLines = readLines(args.shards);
+const expectedKeys = new Set(expected.map((s) => `${s.file}#${s.mode}`));
+const lines = args.subset ? allLines.filter((l) => expectedKeys.has(`${l.file}#${l.mode}`)) : allLines;
 const check = completeness(expected, lines);
 const { files, passed, dirs, fileStatus } = rollup(lines);
 const baseline = args.baseline ? JSON.parse(fs.readFileSync(args.baseline, 'utf8')) : null;
