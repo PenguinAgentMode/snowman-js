@@ -44,6 +44,16 @@ Result<void> DetachArrayBuffer(ArrayBufferObject* arrayBuffer, Value key) {
 
 bool IsDetachedBuffer(const ArrayBufferObject* buffer) { return buffer->isDetached(); }
 
+Result<ArrayBufferObject*> AllocateImmutableArrayBuffer(Object* constructor, double byteLength, const uint8_t* fromBlock,
+                                                        size_t fromIndex, size_t count) {
+  ArrayBufferObject* newBuffer = TRY(AllocateArrayBuffer(constructor, byteLength));
+  if (count > 0) std::memcpy(newBuffer->data(), fromBlock + fromIndex, count);
+  newBuffer->setImmutable();
+  return newBuffer;
+}
+
+bool IsImmutableBuffer(const ArrayBufferObject* buffer) { return buffer->isImmutable(); }
+
 size_t ElementSize(ElementType type) {
   switch (type) {
     case ElementType::Int8:

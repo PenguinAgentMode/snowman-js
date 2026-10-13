@@ -23,6 +23,11 @@ class ArrayBufferObject : public Object {
   uint8_t* data() { return data_.data(); }
   void resize(size_t newByteLength) { data_.resize(newByteLength, 0); }
 
+  // [[ArrayBufferIsImmutable]] (immutable-arraybuffer): set once, by AllocateImmutableArrayBuffer. An immutable
+  // buffer is fixed-length and can't be detached; nothing writes to its data after allocation.
+  bool isImmutable() const { return immutable_; }
+  void setImmutable() { immutable_ = true; }
+
   Value detachKey;  // [[ArrayBufferDetachKey]]
   void detach() {
     detached_ = true;
@@ -34,6 +39,7 @@ class ArrayBufferObject : public Object {
  private:
   bool shared_;
   bool detached_ = false;
+  bool immutable_ = false;
   std::optional<size_t> maxByteLength_;
   std::vector<uint8_t> data_;
 };
@@ -57,6 +63,11 @@ Result<ArrayBufferObject*> AllocateArrayBuffer(Object* constructor, double byteL
 // 25.1.3.5 DetachArrayBuffer ( arrayBuffer [ , key ] ): TypeError if the key does not match or it is shared.
 Result<void> DetachArrayBuffer(ArrayBufferObject* arrayBuffer, Value key = Value::undefined());
 bool IsDetachedBuffer(const ArrayBufferObject* buffer);
+// AllocateImmutableArrayBuffer ( constructor, byteLength, fromBlock, fromIndex, count ) and IsImmutableBuffer
+// (immutable-arraybuffer). count bytes from fromBlock + fromIndex are copied in; the rest are zero.
+Result<ArrayBufferObject*> AllocateImmutableArrayBuffer(Object* constructor, double byteLength, const uint8_t* fromBlock,
+                                                        size_t fromIndex, size_t count);
+bool IsImmutableBuffer(const ArrayBufferObject* buffer);
 
 // The element types of Table 71.
 enum class ElementType : uint8_t {

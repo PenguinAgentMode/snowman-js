@@ -45,5 +45,9 @@ Value TypedArrayGetElement(TypedArrayObject* o, double index);
 Result<void> TypedArraySetElement(TypedArrayObject* o, double index, Value value);
 // 23.2.4.4 ValidateTypedArray: TypeError unless o is an in-bounds TypedArray.
 Result<TypedArrayObject*> ValidateTypedArray(Value o);
+// ValidateTypedArray ( O, order, accessMode ) (immutable-arraybuffer): ~write~ also throws a TypeError for a
+// TypedArray over an immutable buffer, before the bounds check.
+enum class AccessMode : uint8_t { Read, Write };
+Result<TypedArrayObject*> ValidateTypedArray(Value o, AccessMode accessMode);
 
 }  // namespace snowman

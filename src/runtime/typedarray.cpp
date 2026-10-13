@@ -116,6 +116,15 @@ Result<TypedArrayObject*> ValidateTypedArray(Value o) {
   return ta;
 }
 
+Result<TypedArrayObject*> ValidateTypedArray(Value o, AccessMode accessMode) {
+  TypedArrayObject* ta = o.isObject() ? o.asObject()->as<TypedArrayObject>() : nullptr;
+  if (!ta) return ThrowTypeError("this is not a typed array.");
+  if (accessMode == AccessMode::Write && IsImmutableBuffer(ta->buffer))
+    return ThrowTypeError("typed array is backed by an immutable ArrayBuffer");
+  if (IsTypedArrayOutOfBounds(ta)) return ThrowTypeError("typed array is detached or out of bounds");
+  return ta;
+}
+
 // 10.4.5.1 [[GetOwnProperty]]
 Result<std::optional<PropertyDescriptor>> TypedArrayObject::GetOwnProperty(const PropertyKey& key) {
   if (auto index = numericIndex(key)) {
