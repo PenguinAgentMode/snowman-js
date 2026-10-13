@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 
+#include "builtins/abstract_module_source.h"
 #include "interp/dispose.h"
 #include "interp/suspend.h"
 #include "runtime/builtins.h"
@@ -121,11 +122,32 @@ Result<ModuleRecord*> createModule(Realm* realm, const std::string& path, std::u
   return module;
 }
 
+// The host's `<module source>` module (INTERPRETING.md, source-phase-imports-module-source): a module with no
+// exports whose [[ModuleSource]] is a ModuleSource object (prototype chain: ModuleSource.prototype, then
+// %AbstractModuleSource.prototype%), one per realm.
+ModuleRecord* createHostModuleSourceModule(Realm* realm) {
+  auto* module = snowman::make<ModuleRecord>(realm, "<module source>");
+  Object* prototype = OrdinaryObjectCreate(realm->intrinsic(Intrinsic::AbstractModuleSourcePrototype));
+  module->moduleSource = snowman::make<builtins::ModuleSourceObject>(prototype, atom(u"ModuleSource"));
+  module->syntheticDefault = Value(module->moduleSource);
+  module->status = ModuleRecord::Status::Unlinked;
+  return module;
+}
+
 // HostLoadImportedModule + FinishLoadingImportedModule: one module per resolved path (and type) per realm, the
 // same for every import phase.
 Result<ModuleRecord*> hostLoadImportedModule(Realm* realm, const std::string& directory,
                                              const ast::ModuleRequest& request) {
   std::string specifier = utf16ToUtf8(request.specifier);
+  if (specifier == "<module source>") {
+    RealmState* state = realmState(realm);
+    for (auto& [loadedPath, module] : state->moduleMap) {
+      if (loadedPath == specifier) return module;
+    }
+    ModuleRecord* module = createHostModuleSourceModule(realm);
+    state->moduleMap.emplace_back(specifier, module);
+    return module;
+  }
   std::optional<std::string> path = resolveSpecifier(directory, specifier);
   if (!path) return ThrowTypeError("Cannot resolve module specifier '" + specifier + "'");
   ModuleType type = moduleTypeOf(request);
