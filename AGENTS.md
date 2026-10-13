@@ -29,6 +29,12 @@
   build) in the background, attach a `monitor` that fires when it finishes, e.g. a command source that waits
   for the process to exit and then prints the runner's summary line. An idle agent with an unwatched run never
   wakes, and from outside that looks the same as done.
+- **Keep big output out of your conversation** (an agent's context has a hard limit; intl's turn died at 1M
+  tokens). Redirect build, test and generator output to files; print only summaries (`tail -20`, `grep -c`,
+  gate.mjs's summary line, a node one-liner over the JSONL). Never cat JSONL, results/*.json, .inc data or large
+  diffs; read files in ranges.
+- **Keep a handoff note**: `notes/<agent>.md` on your branch (branch, sha, state, numbers, next steps, gotchas),
+  updated with every push. A dead machine or a dead context then costs one re-read, not the work.
 - **Report every ~30 minutes**, even mid-task: one line to the lead (agent_send to="parent"): the branch sha
   pushed, the pass count on your directories, the next step, blockers. Silence reads as a problem.
 - **Merge per feature**: when one feature (a built-in, a constructor, a class) reaches a stable pass count,
