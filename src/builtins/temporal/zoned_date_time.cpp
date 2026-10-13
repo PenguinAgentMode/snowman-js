@@ -187,21 +187,6 @@ Result<double> DifferenceZonedDateTimeWithTotal(EpochNanoseconds ns1, EpochNanos
 
 namespace {
 
-// IsPartialTemporalObject (temporal.h does not declare it yet; local name to avoid a clash when it does).
-Result<bool> isPartialTemporalObject(Value value) {
-  if (!value.isObject()) return false;
-  if (asTemporal<PlainDateObject>(value) || asTemporal<PlainDateTimeObject>(value) ||
-      asTemporal<PlainMonthDayObject>(value) || asTemporal<PlainTimeObject>(value) ||
-      asTemporal<PlainYearMonthObject>(value) || asTemporal<ZonedDateTimeObject>(value)) {
-    return false;
-  }
-  Value calendarProperty = TRY(Get(value.asObject(), PropertyKey(u"calendar")));
-  if (!calendarProperty.isUndefined()) return false;
-  Value timeZoneProperty = TRY(Get(value.asObject(), PropertyKey(u"timeZone")));
-  if (!timeZoneProperty.isUndefined()) return false;
-  return true;
-}
-
 // ToTemporalZonedDateTime
 Result<ZonedDateTimeObject*> ToTemporalZonedDateTime(Value item, Value options = Value::undefined()) {
   bool hasUTCDesignator = false;
@@ -443,7 +428,7 @@ Result<Value> ZonedDateTimePrototype_offset(NativeCall& call) {
 Result<Value> ZonedDateTimePrototype_with(NativeCall& call) {
   ZonedDateTimeObject* zoned = TRY(thisZoned(call, "Temporal.ZonedDateTime.prototype.with"));
   Value temporalZonedDateTimeLike = call.args[0];
-  if (!TRY(isPartialTemporalObject(temporalZonedDateTimeLike))) {
+  if (!TRY(IsPartialTemporalObject(temporalZonedDateTimeLike))) {
     return ThrowTypeError("Temporal.ZonedDateTime.prototype.with requires a partial date-time object");
   }
   EpochNanoseconds epochNs = zoned->epochNanoseconds;
@@ -726,10 +711,5 @@ void installZonedDateTime(Realm& realm) {
 }  // namespace
 
 SNOWMAN_BUILTIN(TemporalZonedDateTime, kOrderDefault, installZonedDateTime);
-
-// Weak fallback until ws/temporal's PlainTime lands (its strong definition replaces this).
-__attribute__((weak)) Result<PlainTimeObject*> ToTemporalTime(Value, Value) {
-  return ThrowTypeError("Temporal.PlainTime is not implemented yet");
-}
 
 }  // namespace snowman::temporal

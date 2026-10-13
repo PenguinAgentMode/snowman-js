@@ -55,19 +55,4 @@ void installNow(Realm& realm) {
 
 SNOWMAN_BUILTIN(TemporalNow, kOrderDefault, installNow);
 
-// Weak fallbacks until ws/temporal's PlainTime and PlainDateTime land (their strong definitions replace these).
-__attribute__((weak)) Result<PlainTimeObject*> CreateTemporalTime(const TimeRecord& time, Object* newTarget) {
-  Object* prototype = newTarget ? TRY(GetPrototypeFromConstructor(newTarget, Intrinsic::TemporalPlainTimePrototype))
-                                : builtins::intrinsic(Intrinsic::TemporalPlainTimePrototype);
-  if (!prototype) prototype = builtins::intrinsic(Intrinsic::ObjectPrototype);
-  return make<PlainTimeObject>(prototype, time);
-}
-__attribute__((weak)) Result<PlainDateTimeObject*> CreateTemporalDateTime(const ISODateTime& isoDateTime,
-                                                                          const CalendarId& calendar, Object* newTarget) {
-  Object* prototype = newTarget ? TRY(GetPrototypeFromConstructor(newTarget, Intrinsic::TemporalPlainDateTimePrototype))
-                                : builtins::intrinsic(Intrinsic::TemporalPlainDateTimePrototype);
-  if (!prototype) prototype = builtins::intrinsic(Intrinsic::ObjectPrototype);
-  return make<PlainDateTimeObject>(prototype, isoDateTime, calendar);
-}
-
 }  // namespace snowman::temporal
