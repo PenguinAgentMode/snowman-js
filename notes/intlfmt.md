@@ -5,7 +5,10 @@ Owner: intlfmt (intl402 leftovers: Intl.DateTimeFormat in non-Gregorian calendar
 ## Branch / state
 
 - Branch `ws/intlfmt`, rebased on main 786b6f2 (STATUS/notes only since 53d4d86; gate baseline 317949e37).
-- Gate: full suite running at ac942bf2d (engine copy $HOME/engine-gate, JSONL $HOME/logs/full-ac942bf2d.jsonl).
+- Gated: ac942bf2d (full suite, 4 jobs, 2,479 s). gate.mjs vs results/317949e37.json: 0 regressions; vs
+  results/317949e37-full.json: 0 regressions. Full 53,441 / 53,616 (+27: 17 DateTimeFormat + 6 Ramadan dateStyle mine,
+  4 PlainMonthDay/from from addd9a2, already on main); ES-core 43,196 (unchanged). JSONL: results branch
+  results/ac942bf2d/full.jsonl. Merge request sent to the lead.
 - Done (WIP, not yet gated): tools/intl/gen-date-data.mjs now also emits kCalendarFields (cldr-cal-*-full 48.0.0 +
   ca-generic from cldr-dates-full): months (hebrew 14 incl. 7-yeartype-leap), days, day periods, date/time/atTime
   formats, availableFormats, appendItems, intervalFormats, leap monthPatterns (31), cyclic year names (32-34),
@@ -37,7 +40,7 @@ Owner: intlfmt (intl402 leftovers: Intl.DateTimeFormat in non-Gregorian calendar
 
 ## Next steps
 
-- full-suite gate in the background; gate.mjs vs results/317949e37{,-full}.json; push JSONL to results branch.
+- After merge: optional, untested by test262: iso8601 patterns (y-MM-dd), `_numbers` overrides (hanidays, hebr).
 
 ## Gotchas
 
