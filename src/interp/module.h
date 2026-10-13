@@ -46,7 +46,8 @@ class ModuleRecord final : public Cell {
 };
 
 // The CLI's --module: load the file as the root module of a graph, link and evaluate it, drain the job
-// queue; a throw is an uncaught exception (parse errors are SyntaxErrors).
+// queue; a throw is an uncaught exception (parse errors are SyntaxErrors). An evaluation still pending once the
+// queue is empty never completes: an Error "module evaluation did not complete".
 Result<void> runModuleFile(Realm* realm, const std::string& path, std::u16string source);
 
 // The directory scripts resolve dynamic import() specifiers against (the main script's).

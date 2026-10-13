@@ -3,6 +3,7 @@
 #pragma once
 
 #include <string>
+#include <vector>
 
 namespace snowman {
 
@@ -11,6 +12,9 @@ struct CliOptions {
   bool parseOnly = false;
   bool dumpAst = false;
   std::string file;
+  // Global Scripts run before the entry, and after it once it completed normally (INTERFACES.md section 1).
+  std::vector<std::string> preludes;
+  std::vector<std::string> epilogues;
 };
 
 // Each returns the process exit code. `source` is the file's bytes (UTF-8). Errors are printed to stdout
@@ -23,8 +27,8 @@ int parseOnlyMain(const CliOptions& options, const std::string& source);
 // --dump-ast: print the program as ESTree JSON (acorn-compatible) on stdout. src/parser/cli.cpp.
 int dumpAstMain(const CliOptions& options, const std::string& source);
 
-// Default: run the script or module, drain the job queue. Implemented by the interp workstream in
-// src/interp/cli.cpp.
+// Default: run the preludes, the script or module, drain the job queue, then the epilogues. Implemented by the
+// interp workstream in src/interp/cli.cpp.
 int runMain(const CliOptions& options, const std::string& source);
 
 }  // namespace snowman
