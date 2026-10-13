@@ -1,6 +1,7 @@
 // ECMAScript function objects (10.2): [[Call]], [[Construct]], creation, and FunctionDeclarationInstantiation.
 #include "interp/function.h"
 
+#include "interp/dispose.h"
 #include "interp/interpreter.h"
 #include "runtime/builtins.h"
 #include "runtime/errors.h"
@@ -159,8 +160,8 @@ Result<Value> OrdinaryCallEvaluateBody(ECMAScriptFunction* F, Args args) {
     }
     case CodeKind::StaticBlock: {
       TRY(FunctionDeclarationInstantiation(F, Args()));
-      auto completion = TRY(evaluateStatementList(static_cast<const ast::StaticBlock*>(F->code)->body));
-      (void)completion;
+      Environment* lexEnv = context->lexicalEnvironment;
+      TRY(DisposeResources(lexEnv, evaluateStatementList(static_cast<const ast::StaticBlock*>(F->code)->body)));
       return Value::undefined();
     }
     case CodeKind::DefaultConstructor:
@@ -186,7 +187,9 @@ Result<Value> OrdinaryCallEvaluateBody(ECMAScriptFunction* F, Args args) {
 Result<Value> runFunctionBody(ECMAScriptFunction* F, Args) {
   const ast::Function* function = F->function;
   if (function->expression) return evaluate(function->body);
-  Completion completion = TRY(evaluateStatementList(function->body->as<ast::BlockStatement>()->body));
+  Environment* lexEnv = runningContext()->lexicalEnvironment;
+  Completion completion =
+      TRY(DisposeResources(lexEnv, evaluateStatementList(function->body->as<ast::BlockStatement>()->body)));
   if (completion.type == CompletionType::Return) return completion.value;
   return Value::undefined();
 }
@@ -263,6 +266,12 @@ Result<void> DefineMethodProperty(Object* homeObject, Value key, Object* closure
   return DefinePropertyOrThrow(homeObject, propertyKey, PropertyDescriptor::data(Value(closure), attrs));
 }
 
+void AddLegacyFunctionProperties(ECMAScriptFunction* F) {
+  if (F->strict) return;
+  defineValue(F, PropertyKey(u"arguments"), Value::undefined(), Attr::None);
+  defineValue(F, PropertyKey(u"caller"), Value::undefined(), Attr::None);
+}
+
 Object* functionPrototypeFor(Realm* realm, const ast::Function* function) {
   if (function->async && function->generator) return realm->intrinsic(Intrinsic::AsyncGeneratorFunctionPrototype);
   if (function->generator) return realm->intrinsic(Intrinsic::GeneratorFunctionPrototype);
@@ -284,6 +293,7 @@ void finishFunctionObject(ECMAScriptFunction* F, const ast::Function* function) 
     return;
   }
   if (function->async || function->isArrow() || function->kind != ast::FunctionKind::Normal) return;
+  AddLegacyFunctionProperties(F);
   MakeConstructor(F);
 }
 
@@ -479,7 +489,8 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
   auto* varDeclEnv = static_cast<DeclarativeEnvironment*>(varEnv);
   for (ast::FunctionDeclaration* f : code->annexBFunctions) {
     String* F = identifierName(f->id);
-    if (!containsName(instantiatedVarNames, F) && F != atom(u"arguments")) {
+    if (F == atom(u"arguments")) continue;  // never hoisted over the arguments binding
+    if (!containsName(instantiatedVarNames, F)) {
       TRY(varDeclEnv->CreateMutableBinding(F, false));
       TRY(varDeclEnv->InitializeBinding(F, Value::undefined()));
       instantiatedVarNames.push_back(F);

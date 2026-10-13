@@ -4,13 +4,19 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 #include "runtime/object.h"
+#include "runtime/property_map.h"
 #include "runtime/result.h"
 #include "runtime/string.h"
 #include "runtime/value.h"
+
+namespace snowman::builtins {
+class DisposeCapability;
+}
 
 namespace snowman::interp {
 
@@ -73,9 +79,15 @@ class DeclarativeEnvironment : public Environment {
   // A new binding initialized to `value` (CreateMutableBinding + InitializeBinding).
   void createInitializedBinding(String* name, Value value, bool mutable_ = true);
   const std::vector<Binding>& bindings() const { return bindings_; }
+  // Every binding back to uninitialized (a reused loop iteration environment).
+  void resetBindings() {
+    for (Binding& binding : bindings_) binding.value = Value::empty();
+  }
 
   // The environment of a catch clause (B.3.4: eval code may redeclare its parameter with var).
   bool isCatchEnvironment = false;
+  // [[DisposeCapability]]: created by the first `using` / `await using` binding initialized here.
+  builtins::DisposeCapability* disposeCapability = nullptr;
 
   void trace(Tracer& tracer) override;
 
@@ -126,6 +138,9 @@ class ObjectEnvironment final : public Environment {
   Value WithBaseObject() const override {
     return isWithEnvironment ? Value(bindingObject) : Value::undefined();
   }
+  // The binding object's own data property `name`, when it can be read and written directly (an ordinary
+  // binding object, not a with environment); nullopt otherwise or when there is none.
+  std::optional<PropertySlot> ownDataSlot(String* name);
 
   void trace(Tracer& tracer) override;
 

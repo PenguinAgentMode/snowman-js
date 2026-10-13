@@ -2,6 +2,8 @@
 //
 // The whole program runs on a 1 GB coroutine stack, so CheckStack() turns runaway recursion into a
 // RangeError long before the stack is exhausted.
+#include <malloc.h>
+
 #include <cstdio>
 #include <string>
 
@@ -10,6 +12,7 @@
 #include "interp/interpreter.h"
 #include "interp/module.h"
 #include "runtime/errors.h"
+#include "runtime/heap.h"
 #include "runtime/operations.h"
 #include "runtime/vm.h"
 
@@ -62,6 +65,7 @@ int runProgram(const CliOptions& options, const std::string& source) {
   Realm* realm = CreateRealm();
   vm().initialRealm = realm;
   interp::setUpRealm(realm);
+  heap().setCollectorEnabled(true);
   std::u16string text = utf8ToUtf16(source);
 
   if (options.module) {
@@ -102,6 +106,11 @@ void mainEntry(interp::Coroutine*, void* data) {
 }  // namespace
 
 int runMain(const CliOptions& options, const std::string& source) {
+  // The collector frees many small cells at once; keep the freed memory for reuse instead of returning it to
+  // the system and faulting it back in after every collection.
+  mallopt(M_TRIM_THRESHOLD, 1 << 30);
+  mallopt(M_TOP_PAD, 64 << 20);
+  mallopt(M_MMAP_THRESHOLD, 256 << 20);
   MainData data{&options, &source};
   interp::Coroutine main(mainEntry, &data, interp::Coroutine::kMainStackSize);
   main.resume();

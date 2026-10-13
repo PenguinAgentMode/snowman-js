@@ -3,6 +3,8 @@
 // body's execution context before switching in and restores its own after switching back.
 #include "interp/suspend.h"
 
+#include "interp/dispose.h"
+
 #include "runtime/builtins.h"
 #include "runtime/errors.h"
 #include "runtime/operations.h"
@@ -138,7 +140,9 @@ Result<Value> evaluateGeneratorLikeBody(ECMAScriptFunction* F) {
   if (function->expression) {
     result = evaluate(function->body);
   } else {
-    Result<Completion> completion = evaluateStatementList(function->body->as<ast::BlockStatement>()->body);
+    Environment* lexEnv = runningContext()->lexicalEnvironment;
+    Result<Completion> completion =
+        DisposeResources(lexEnv, evaluateStatementList(function->body->as<ast::BlockStatement>()->body));
     if (completion.isThrow()) {
       result = Throw{completion.thrown()};
     } else if (completion.value().type == CompletionType::Return) {

@@ -1,4 +1,5 @@
 // Evaluation of statements and declarations (ECMA-262 14), with their completion values.
+#include "interp/dispose.h"
 #include "interp/interpreter.h"
 #include "runtime/errors.h"
 #include "runtime/operations.h"
@@ -51,6 +52,7 @@ void setLexicalEnvironment(Environment* env) { runningContext()->lexicalEnvironm
 
 Result<void> evaluateVariableDeclaration(const VariableDeclaration* node) {
   bool isVar = node->kind == VariableKind::Var;
+  bool isUsing = node->kind == VariableKind::Using || node->kind == VariableKind::AwaitUsing;
   for (const VariableDeclarator* declarator : node->declarations) {
     const Node* id = declarator->id;
     if (id->type == NodeType::Identifier) {
@@ -62,6 +64,8 @@ Result<void> evaluateVariableDeclaration(const VariableDeclaration* node) {
       if (isVar) {
         TRY(PutValue(lhs, value));
       } else {
+        // InitializeReferencedBinding(lhs, value, hint): the resource is added before the binding is set.
+        if (isUsing) TRY(addUsingResource(lhs.env, value, node->kind));
         TRY(InitializeReferencedBinding(lhs, value));
       }
       continue;
@@ -100,7 +104,7 @@ Result<Completion> evaluateScopedStatements(const std::vector<Node*>& statements
   auto* blockEnv = snowman::make<DeclarativeEnvironment>(scope.saved());
   BlockDeclarationInstantiation(declarations, blockEnv);
   setLexicalEnvironment(blockEnv);
-  return evaluateStatementList(statements);
+  return DisposeResources(blockEnv, evaluateStatementList(statements));
 }
 
 // ---- if / with / switch ----
@@ -187,12 +191,11 @@ Result<Completion> CaseBlockEvaluation(const SwitchStatement* node, Value input)
 Result<Completion> evaluateSwitch(const SwitchStatement* node) {
   Value switchValue = TRY(evaluate(node->discriminant));
   LexicalEnvironmentScope scope;
-  if (!node->lexicallyScopedDeclarations.empty()) {
-    auto* blockEnv = snowman::make<DeclarativeEnvironment>(scope.saved());
-    BlockDeclarationInstantiation(node->lexicallyScopedDeclarations, blockEnv);
-    setLexicalEnvironment(blockEnv);
-  }
-  return CaseBlockEvaluation(node, switchValue);
+  if (node->lexicallyScopedDeclarations.empty()) return CaseBlockEvaluation(node, switchValue);
+  auto* blockEnv = snowman::make<DeclarativeEnvironment>(scope.saved());
+  BlockDeclarationInstantiation(node->lexicallyScopedDeclarations, blockEnv);
+  setLexicalEnvironment(blockEnv);
+  return DisposeResources(blockEnv, CaseBlockEvaluation(node, switchValue));
 }
 
 // ---- try ----
@@ -297,9 +300,11 @@ Result<Completion> evaluateFor(const ForStatement* node, const LabelSet* labels)
       }
     }
     setLexicalEnvironment(loopEnv);
-    TRY(evaluateVariableDeclaration(declaration));
-    if (isConst) boundNames.clear();
-    return ForBodyEvaluation(node, boundNames, labels);
+    Result<void> forDcl = evaluateVariableDeclaration(declaration);
+    if (forDcl.isThrow()) return DisposeResources(loopEnv, Result<Completion>(Throw{forDcl.thrown()}));
+    // Per-iteration copies are unobservable when nothing in the loop can capture an iteration's environment.
+    if (isConst || !loopMayCaptureEnvironment(node)) boundNames.clear();
+    return DisposeResources(loopEnv, ForBodyEvaluation(node, boundNames, labels));
   }
   if (init) {
     if (init->type == NodeType::VariableDeclaration) {
@@ -390,14 +395,15 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
                                    const LabelSet* labels) {
   InterpContext* context = runningContext();
   Environment* oldEnv = context->lexicalEnvironment;
-  (void)node;
 
   LhsKind lhsKind = LhsKind::Assignment;
   const Node* lhs = left;
   bool isConst = false;
+  VariableKind declarationKind = VariableKind::Var;
   if (left->type == NodeType::VariableDeclaration) {
     auto* declaration = left->as<VariableDeclaration>();
     lhs = declaration->declarations[0]->id;
+    declarationKind = declaration->kind;
     if (declaration->kind == VariableKind::Var) {
       lhsKind = LhsKind::VarBinding;
       // B.3.5: for (var x = init in obj)
@@ -443,6 +449,7 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
 
   // ForIn/OfBodyEvaluation
   Value V = Value::undefined();
+  DeclarativeEnvironment* reusableEnv = nullptr;
   bool destructuring = isDestructuring(lhs);
   while (true) {
     Value nextValue;
@@ -461,8 +468,14 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
 
     Result<void> status;
     DeclarativeEnvironment* iterationEnv = nullptr;
-    if (lhsKind == LhsKind::LexicalBinding) {
+    if (lhsKind == LhsKind::LexicalBinding && reusableEnv) {
+      // Nothing can capture an iteration's environment: reuse one, back in its TDZ state.
+      iterationEnv = reusableEnv;
+      iterationEnv->resetBindings();
+      context->lexicalEnvironment = iterationEnv;
+    } else if (lhsKind == LhsKind::LexicalBinding) {
       iterationEnv = snowman::make<DeclarativeEnvironment>(oldEnv);
+      if (!loopMayCaptureEnvironment(node)) reusableEnv = iterationEnv;
       for (const auto& d : declarations) {
         for (const auto& dn : d.boundNames) {
           if (isConst) {
@@ -481,7 +494,10 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
       if (lhsRef.isThrow()) {
         status = Throw{lhsRef.thrown()};
       } else if (lhsKind == LhsKind::LexicalBinding) {
-        status = InitializeReferencedBinding(lhsRef.value(), nextValue);
+        if (declarationKind == VariableKind::Using || declarationKind == VariableKind::AwaitUsing) {
+          status = addUsingResource(iterationEnv, nextValue, declarationKind);
+        }
+        if (!status.isThrow()) status = InitializeReferencedBinding(lhsRef.value(), nextValue);
       } else {
         status = PutValue(lhsRef.value(), nextValue);
       }
@@ -500,6 +516,7 @@ Result<Completion> evaluateForInOf(const Node* node, const Node* left, const Nod
     }
 
     Result<Completion> result = evaluateStatement(body);
+    if (iterationEnv) result = DisposeResources(iterationEnv, std::move(result));
     context->lexicalEnvironment = oldEnv;
     if (result.isThrow() || !LoopContinues(result.value(), labels)) {
       if (kind == IterationKind::Enumerate) {

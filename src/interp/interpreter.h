@@ -216,6 +216,9 @@ Result<Value> InstantiateFunctionExpression(const ast::Function* function, Value
 // MethodDefinition / object literal methods: DefineMethod and its generator / async variants.
 Result<ECMAScriptFunction*> DefineMethod(const ast::Function* function, Object* object,
                                          Object* functionPrototype = nullptr);
+// Sloppy plain functions' own "arguments" and "caller" (undefined, non-writable, non-configurable): an extension
+// 17.1 allows, so legacy `f.caller` reads don't hit %ThrowTypeError%.
+void AddLegacyFunctionProperties(ECMAScriptFunction* F);
 // The %XFunction.prototype% intrinsic and instance prototype for a function's kind.
 Object* functionPrototypeFor(Realm* realm, const ast::Function* function);
 
@@ -279,6 +282,14 @@ Result<Value> evaluateGeneratorLikeBody(ECMAScriptFunction* F);
 // AsyncIteratorClose / the async iterators used by for-await and yield* in async generators.
 Result<void> AsyncIteratorClose(const IteratorRecord& record, Result<void> completion);
 Result<IteratorRecord> GetAsyncIterator(Value object);
+
+// ---- Static analysis (analysis.cpp) ----
+
+// Whether evaluating `node` may capture the running environment: a function, class or arrow, or a direct
+// eval candidate. Conservative: true for any node kind it does not know.
+bool mayCaptureEnvironment(const ast::Node* node);
+// mayCaptureEnvironment(loop), cached on the loop node.
+bool loopMayCaptureEnvironment(const ast::Node* loop);
 
 // ---- Modules (module.cpp) ----
 

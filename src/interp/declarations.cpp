@@ -170,12 +170,8 @@ Result<void> EvalDeclarationInstantiation(const Program* body, Environment* varE
       auto* declEnv = static_cast<DeclarativeEnvironment*>(thisEnv);
       for (String* name : varNames) {
         if (!declEnv->hasBindingDirect(name)) continue;
-        // B.3.4: a var may redeclare a catch parameter (not a function declaration's name).
-        bool isFunctionName = false;
-        for (const FunctionDeclaration* f : body->functionsToInitialize) {
-          if (identifierName(f->id) == name) isFunctionName = true;
-        }
-        if (declEnv->isCatchEnvironment && !isFunctionName) continue;
+        // B.3.4: eval code's var-scoped declarations may redeclare a catch parameter.
+        if (declEnv->isCatchEnvironment) continue;
         return redeclaration(name);
       }
     }

@@ -53,6 +53,7 @@ Result<Value> CreateDynamicFunction(Object* constructor, Object* newTarget, Dyna
     Object* prototype = OrdinaryObjectCreate(realm->intrinsic(prototypeId));
     defineValue(F, PropertyKey(u"prototype"), Value(prototype), Attr::Writable);
   } else if (kind == DynamicFunctionKind::Normal) {
+    AddLegacyFunctionProperties(F);
     MakeConstructor(F);
   }
   return Value(F);
