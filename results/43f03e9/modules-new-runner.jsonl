@@ -1,0 +1,843 @@
+{"file":"test/language/comments/hashbang/module.js","mode":"sloppy","status":"pass","ms":111}
+{"file":"test/language/eval-code/direct/import.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/eval-code/direct/export.js","mode":"sloppy","status":"pass","ms":115}
+{"file":"test/language/eval-code/indirect/export.js","mode":"sloppy","status":"pass","ms":106}
+{"file":"test/language/eval-code/indirect/import.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/export/escaped-as-export-specifier.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/export/escaped-default.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/export/escaped-from.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/expressions/assignmenttargettype/direct-importcall-defer.js","mode":"sloppy","status":"pass","ms":63}
+{"file":"test/language/expressions/assignmenttargettype/direct-importcall.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/expressions/assignmenttargettype/direct-importcall-source.js","mode":"sloppy","status":"pass","ms":102}
+{"file":"test/language/expressions/assignmenttargettype/parenthesized-importcall-defer.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/expressions/assignmenttargettype/parenthesized-importcall-source.js","mode":"sloppy","status":"pass","ms":104}
+{"file":"test/language/expressions/assignmenttargettype/parenthesized-importcall.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/expressions/class/class-name-ident-await-escaped-module.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/expressions/class/class-name-ident-await-module.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/expressions/class/cpn-class-expr-accessors-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/expressions/class/cpn-class-expr-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/expressions/class/cpn-class-expr-fields-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/expressions/class/cpn-class-expr-fields-methods-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":104}
+{"file":"test/language/expressions/class/elements/class-name-static-initializer-default-export.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/expressions/dynamic-import/assignment-expression/import-meta.js","mode":"sloppy","status":"pass","ms":100}
+{"file":"test/language/expressions/dynamic-import/catch/nested-arrow-import-catch-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":107}
+{"file":"test/language/expressions/dynamic-import/catch/nested-async-arrow-function-await-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":104}
+{"file":"test/language/expressions/dynamic-import/catch/nested-async-arrow-function-return-await-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/expressions/dynamic-import/catch/nested-async-function-await-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/expressions/dynamic-import/catch/nested-async-function-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/expressions/dynamic-import/catch/nested-async-function-return-await-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/expressions/dynamic-import/catch/nested-async-gen-await-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/expressions/dynamic-import/catch/nested-async-gen-return-await-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/expressions/dynamic-import/catch/nested-block-labeled-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":61}
+{"file":"test/language/expressions/dynamic-import/catch/nested-block-import-catch-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/expressions/dynamic-import/catch/nested-do-while-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/expressions/dynamic-import/catch/nested-else-import-catch-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/expressions/dynamic-import/catch/nested-if-import-catch-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":96}
+{"file":"test/language/expressions/dynamic-import/catch/nested-function-import-catch-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/expressions/dynamic-import/catch/nested-while-import-catch-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/expressions/dynamic-import/catch/top-level-import-catch-eval-script-code-target.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-cls-anon.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-cls-name-meth.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-cls-named.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-expr-cls-anon.js","mode":"sloppy","status":"pass","ms":96}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-expr-cls-named.js","mode":"sloppy","status":"pass","ms":54}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-expr-cls-name-meth.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-expr-fn-anon.js","mode":"sloppy","status":"pass","ms":66}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-expr-fn-named.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-expr-gen-anon.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-expr-in.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/expressions/dynamic-import/eval-export-dflt-expr-gen-named.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/expressions/dynamic-import/import-defer/import-defer-async-module/main.js","mode":"sloppy","status":"fail","ms":81,"error_name":"SyntaxError","message":"The only valid meta property for import is 'import.meta'"}
+{"file":"test/language/expressions/dynamic-import/eval-self-once-module.js","mode":"sloppy","status":"pass","ms":116}
+{"file":"test/language/expressions/dynamic-import/import-defer/import-defer-transitive-async-module/main.js","mode":"sloppy","status":"fail","ms":83,"error_name":"SyntaxError","message":"The only valid meta property for import is 'import.meta'"}
+{"file":"test/language/expressions/dynamic-import/import-defer/import-defer-transitive-async-module/promise-prototype-then-not-called.js","mode":"sloppy","status":"fail","ms":97,"error_name":"SyntaxError","message":"The only valid meta property for import is 'import.meta'"}
+{"file":"test/language/expressions/dynamic-import/import-defer/sync/main.js","mode":"sloppy","status":"fail","ms":67,"error_name":"SyntaxError","message":"The only valid meta property for import is 'import.meta'"}
+{"file":"test/language/expressions/dynamic-import/import-defer/sync-dependency-of-deferred-async-module/main.js","mode":"sloppy","status":"fail","ms":75,"error_name":"SyntaxError","message":"The only valid meta property for import is 'import.meta'"}
+{"file":"test/language/expressions/dynamic-import/imported-self-update.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/expressions/dynamic-import/namespace/await-ns-get-nested-namespace-dflt-indirect.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/expressions/dynamic-import/namespace/promise-then-ns-get-nested-namespace-dflt-indirect.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/expressions/dynamic-import/reuse-namespace-object-from-import.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/expressions/import.meta/distinct-for-each-module.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/expressions/import.meta/import-meta-is-an-ordinary-object.js","mode":"sloppy","status":"pass","ms":64}
+{"file":"test/language/expressions/import.meta/not-accessible-from-direct-eval.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/expressions/import.meta/same-object-returned.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/expressions/import.meta/syntax/escape-sequence-meta.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/expressions/import.meta/syntax/escape-sequence-import.js","mode":"sloppy","status":"pass","ms":115}
+{"file":"test/language/expressions/import.meta/syntax/goal-module-nested-function.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/expressions/import.meta/syntax/goal-module.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-array-destructuring-expr.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-assignment-expr.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-array-rest-destructuring-expr.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-for-await-of-loop.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-for-in-loop.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-object-destructuring-expr.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-for-of-loop.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-object-rest-destructuring-expr.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/expressions/import.meta/syntax/invalid-assignment-target-update-expr.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/import/dup-bound-names.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/expressions/object/cpn-obj-lit-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/import/escaped-as-import-specifier.js","mode":"sloppy","status":"pass","ms":108}
+{"file":"test/language/import/escaped-as-namespace-import.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/import/escaped-from.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/import/import-attributes/json-extensibility-array.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/import/import-attributes/json-extensibility-object.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/import/import-attributes/json-idempotency.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/import/import-attributes/json-invalid.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/import/import-attributes/json-named-bindings.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/import/import-attributes/json-value-array.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/import/import-attributes/json-value-boolean.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/import/import-attributes/json-value-null.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/import/import-attributes/json-value-number.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/import/import-attributes/json-value-object.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/import/import-attributes/json-value-string.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/import/import-attributes/json-via-namespace.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/import/import-attributes/text-empty.js","mode":"sloppy","status":"fail","ms":83,"error_name":"SyntaxError","message":"The requested module does not provide an export named 'default'"}
+{"file":"test/language/import/import-attributes/text-javascript.js","mode":"sloppy","status":"fail","ms":96,"error_name":"SyntaxError","message":"Unexpected token '{'"}
+{"file":"test/language/import/import-attributes/text-self.js","mode":"sloppy","status":"fail","ms":77,"error_name":"SyntaxError","message":"The requested module does not provide an export named 'default'"}
+{"file":"test/language/import/import-attributes/text-string.js","mode":"sloppy","status":"fail","ms":89,"error_name":"SyntaxError","message":"Unexpected token 'string'"}
+{"file":"test/language/import/import-attributes/text-via-namespace.js","mode":"sloppy","status":"fail","ms":80,"error_name":"Test262Error","message":"Expected SameValue(«0», «1») to be true"}
+{"file":"test/language/import/import-bytes/bytes-from-empty.js","mode":"sloppy","status":"fail","ms":80,"error_name":"SyntaxError","message":"The requested module does not provide an export named 'default'"}
+{"file":"test/language/import/import-bytes/bytes-from-js.js","mode":"sloppy","status":"fail","ms":85,"error_name":"SyntaxError","message":"The requested module does not provide an export named 'default'"}
+{"file":"test/language/import/import-bytes/bytes-from-json.js","mode":"sloppy","status":"fail","ms":66,"error_name":"SyntaxError","message":"Unexpected token ':'"}
+{"file":"test/language/import/import-bytes/bytes-from-png.js","mode":"sloppy","status":"fail","ms":71,"error_name":"SyntaxError","message":"Invalid or unexpected token"}
+{"file":"test/language/import/import-bytes/bytes-from-txt.js","mode":"sloppy","status":"fail","ms":77,"error_name":"SyntaxError","message":"Unexpected token 'World'"}
+{"file":"test/language/import/import-defer/deferred-namespace-object/exotic-object-behavior.js","mode":"sloppy","status":"fail","ms":80,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/deferred-namespace-object/identity.js","mode":"sloppy","status":"fail","ms":94,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/deferred-namespace-object/json-module.js","mode":"sloppy","status":"fail","ms":90,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/deferred-namespace-object/reexport-deferred-ns-evaluation.js","mode":"sloppy","status":"fail","ms":87,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/deferred-namespace-object/to-string-tag.js","mode":"sloppy","status":"fail","ms":101,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/get-other-while-dep-evaluating/main.js","mode":"sloppy","status":"fail","ms":100,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/get-other-while-dep-evaluating-async/main.js","mode":"sloppy","status":"fail","ms":101,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/get-other-while-evaluating/main.js","mode":"sloppy","status":"fail","ms":89,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/get-other-while-evaluating-async/main.js","mode":"sloppy","status":"fail","ms":85,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/get-self-while-defer-evaluating/main.js","mode":"sloppy","status":"fail","ms":89,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/get-self-while-evaluating-async/main.js","mode":"sloppy","status":"fail","ms":90,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/module-throws/defer-import-after-evaluation.js","mode":"sloppy","status":"fail","ms":88}
+{"file":"test/language/import/import-defer/errors/get-self-while-evaluating.js","mode":"sloppy","status":"fail","ms":120,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/module-throws/third-party-evaluation-after-defer-import.js","mode":"sloppy","status":"fail","ms":99,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/module-throws/trigger-evaluation.js","mode":"sloppy","status":"fail","ms":89,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/errors/syntax-error/import-defer-of-syntax-error-fails.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/import/import-defer/errors/resolution-error/import-defer-of-missing-module-fails.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/import/import-defer/evaluation-sync/import-defer-does-not-evaluate.js","mode":"sloppy","status":"fail","ms":73,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-sync/module-imported-defer-and-eager.js","mode":"sloppy","status":"fail","ms":76,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-top-level-await/flattening-order/main.js","mode":"sloppy","status":"fail","ms":66,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-top-level-await/async-cycle-dependency-of-deferred-module/main.js","mode":"sloppy","status":"fail","ms":85,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-top-level-await/import-defer-async-module/main.js","mode":"sloppy","status":"fail","ms":86,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-top-level-await/import-defer-transitive-async-module/main.js","mode":"sloppy","status":"fail","ms":87,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-defineOwnProperty.js","mode":"sloppy","status":"fail","ms":85,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-top-level-await/sync-dependency-of-deferred-async-module/main.js","mode":"sloppy","status":"fail","ms":112,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-delete.js","mode":"sloppy","status":"fail","ms":90,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-get-in-prototype.js","mode":"sloppy","status":"fail","ms":111,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-get.js","mode":"sloppy","status":"fail","ms":94,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-getOwnProperty.js","mode":"sloppy","status":"fail","ms":105,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-hasProperty-in-prototype.js","mode":"sloppy","status":"fail","ms":113,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-hasProperty.js","mode":"sloppy","status":"fail","ms":92,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-super-get.js","mode":"sloppy","status":"fail","ms":109,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-super-property-define.js","mode":"sloppy","status":"fail","ms":106,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-exported-then-super-property-set-exported.js","mode":"sloppy","status":"fail","ms":101,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-getPrototypeOf.js","mode":"sloppy","status":"fail","ms":96,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-isExtensible.js","mode":"sloppy","status":"fail","ms":74,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-defineOwnProperty.js","mode":"sloppy","status":"fail","ms":67,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-delete.js","mode":"sloppy","status":"fail","ms":70,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-get-in-prototype.js","mode":"sloppy","status":"fail","ms":69,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-get.js","mode":"sloppy","status":"fail","ms":68,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-getOwnProperty.js","mode":"sloppy","status":"fail","ms":81,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-hasProperty-in-prototype.js","mode":"sloppy","status":"fail","ms":65,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-hasProperty.js","mode":"sloppy","status":"fail","ms":70,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-super-get.js","mode":"sloppy","status":"fail","ms":79,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-super-property-define.js","mode":"sloppy","status":"fail","ms":82,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-not-exported-then-super-property-set-exported.js","mode":"sloppy","status":"fail","ms":87,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-preventExtensions.js","mode":"sloppy","status":"fail","ms":109,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-private-name-access.js","mode":"sloppy","status":"fail","ms":97,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-set-string-exported.js","mode":"sloppy","status":"fail","ms":89,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-set-string-not-exported.js","mode":"sloppy","status":"fail","ms":99,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-setPrototypeOf.js","mode":"sloppy","status":"fail","ms":64,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-defineOwnProperty.js","mode":"sloppy","status":"fail","ms":82,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-delete.js","mode":"sloppy","status":"fail","ms":93,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-get-in-prototype.js","mode":"sloppy","status":"fail","ms":86,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-get.js","mode":"sloppy","status":"fail","ms":81,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-getOwnProperty.js","mode":"sloppy","status":"fail","ms":63,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-hasProperty-in-prototype.js","mode":"sloppy","status":"fail","ms":69,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-hasProperty.js","mode":"sloppy","status":"fail","ms":73,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-super-get.js","mode":"sloppy","status":"fail","ms":70,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-super-property-define.js","mode":"sloppy","status":"fail","ms":72,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-other-super-property-set-exported.js","mode":"sloppy","status":"fail","ms":75,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-delete.js","mode":"sloppy","status":"fail","ms":62,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-defineOwnProperty.js","mode":"sloppy","status":"fail","ms":80,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-get-in-prototype.js","mode":"sloppy","status":"fail","ms":87,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-get.js","mode":"sloppy","status":"fail","ms":87,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-hasProperty-in-prototype.js","mode":"sloppy","status":"fail","ms":94,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-getOwnProperty.js","mode":"sloppy","status":"fail","ms":121,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-hasProperty.js","mode":"sloppy","status":"fail","ms":95,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-super-get.js","mode":"sloppy","status":"fail","ms":97,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-super-property-set-exported.js","mode":"sloppy","status":"fail","ms":81,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/ignore-symbol-toStringTag-super-property-define.js","mode":"sloppy","status":"fail","ms":107,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-defineOwnProperty.js","mode":"sloppy","status":"fail","ms":107,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-get-in-prototype.js","mode":"sloppy","status":"fail","ms":69,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-delete.js","mode":"sloppy","status":"fail","ms":117,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-get.js","mode":"sloppy","status":"fail","ms":83,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-getOwnProperty.js","mode":"sloppy","status":"fail","ms":115,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-hasProperty.js","mode":"sloppy","status":"fail","ms":82,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-hasProperty-in-prototype.js","mode":"sloppy","status":"fail","ms":126,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-super-get.js","mode":"sloppy","status":"fail","ms":123,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-super-property-define.js","mode":"sloppy","status":"fail","ms":91,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-exported-string-super-property-set-exported.js","mode":"sloppy","status":"fail","ms":106,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-delete.js","mode":"sloppy","status":"fail","ms":111,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-defineOwnProperty.js","mode":"sloppy","status":"fail","ms":141,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-get-in-prototype.js","mode":"sloppy","status":"fail","ms":135,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-get.js","mode":"sloppy","status":"fail","ms":121,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-hasProperty-in-prototype.js","mode":"sloppy","status":"fail","ms":77,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-getOwnProperty.js","mode":"sloppy","status":"fail","ms":97,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-super-get.js","mode":"sloppy","status":"fail","ms":93,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-hasProperty.js","mode":"sloppy","status":"fail","ms":125,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-super-property-define.js","mode":"sloppy","status":"fail","ms":105,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-not-exported-string-super-property-set-exported.js","mode":"sloppy","status":"fail","ms":165,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-ownPropertyKeys-symbols.js","mode":"sloppy","status":"fail","ms":134,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-ownPropertyKey-names.js","mode":"sloppy","status":"fail","ms":157,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/evaluation-triggers/trigger-ownPropertyKeys.js","mode":"sloppy","status":"fail","ms":183,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/syntax/valid-default-binding-named-defer.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/import/import-defer/syntax/import-attributes.js","mode":"sloppy","status":"fail","ms":133,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/import/import-defer/syntax/valid-defer-namespace.js","mode":"sloppy","status":"fail","ms":117,"error_name":"SyntaxError","message":"Unexpected token '*'"}
+{"file":"test/language/module-code/ambiguous-export-bindings/error-export-from-named-as.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/ambiguous-export-bindings/error-export-from-named.js","mode":"sloppy","status":"pass","ms":105}
+{"file":"test/language/module-code/ambiguous-export-bindings/error-import-named.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/ambiguous-export-bindings/error-import-named-as.js","mode":"sloppy","status":"pass","ms":134}
+{"file":"test/language/module-code/ambiguous-export-bindings/import-and-export-propagates-binding.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-export-star-as-from-and-import-star-as-and-export.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-export-star-as-from.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-import-source-and-export.js","mode":"sloppy","status":"fail","ms":89,"error_name":"SyntaxError","message":"Unexpected token 'mod'"}
+{"file":"test/language/module-code/ambiguous-export-bindings/namespace-unambiguous-if-import-star-as-and-export.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/ambiguous-export-bindings/omitted-from-namespace.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/comment-multi-line-html-close.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/comment-single-line-html-close.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/comment-single-line-html-open.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/early-dup-export-as-star-as.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/early-dup-export-dflt-id.js","mode":"sloppy","status":"pass","ms":66}
+{"file":"test/language/module-code/early-dup-export-decl.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/early-dup-export-dflt.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/early-dup-export-id-as.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/early-dup-export-id.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/early-dup-export-star-as-dflt.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/early-dup-lables.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/early-dup-lex.js","mode":"sloppy","status":"pass","ms":96}
+{"file":"test/language/module-code/early-dup-top-function-async.js","mode":"sloppy","status":"pass","ms":96}
+{"file":"test/language/module-code/early-dup-top-function-async-generator.js","mode":"sloppy","status":"pass","ms":113}
+{"file":"test/language/module-code/early-dup-top-function-generator.js","mode":"sloppy","status":"pass","ms":113}
+{"file":"test/language/module-code/early-dup-top-function.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/early-export-global.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/early-export-ill-formed-string.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/early-export-unresolvable.js","mode":"sloppy","status":"pass","ms":61}
+{"file":"test/language/module-code/early-import-as-arguments.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/early-import-arguments.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/early-import-as-eval.js","mode":"sloppy","status":"pass","ms":106}
+{"file":"test/language/module-code/early-import-eval.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/early-new-target.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/early-lex-and-var.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/early-strict-mode.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/early-super.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/early-undef-break.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/early-undef-continue.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/eval-export-cls-semi.js","mode":"sloppy","status":"pass","ms":58}
+{"file":"test/language/module-code/eval-export-dflt-cls-anon-semi.js","mode":"sloppy","status":"pass","ms":65}
+{"file":"test/language/module-code/eval-export-dflt-cls-anon.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/eval-export-dflt-cls-name-meth.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/eval-export-dflt-cls-named-semi.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/eval-export-dflt-cls-named.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/eval-export-dflt-expr-cls-name-meth.js","mode":"sloppy","status":"pass","ms":63}
+{"file":"test/language/module-code/eval-export-dflt-expr-cls-anon.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/eval-export-dflt-expr-cls-named.js","mode":"sloppy","status":"pass","ms":66}
+{"file":"test/language/module-code/eval-export-dflt-expr-err-eval.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/eval-export-dflt-expr-fn-anon.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/eval-export-dflt-expr-err-get-value.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/eval-export-dflt-expr-fn-named.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/eval-export-dflt-expr-gen-anon.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/eval-export-dflt-expr-gen-named.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/eval-export-dflt-expr-in.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/eval-export-dflt-fun-anon-semi.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/eval-export-dflt-fun-named-semi.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/eval-export-dflt-gen-named-semi.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/eval-export-dflt-gen-anon-semi.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/eval-export-fun-semi.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/eval-export-gen-semi.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/eval-gtbndng-indirect-trlng-comma.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/eval-gtbndng-indirect-update-as.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/eval-gtbndng-indirect-update-dflt.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/eval-gtbndng-indirect-update.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/eval-gtbndng-local-bndng-cls.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/eval-gtbndng-local-bndng-const.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/eval-gtbndng-local-bndng-var.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/eval-gtbndng-local-bndng-let.js","mode":"sloppy","status":"pass","ms":104}
+{"file":"test/language/module-code/eval-rqstd-abrupt.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/eval-rqstd-once.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/eval-self-abrupt.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/eval-rqstd-order.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/eval-self-once.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/eval-this.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/export-default-asyncfunction-declaration-binding-exists.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/export-default-asyncfunction-declaration-binding.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/export-default-asyncgenerator-declaration-binding-exists.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/module-code/export-default-asyncgenerator-declaration-binding.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/export-default-function-declaration-binding-exists.js","mode":"sloppy","status":"pass","ms":103}
+{"file":"test/language/module-code/export-default-function-declaration-binding.js","mode":"sloppy","status":"pass","ms":104}
+{"file":"test/language/module-code/export-default-generator-declaration-binding-exists.js","mode":"sloppy","status":"pass","ms":102}
+{"file":"test/language/module-code/export-expname-binding-index.js","mode":"sloppy","status":"pass","ms":144}
+{"file":"test/language/module-code/export-default-generator-declaration-binding.js","mode":"sloppy","status":"pass","ms":212}
+{"file":"test/language/module-code/export-expname-binding-string.js","mode":"sloppy","status":"pass","ms":179}
+{"file":"test/language/module-code/export-expname-from-as-unpaired-surrogate.js","mode":"sloppy","status":"pass","ms":178}
+{"file":"test/language/module-code/export-expname-from-binding-string.js","mode":"sloppy","status":"pass","ms":149}
+{"file":"test/language/module-code/export-expname-from-star-string.js","mode":"sloppy","status":"pass","ms":118}
+{"file":"test/language/module-code/export-expname-from-star-unpaired-surrogate.js","mode":"sloppy","status":"pass","ms":114}
+{"file":"test/language/module-code/export-expname-from-star.js","mode":"sloppy","status":"pass","ms":95}
+{"file":"test/language/module-code/export-expname-from-string-string.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/export-expname-from-string-binding.js","mode":"sloppy","status":"pass","ms":145}
+{"file":"test/language/module-code/export-expname-from-string.js","mode":"sloppy","status":"pass","ms":122}
+{"file":"test/language/module-code/export-expname-from-unpaired-surrogate.js","mode":"sloppy","status":"pass","ms":125}
+{"file":"test/language/module-code/export-expname-import-unpaired-surrogate.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/export-expname-import-string-binding.js","mode":"sloppy","status":"pass","ms":142}
+{"file":"test/language/module-code/export-expname-string-binding.js","mode":"sloppy","status":"pass","ms":163}
+{"file":"test/language/module-code/export-expname-unpaired-surrogate.js","mode":"sloppy","status":"pass","ms":158}
+{"file":"test/language/module-code/export-star-as-dflt.js","mode":"sloppy","status":"pass","ms":117}
+{"file":"test/language/module-code/import-attributes/allow-nlt-before-with.js","mode":"sloppy","status":"pass","ms":146}
+{"file":"test/language/module-code/import-attributes/early-dup-attribute-key-import-nobinding.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/import-attributes/early-dup-attribute-key-export.js","mode":"sloppy","status":"pass","ms":119}
+{"file":"test/language/module-code/import-attributes/early-dup-attribute-key-import-withbinding.js","mode":"sloppy","status":"pass","ms":147}
+{"file":"test/language/module-code/import-attributes/import-attribute-empty.js","mode":"sloppy","status":"pass","ms":118}
+{"file":"test/language/module-code/import-attributes/import-attribute-key-identifiername.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/import-attributes/import-attribute-key-string-double.js","mode":"sloppy","status":"pass","ms":129}
+{"file":"test/language/module-code/import-attributes/import-attribute-key-string-single.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/import-attributes/import-attribute-many.js","mode":"sloppy","status":"pass","ms":102}
+{"file":"test/language/module-code/import-attributes/import-attribute-newlines.js","mode":"sloppy","status":"pass","ms":109}
+{"file":"test/language/module-code/import-attributes/import-attribute-trlng-comma.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/import-attributes/import-attribute-value-string-double.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/import-attributes/import-attribute-value-string-single.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/instn-iee-bndng-cls.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/instn-iee-bndng-fun.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/instn-iee-bndng-const.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/instn-iee-bndng-gen.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/instn-iee-bndng-let.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/instn-iee-bndng-var.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/instn-iee-err-circular-as.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/instn-iee-err-circular.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/instn-iee-err-dflt-thru-star.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/instn-iee-err-dflt-thru-star-as.js","mode":"sloppy","status":"pass","ms":103}
+{"file":"test/language/module-code/instn-iee-err-not-found-as.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/instn-iee-err-not-found.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/instn-iee-iee-cycle.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/instn-iee-star-cycle.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/instn-iee-trlng-comma.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/instn-local-bndng-cls.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/instn-local-bndng-const.js","mode":"sloppy","status":"pass","ms":61}
+{"file":"test/language/module-code/instn-local-bndng-export-cls.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/instn-local-bndng-export-fun.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/instn-local-bndng-export-const.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/instn-local-bndng-export-gen.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/instn-local-bndng-export-let.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/instn-local-bndng-export-var.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/instn-local-bndng-for-dup.js","mode":"sloppy","status":"pass","ms":95}
+{"file":"test/language/module-code/instn-local-bndng-for.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/instn-local-bndng-fun.js","mode":"sloppy","status":"pass","ms":64}
+{"file":"test/language/module-code/instn-local-bndng-gen.js","mode":"sloppy","status":"pass","ms":66}
+{"file":"test/language/module-code/instn-local-bndng-let.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/instn-local-bndng-var-dup.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/instn-local-bndng-var.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/instn-named-bndng-cls.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/instn-named-bndng-const.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/instn-named-bndng-dflt-cls.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/instn-named-bndng-dflt-expr.js","mode":"sloppy","status":"pass","ms":62}
+{"file":"test/language/module-code/instn-named-bndng-dflt-fun-anon.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/instn-named-bndng-dflt-fun-named.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/instn-named-bndng-dflt-gen-anon.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/instn-named-bndng-dflt-gen-named.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/instn-named-bndng-dflt-named.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/instn-named-bndng-dflt-star.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/instn-named-bndng-fun.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/instn-named-bndng-gen.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/instn-named-bndng-let.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/instn-named-bndng-trlng-comma.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/instn-named-bndng-var.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/instn-named-err-dflt-thru-star-as.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/instn-named-err-dflt-thru-star-dflt.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/module-code/instn-named-err-not-found-as.js","mode":"sloppy","status":"pass","ms":111}
+{"file":"test/language/module-code/instn-named-err-not-found-dflt.js","mode":"sloppy","status":"pass","ms":131}
+{"file":"test/language/module-code/instn-named-err-not-found.js","mode":"sloppy","status":"pass","ms":106}
+{"file":"test/language/module-code/instn-named-id-name.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/instn-named-iee-cycle.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/instn-once.js","mode":"sloppy","status":"pass","ms":149}
+{"file":"test/language/module-code/instn-named-star-cycle.js","mode":"sloppy","status":"pass","ms":170}
+{"file":"test/language/module-code/instn-resolve-empty-export.js","mode":"sloppy","status":"pass","ms":143}
+{"file":"test/language/module-code/instn-resolve-empty-import.js","mode":"sloppy","status":"pass","ms":154}
+{"file":"test/language/module-code/instn-resolve-err-syntax-1.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/instn-resolve-order-depth.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/instn-resolve-err-syntax-2.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/instn-resolve-order-src.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/instn-same-global.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/instn-star-binding.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/instn-star-as-props-dflt-skip.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/instn-star-equality.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/instn-star-err-not-found.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/instn-star-id-name.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/instn-star-iee-cycle.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/instn-star-iee-single-cycle-same-name.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/instn-star-iee-multi-cycle-same-name.js","mode":"sloppy","status":"pass","ms":109}
+{"file":"test/language/module-code/instn-star-props-circular.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/instn-star-props-dflt-keep-indirect.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/instn-star-props-dflt-skip.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/instn-star-props-dflt-keep-local.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/instn-star-props-nrml.js","mode":"sloppy","status":"pass","ms":103}
+{"file":"test/language/module-code/instn-star-star-cycle.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/invalid-private-names-call-expression-bad-reference.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/instn-uniq-env-rec.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/invalid-private-names-call-expression-this.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/invalid-private-names-member-expression-bad-reference.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/namespace/internals/define-own-property.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/invalid-private-names-member-expression-this.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/namespace/internals/delete-exported-init.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/namespace/internals/delete-exported-uninit.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/namespace/internals/delete-non-exported.js","mode":"sloppy","status":"pass","ms":62}
+{"file":"test/language/module-code/namespace/internals/enumerate-binding-uninit.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/namespace/internals/get-nested-namespace-dflt-skip.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/namespace/internals/get-nested-namespace-props-nrml.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/namespace/internals/get-own-property-str-found-init.js","mode":"sloppy","status":"pass","ms":95}
+{"file":"test/language/module-code/namespace/internals/get-own-property-str-found-uninit.js","mode":"sloppy","status":"pass","ms":116}
+{"file":"test/language/module-code/namespace/internals/get-own-property-str-not-found.js","mode":"sloppy","status":"pass","ms":109}
+{"file":"test/language/module-code/namespace/internals/get-prototype-of.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/namespace/internals/get-own-property-sym.js","mode":"sloppy","status":"pass","ms":115}
+{"file":"test/language/module-code/namespace/internals/get-str-found-init.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/namespace/internals/get-str-found-uninit.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/namespace/internals/get-str-initialize.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/namespace/internals/get-str-not-found.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/namespace/internals/get-str-update.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/namespace/internals/get-sym-found.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/namespace/internals/get-sym-not-found.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/namespace/internals/has-property-str-found-init.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/namespace/internals/has-property-str-found-uninit.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/namespace/internals/has-property-str-not-found.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/namespace/internals/has-property-sym-found.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/namespace/internals/has-property-sym-not-found.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/namespace/internals/is-extensible.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/namespace/internals/object-hasOwnProperty-binding-uninit.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/namespace/internals/object-keys-binding-uninit.js","mode":"sloppy","status":"pass","ms":177}
+{"file":"test/language/module-code/namespace/internals/object-propertyIsEnumerable-binding-uninit.js","mode":"sloppy","status":"pass","ms":212}
+{"file":"test/language/module-code/namespace/internals/own-property-keys-sort.js","mode":"sloppy","status":"pass","ms":348}
+{"file":"test/language/module-code/namespace/internals/own-property-keys-binding-types.js","mode":"sloppy","status":"pass","ms":506}
+{"file":"test/language/module-code/namespace/internals/prevent-extensions.js","mode":"sloppy","status":"pass","ms":756}
+{"file":"test/language/module-code/namespace/internals/set-prototype-of-null.js","mode":"sloppy","status":"pass","ms":772}
+{"file":"test/language/module-code/namespace/internals/set.js","mode":"sloppy","status":"pass","ms":589}
+{"file":"test/language/module-code/namespace/internals/set-prototype-of.js","mode":"sloppy","status":"pass","ms":732}
+{"file":"test/language/module-code/namespace/internals/super-set-to-tdz-binding-with-accessor.js","mode":"sloppy","status":"pass","ms":196}
+{"file":"test/language/module-code/namespace/internals/super-access-to-tdz-binding.js","mode":"sloppy","status":"pass","ms":301}
+{"file":"test/language/module-code/namespace/Symbol.iterator.js","mode":"sloppy","status":"pass","ms":135}
+{"file":"test/language/module-code/namespace/Symbol.toStringTag.js","mode":"sloppy","status":"pass","ms":126}
+{"file":"test/language/module-code/parse-err-decl-pos-export-block-stmt-list.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/module-code/parse-err-decl-pos-export-arrow-function.js","mode":"sloppy","status":"pass","ms":147}
+{"file":"test/language/module-code/parse-err-decl-pos-export-class-decl-meth-static.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/parse-err-decl-pos-export-block-stmt.js","mode":"sloppy","status":"pass","ms":140}
+{"file":"test/language/module-code/parse-err-decl-pos-export-class-decl-meth.js","mode":"sloppy","status":"pass","ms":126}
+{"file":"test/language/module-code/parse-err-decl-pos-export-class-decl-method-gen-static.js","mode":"sloppy","status":"pass","ms":122}
+{"file":"test/language/module-code/parse-err-decl-pos-export-class-decl-method-gen.js","mode":"sloppy","status":"pass","ms":105}
+{"file":"test/language/module-code/parse-err-decl-pos-export-class-expr-meth-gen-static.js","mode":"sloppy","status":"pass","ms":104}
+{"file":"test/language/module-code/parse-err-decl-pos-export-class-expr-meth-static.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/parse-err-decl-pos-export-class-expr-meth.js","mode":"sloppy","status":"pass","ms":116}
+{"file":"test/language/module-code/parse-err-decl-pos-export-class-expr-meth-gen.js","mode":"sloppy","status":"pass","ms":158}
+{"file":"test/language/module-code/parse-err-decl-pos-export-do-while.js","mode":"sloppy","status":"pass","ms":173}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-const.js","mode":"sloppy","status":"pass","ms":130}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-in-let.js","mode":"sloppy","status":"pass","ms":107}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-in-const.js","mode":"sloppy","status":"pass","ms":124}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-in-lhs.js","mode":"sloppy","status":"pass","ms":117}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-in-var.js","mode":"sloppy","status":"pass","ms":108}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-let.js","mode":"sloppy","status":"pass","ms":113}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-lhs.js","mode":"sloppy","status":"pass","ms":116}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-of-const.js","mode":"sloppy","status":"pass","ms":95}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-of-let.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-of-var.js","mode":"sloppy","status":"pass","ms":95}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-of-lhs.js","mode":"sloppy","status":"pass","ms":109}
+{"file":"test/language/module-code/parse-err-decl-pos-export-for-var.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/parse-err-decl-pos-export-function-decl.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/parse-err-decl-pos-export-generator-decl.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/parse-err-decl-pos-export-function-expr.js","mode":"sloppy","status":"pass","ms":112}
+{"file":"test/language/module-code/parse-err-decl-pos-export-if-else.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/parse-err-decl-pos-export-generator-expr.js","mode":"sloppy","status":"pass","ms":136}
+{"file":"test/language/module-code/parse-err-decl-pos-export-if-if.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/module-code/parse-err-decl-pos-export-labeled.js","mode":"sloppy","status":"pass","ms":108}
+{"file":"test/language/module-code/parse-err-decl-pos-export-object-getter.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/parse-err-decl-pos-export-object-gen-method.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/parse-err-decl-pos-export-object-method.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/module-code/parse-err-decl-pos-export-object-setter.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/module-code/parse-err-decl-pos-export-switch-case-dflt.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/parse-err-decl-pos-export-switch-case.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/parse-err-decl-pos-export-switch-dftl.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/module-code/parse-err-decl-pos-export-try-catch-finally.js","mode":"sloppy","status":"pass","ms":105}
+{"file":"test/language/module-code/parse-err-decl-pos-export-try-finally.js","mode":"sloppy","status":"pass","ms":112}
+{"file":"test/language/module-code/parse-err-decl-pos-export-try-catch.js","mode":"sloppy","status":"pass","ms":129}
+{"file":"test/language/module-code/parse-err-decl-pos-export-try-try.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/parse-err-decl-pos-export-while.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/parse-err-decl-pos-import-arrow-function.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/parse-err-decl-pos-import-block-stmt-list.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/parse-err-decl-pos-import-block-stmt.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/parse-err-decl-pos-import-class-decl-meth-static.js","mode":"sloppy","status":"pass","ms":100}
+{"file":"test/language/module-code/parse-err-decl-pos-import-class-decl-method-gen-static.js","mode":"sloppy","status":"pass","ms":103}
+{"file":"test/language/module-code/parse-err-decl-pos-import-class-decl-meth.js","mode":"sloppy","status":"pass","ms":120}
+{"file":"test/language/module-code/parse-err-decl-pos-import-class-decl-method-gen.js","mode":"sloppy","status":"pass","ms":102}
+{"file":"test/language/module-code/parse-err-decl-pos-import-class-expr-meth-gen-static.js","mode":"sloppy","status":"pass","ms":102}
+{"file":"test/language/module-code/parse-err-decl-pos-import-class-expr-meth-gen.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/parse-err-decl-pos-import-class-expr-meth-static.js","mode":"sloppy","status":"pass","ms":130}
+{"file":"test/language/module-code/parse-err-decl-pos-import-class-expr-meth.js","mode":"sloppy","status":"pass","ms":123}
+{"file":"test/language/module-code/parse-err-decl-pos-import-do-while.js","mode":"sloppy","status":"pass","ms":141}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-const.js","mode":"sloppy","status":"pass","ms":132}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-in-const.js","mode":"sloppy","status":"pass","ms":114}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-in-let.js","mode":"sloppy","status":"pass","ms":107}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-in-lhs.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-in-var.js","mode":"sloppy","status":"pass","ms":103}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-lhs.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-let.js","mode":"sloppy","status":"pass","ms":114}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-of-const.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-of-let.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-of-var.js","mode":"sloppy","status":"pass","ms":96}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-of-lhs.js","mode":"sloppy","status":"pass","ms":114}
+{"file":"test/language/module-code/parse-err-decl-pos-import-for-var.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/parse-err-decl-pos-import-function-decl.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/parse-err-decl-pos-import-generator-decl.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/parse-err-decl-pos-import-function-expr.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/parse-err-decl-pos-import-generator-expr.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/parse-err-decl-pos-import-if-else.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/parse-err-decl-pos-import-if-if.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/parse-err-decl-pos-import-labeled.js","mode":"sloppy","status":"pass","ms":100}
+{"file":"test/language/module-code/parse-err-decl-pos-import-object-gen-method.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/parse-err-decl-pos-import-object-getter.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/parse-err-decl-pos-import-object-method.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/parse-err-decl-pos-import-object-setter.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/parse-err-decl-pos-import-switch-case-dflt.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/parse-err-decl-pos-import-switch-case.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/parse-err-decl-pos-import-switch-dftl.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/parse-err-decl-pos-import-try-catch-finally.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/parse-err-decl-pos-import-try-catch.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/parse-err-decl-pos-import-try-finally.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/parse-err-decl-pos-import-try-try.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/parse-err-decl-pos-import-while.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/parse-err-export-dflt-const.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/parse-err-export-dflt-expr.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/parse-err-export-dflt-let.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/parse-err-export-dflt-var.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/parse-err-hoist-lex-fun.js","mode":"sloppy","status":"pass","ms":107}
+{"file":"test/language/module-code/parse-err-invoke-anon-fun-decl.js","mode":"sloppy","status":"pass","ms":100}
+{"file":"test/language/module-code/parse-err-hoist-lex-gen.js","mode":"sloppy","status":"pass","ms":130}
+{"file":"test/language/module-code/parse-err-invoke-anon-gen-decl.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/parse-err-return.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/parse-err-semi-export-star.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/parse-err-semi-dflt-expr.js","mode":"sloppy","status":"pass","ms":109}
+{"file":"test/language/module-code/parse-err-semi-named-export-from.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/parse-err-semi-name-space-export.js","mode":"sloppy","status":"pass","ms":113}
+{"file":"test/language/module-code/parse-err-semi-named-export.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/parse-err-syntax-1.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/parse-err-syntax-2.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/parse-err-yield.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/parse-export-empty.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/privatename-not-valid-earlyerr-module-1.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/private-identifiers-not-empty.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/privatename-not-valid-earlyerr-module-2.js","mode":"sloppy","status":"pass","ms":117}
+{"file":"test/language/module-code/privatename-not-valid-earlyerr-module-3.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/privatename-not-valid-earlyerr-module-4.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/privatename-not-valid-earlyerr-module-5.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/privatename-not-valid-earlyerr-module-6.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/privatename-not-valid-earlyerr-module-7.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/privatename-not-valid-earlyerr-module-8.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/privatename-valid-no-earlyerr.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/source-phase-import/reexport-source-binding-named-import.js","mode":"sloppy","status":"fail","ms":82,"error_name":"SyntaxError","message":"Unexpected token 'x'"}
+{"file":"test/language/module-code/source-phase-import/reexport-source-binding-namespace-get.js","mode":"sloppy","status":"fail","ms":82,"error_name":"SyntaxError","message":"Unexpected token 'x'"}
+{"file":"test/language/module-code/top-level-await/async-module-does-not-block-sibling-modules.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/top-level-await/await-awaits-thenable-not-callable.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/await-awaits-thenables-that-throw.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/await-awaits-thenables.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/top-level-await/await-dynamic-import-rejection.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/top-level-await/await-dynamic-import-resolution.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/top-level-await/await-expr-new-expr-reject.js","mode":"sloppy","status":"pass","ms":63}
+{"file":"test/language/module-code/top-level-await/await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":105}
+{"file":"test/language/module-code/top-level-await/await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/await-expr-regexp.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/top-level-await/await-expr-reject-throws.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/top-level-await/await-expr-resolution.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/top-level-await/dfs-invariant.js","mode":"sloppy","status":"pass","ms":61}
+{"file":"test/language/module-code/top-level-await/await-void-expr.js","mode":"sloppy","status":"pass","ms":116}
+{"file":"test/language/module-code/top-level-await/dynamic-import-rejection.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/top-level-await/dynamic-import-resolution.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/top-level-await/early-errors-await-not-simple-assignment-target.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/fulfillment-order.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/if-await-expr.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/top-level-await/module-async-import-async-resolution-ticks.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/top-level-await/module-graphs-does-not-hang.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/top-level-await/module-import-rejection-tick.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/module-import-rejection-body.js","mode":"sloppy","status":"pass","ms":96}
+{"file":"test/language/module-code/top-level-await/module-import-rejection.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/module-import-resolution.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/top-level-await/module-self-import-async-resolution-ticks.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/top-level-await/module-import-unwrapped.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/top-level-await/module-sync-import-async-resolution-ticks.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/top-level-await/new-await-parens.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/top-level-await/no-operand.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/top-level-await/new-await.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/top-level-await/pending-async-dep-from-cycle.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/top-level-await/rejection-order.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/top-level-await/syntax/await-expr-dyn-import.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":60}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":62}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":65}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-nested.js","mode":"sloppy","status":"pass","ms":63}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-null.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/top-level-await/syntax/block-await-expr-this.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/syntax/catch-parameter.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/top-level-await/syntax/early-does-not-propagate-to-fn-declaration-body.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/top-level-await/syntax/early-does-not-propagate-to-fn-declaration-params.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/top-level-await/syntax/early-does-not-propagate-to-fn-expr-params.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/syntax/early-does-not-propagate-to-fn-expr-body.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/top-level-await/syntax/early-no-escaped-await.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-nested.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":65}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-null.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/syntax/export-class-decl-await-expr-this.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":65}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":61}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-nested.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-null.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/top-level-await/syntax/export-dflt-assign-expr-await-expr-this.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":65}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":64}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":61}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-nested.js","mode":"sloppy","status":"pass","ms":66}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":59}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-null.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":63}
+{"file":"test/language/module-code/top-level-await/syntax/export-dft-class-decl-await-expr-this.js","mode":"sloppy","status":"pass","ms":66}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":68}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-nested.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-null.js","mode":"sloppy","status":"pass","ms":50}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":60}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-this.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/top-level-await/syntax/export-lex-decl-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":105}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-nested.js","mode":"sloppy","status":"pass","ms":64}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-null.js","mode":"sloppy","status":"pass","ms":59}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/top-level-await/syntax/export-var-await-expr-this.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":59}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-nested.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-null.js","mode":"sloppy","status":"pass","ms":95}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-await-expr-this.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":120}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":96}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":104}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-nested.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-null.js","mode":"sloppy","status":"pass","ms":115}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":119}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":103}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/top-level-await/syntax/for-await-expr-this.js","mode":"sloppy","status":"pass","ms":122}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":111}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-nested.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-null.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":110}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/top-level-await/syntax/for-in-await-expr-this.js","mode":"sloppy","status":"pass","ms":103}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":109}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-nested.js","mode":"sloppy","status":"pass","ms":59}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-null.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":100}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/top-level-await/syntax/for-of-await-expr-this.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":65}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":102}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":125}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":138}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-nested.js","mode":"sloppy","status":"pass","ms":129}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-null.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/top-level-await/syntax/if-block-await-expr-this.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-nested.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-null.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":60}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":97}
+{"file":"test/language/module-code/top-level-await/syntax/if-expr-await-expr-this.js","mode":"sloppy","status":"pass","ms":103}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":117}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-nested.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":90}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":102}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-null.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/top-level-await/syntax/top-level-await-expr-this.js","mode":"sloppy","status":"pass","ms":86}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":107}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":108}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-nested.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-null.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/module-code/top-level-await/syntax/try-await-expr-this.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":91}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":94}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-nested.js","mode":"sloppy","status":"pass","ms":81}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-null.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/top-level-await/syntax/typeof-await-expr-this.js","mode":"sloppy","status":"pass","ms":74}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":62}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":58}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":62}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-nested.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-null.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":99}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":67}
+{"file":"test/language/module-code/top-level-await/syntax/void-await-expr-this.js","mode":"sloppy","status":"pass","ms":76}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-array-literal.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-func-expression.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-identifier.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-literal-number.js","mode":"sloppy","status":"pass","ms":92}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-literal-string.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-new-expr.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-nested.js","mode":"sloppy","status":"pass","ms":109}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-null.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-obj-literal.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-template-literal.js","mode":"sloppy","status":"pass","ms":69}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-regexp.js","mode":"sloppy","status":"pass","ms":85}
+{"file":"test/language/module-code/top-level-await/syntax/while-await-expr-this.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/language/module-code/top-level-await/top-level-ticks-2.js","mode":"sloppy","status":"pass","ms":88}
+{"file":"test/language/module-code/top-level-await/top-level-ticks.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/top-level-await/unobservable-global-async-evaluation-count-reset.js","mode":"sloppy","status":"pass","ms":107}
+{"file":"test/language/module-code/top-level-await/void-await-expr.js","mode":"sloppy","status":"pass","ms":98}
+{"file":"test/language/module-code/top-level-await/while-dynamic-evaluation.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/module-code/verify-dfs.js","mode":"sloppy","status":"pass","ms":87}
+{"file":"test/language/statements/await-using/initializer-Symbol.asyncDispose-disposed-at-end-of-imported-module.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/language/reserved-words/await-module.js","mode":"sloppy","status":"pass","ms":101}
+{"file":"test/language/statements/await-using/initializer-Symbol.asyncDispose-disposed-at-end-of-module.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/language/statements/await-using/initializer-Symbol.dispose-disposed-at-end-of-imported-module.js","mode":"sloppy","status":"pass","ms":89}
+{"file":"test/language/statements/await-using/initializer-Symbol.dispose-disposed-at-end-of-module.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/statements/await-using/syntax/await-using-allowed-at-top-level-of-module.js","mode":"sloppy","status":"pass","ms":95}
+{"file":"test/language/statements/class/class-name-ident-await-escaped-module.js","mode":"sloppy","status":"pass","ms":79}
+{"file":"test/language/statements/await-using/syntax/await-using.js","mode":"sloppy","status":"pass","ms":119}
+{"file":"test/language/statements/class/class-name-ident-await-module.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/statements/class/cpn-class-decl-accessors-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":82}
+{"file":"test/language/statements/class/cpn-class-decl-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":70}
+{"file":"test/language/statements/class/cpn-class-decl-fields-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/statements/class/cpn-class-decl-fields-methods-computed-property-name-from-await-expression.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/statements/for-of/head-await-using-bound-names-in-stmt.js","mode":"sloppy","status":"pass","ms":72}
+{"file":"test/language/statements/for-of/head-await-using-fresh-binding-per-iteration.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/statements/labeled/value-await-module-escaped.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/language/statements/labeled/value-await-module.js","mode":"sloppy","status":"pass","ms":83}
+{"file":"test/language/statements/using/initializer-disposed-at-end-of-imported-module.js","mode":"sloppy","status":"pass","ms":77}
+{"file":"test/language/statements/using/initializer-disposed-at-end-of-module.js","mode":"sloppy","status":"pass","ms":66}
+{"file":"test/language/statements/using/syntax/using-allowed-at-top-level-of-module.js","mode":"sloppy","status":"pass","ms":71}
+{"file":"test/language/statements/using/syntax/using.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/built-ins/AbstractModuleSource/length.js","mode":"sloppy","status":"fail","ms":63,"error_name":"Test262Error","message":"Expected SameValue(«\"undefined\"», «\"function\"») to be true"}
+{"file":"test/built-ins/AbstractModuleSource/name.js","mode":"sloppy","status":"fail","ms":67,"error_name":"Test262Error","message":"Expected SameValue(«\"undefined\"», «\"function\"») to be true"}
+{"file":"test/built-ins/AbstractModuleSource/proto.js","mode":"sloppy","status":"fail","ms":62,"error_name":"Test262Error","message":"Expected SameValue(«\"undefined\"», «\"function\"») to be true"}
+{"file":"test/built-ins/AbstractModuleSource/prototype/constructor.js","mode":"sloppy","status":"fail","ms":67,"error_name":"Test262Error","message":"Expected SameValue(«\"undefined\"», «\"function\"») to be true"}
+{"file":"test/built-ins/AbstractModuleSource/prototype/proto.js","mode":"sloppy","status":"fail","ms":71,"error_name":"Test262Error","message":"Expected SameValue(«\"undefined\"», «\"function\"») to be true"}
+{"file":"test/built-ins/AbstractModuleSource/prototype/Symbol.toStringTag.js","mode":"sloppy","status":"fail","ms":75,"error_name":"Test262Error","message":"Expected SameValue(«\"undefined\"», «\"function\"») to be true"}
+{"file":"test/built-ins/AbstractModuleSource/prototype.js","mode":"sloppy","status":"fail","ms":84,"error_name":"Test262Error","message":"Expected SameValue(«\"undefined\"», «\"function\"») to be true"}
+{"file":"test/built-ins/AbstractModuleSource/throw-from-constructor.js","mode":"sloppy","status":"fail","ms":80,"error_name":"Test262Error","message":"Expected SameValue(«\"undefined\"», «\"function\"») to be true"}
+{"file":"test/built-ins/Proxy/preventExtensions/trap-is-undefined-target-is-proxy.js","mode":"sloppy","status":"pass","ms":93}
+{"file":"test/built-ins/ShadowRealm/prototype/importValue/import-value.js","mode":"sloppy","status":"fail","ms":100,"error_name":"ReferenceError","message":"ShadowRealm is not defined"}
+{"file":"test/built-ins/ShadowRealm/prototype/importValue/throws-if-import-value-does-not-exist.js","mode":"sloppy","status":"fail","ms":83,"error_name":"ReferenceError","message":"ShadowRealm is not defined"}
+{"file":"test/built-ins/ShadowRealm/prototype/importValue/throws-typeerror-import-syntax-error.js","mode":"sloppy","status":"fail","ms":87,"error_name":"ReferenceError","message":"ShadowRealm is not defined"}
+{"file":"test/built-ins/ShadowRealm/prototype/importValue/throws-typeerror-import-throws.js","mode":"sloppy","status":"fail","ms":87,"error_name":"ReferenceError","message":"ShadowRealm is not defined"}
+{"file":"test/staging/sm/async-functions/async-contains-unicode-escape-module.js","mode":"sloppy","status":"pass","ms":78}
+{"file":"test/staging/explicit-resource-management/await-using-in-top-level-module.js","mode":"sloppy","status":"pass","ms":104}
+{"file":"test/staging/sm/async-functions/async-function-declaration-in-modules.js","mode":"sloppy","status":"pass","ms":95}
+{"file":"test/staging/sm/expressions/optional-chain-first-expression-module.js","mode":"sloppy","status":"pass","ms":96}
+{"file":"test/staging/sm/fields/await-identifier-module-1.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/staging/sm/fields/await-identifier-module-2.js","mode":"sloppy","status":"pass","ms":80}
+{"file":"test/staging/sm/fields/await-identifier-module-3.js","mode":"sloppy","status":"pass","ms":66}
+{"file":"test/staging/sm/module/await-restricted-nested.js","mode":"sloppy","status":"pass","ms":63}
+{"file":"test/staging/sm/module/bug1488117.js","mode":"sloppy","status":"pass","ms":75}
+{"file":"test/staging/sm/module/duplicate-exported-names-in-single-export-declaration.js","mode":"sloppy","status":"pass","ms":84}
+{"file":"test/staging/sm/module/duplicate-exported-names-in-single-export-var-declaration.js","mode":"sloppy","status":"pass","ms":73}
+{"file":"test/staging/sm/module/module-export-name-star.js","mode":"sloppy","status":"pass","ms":63}
+{"file":"test/staging/top-level-await/tla-hang-entry.js","mode":"sloppy","status":"pass","ms":65}
