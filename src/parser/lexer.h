@@ -18,6 +18,7 @@ enum class T : uint8_t {
   And, Or, Nullish,
   Assign, PlusEq, MinusEq, StarEq, SlashEq, PercentEq, Star2Eq, ShlEq, SarEq, ShrEq, AmpEq, PipeEq, CaretEq,
   AndEq, OrEq, NullishEq,
+  At,  // `@` (decorators)
 };
 
 // Keyword ids of Name tokens (by StringValue, escaped or not).

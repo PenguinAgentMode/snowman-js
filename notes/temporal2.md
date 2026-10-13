@@ -30,3 +30,15 @@
 - Not done (needs interp/function.cpp, not mine): staging block functions named `arguments`
   (block-scoped-functions-annex-b-arguments.js, regress-602621.js): B.3.2.1 must still assign the var binding when
   F is "arguments" (2d134b3 skips the candidate). Queue item (d): staging/sm/regress/regress-610026 (AST node size).
+
+## Area 3 (parked): decorators (branch ws/decorators)
+
+- 64a2771 parser: reuse exited Scopes (regress-610026 analysis: ~470 -> ~105 B per `{}` while parsing; the test
+  still needs freeable eval ASTs, which the lead declined). Gated on its own (full-suite run on 64a2771).
+- wip on top: parser for decorators: `@` token (T::At), ast::Decorator, `decorators` lists on Class /
+  MethodDefinition / PropertyDefinition / AccessorProperty, `accessor` auto-accessor elements (ast::AccessorProperty),
+  decorators before `class`, `export @dec class`, `@dec export class`, class expressions, class elements. Builds
+  warning-free; not yet tested.
+- Next: run the 27 decorator files + test/language/statements/class etc. for parse regressions; interp/class.cpp:
+  evaluate decorator expressions, apply them (context objects, addInitializer, accessor storage); AccessorProperty
+  element evaluation (getter/setter over a private storage name).
