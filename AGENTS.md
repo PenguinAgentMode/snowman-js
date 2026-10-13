@@ -15,6 +15,9 @@
     the baseline STATUS.md names. Every `REGRESSION` line (a file that passes on main and fails on your branch)
     is fixed or explained in the merge request (passing by accident; a timeout re-run alone with `--filter` and
     passing). A +20/−20 swap is not a clean gate.
+- **Merge only a gated sha**: the lead merges exactly the commit whose full ES-core gate is clean (every
+  REGRESSION line fixed or explained). A fix for a gate regression needs its own full gate before it merges; a
+  slice check is for development, never for merging.
 - **Merging from an older base** (the lead's rule): a branch gated on an older main may merge only if no file
   it changes was changed on main since its base. After every merge, or batch of merges, the lead has the full
   suite run on the new main (`tools/lead/measure.sh suite <baseline>`) and `gate.mjs` against the previous

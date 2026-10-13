@@ -46,7 +46,8 @@ Not in 8a5df0b93's run; the next `measure.sh suite` on main covers them:
 - 00dc9d9 ws/temporal 7526397 (Temporal core + Duration + Plain*), gated on 8a5df0b.
 - 8e85e96 ws/builtins d0423a1 (legacy RegExp statics 26/26 + Function.prototype.toString fix in
   builtins/function_prototype.cpp), gated on cfb908c (cf26874 alone: 1 regression, fixed by d0423a1; Function
-  893/893 on the fix).
+  893/893 on the fix). Merged before d0423a1's own full gate (a rule slip): builtins' tip gate 996500e (a
+  superset) is the confirming gate; any regression from it reverts 8e85e96.
 
 ## Decisions
 
