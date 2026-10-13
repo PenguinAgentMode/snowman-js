@@ -9,5 +9,5 @@ void installDurationFormat(Realm&, Object*) {}
 
 
 
-void installSegmenter(Realm&, Object*) {}
+
 }  // namespace snowman::intl
