@@ -361,6 +361,27 @@ Result<Value> IteratorPrototype_includes(NativeCall& call) {
   }
 }
 
+// Iterator.prototype.join ( separator ) (proposal-iterator-join)
+Result<Value> IteratorPrototype_join(NativeCall& call) {
+  Value o = call.thisValue;
+  if (!o.isObject()) return ThrowTypeError("Iterator.prototype.join called on non-object");
+  IteratorRecord iterated{o.asObject(), Value::undefined(), false};
+  std::u16string sep = u",";
+  if (!call.args[0].isUndefined()) sep = TRY_CLOSE(iterated, ToString(call.args[0]))->view();
+  iterated = TRY(GetIteratorDirect(o.asObject()));
+  std::u16string r;
+  bool first = true;
+  while (true) {
+    std::optional<Value> value = TRY(IteratorStepValue(iterated));
+    if (!value) return Value(newString(std::move(r)));
+    if (!first) r.append(sep);
+    first = false;
+    if (value->isUndefined() || value->isNull()) continue;
+    String* next = TRY_CLOSE(iterated, ToString(*value));
+    r.append(next->view());
+  }
+}
+
 // 27.1.4.12 Iterator.prototype.toArray ( )
 Result<Value> IteratorPrototype_toArray(NativeCall& call) {
   IteratorRecord iterated = TRY(eagerStart(call, false));
@@ -472,6 +493,7 @@ void installIterator(Realm& realm) {
   defineFunction(realm, proto, PropertyKey(u"flatMap"), 1, IteratorPrototype_flatMap);
   defineFunction(realm, proto, PropertyKey(u"forEach"), 1, IteratorPrototype_forEach);
   defineFunction(realm, proto, PropertyKey(u"includes"), 1, IteratorPrototype_includes);
+  defineFunction(realm, proto, PropertyKey(u"join"), 1, IteratorPrototype_join);
   defineFunction(realm, proto, PropertyKey(u"map"), 1, IteratorPrototype_map);
   defineFunction(realm, proto, PropertyKey(u"reduce"), 1, IteratorPrototype_reduce);
   defineFunction(realm, proto, PropertyKey(u"some"), 1, IteratorPrototype_some);
