@@ -915,7 +915,10 @@ Result<Value> ClassDefinitionEvaluation(const Class* node, String* classBinding,
   if (node->superClass) F->derived = true;
   TRY(DefineMethodProperty(proto, Value(atom(u"constructor")), F, false));
 
-  auto* elements = snowman::make<ClassElements>();
+  // Rooted for the whole evaluation: below, only references into it are used, and the conservative stack scan
+  // does not see interior pointers (a field initializer's collection freed it: ASan with SNOWMAN_GC_STRESS=1).
+  Rooted<ClassElements> elementsRoot(snowman::make<ClassElements>());
+  ClassElements* elements = elementsRoot.get();
   auto& instancePrivateMethods = elements->instancePrivateMethods;
   auto& staticPrivateMethods = elements->staticPrivateMethods;
   auto& instanceFields = elements->instanceFields;

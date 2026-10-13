@@ -81,7 +81,8 @@ class MarkTracer final : public Tracer {
 
 }  // namespace
 
-void Heap::scanRange(Tracer& tracer, const void* low, const void* high) {
+// Reads every word of a stack, ASan's redzones between a frame's locals included.
+__attribute__((no_sanitize("address"))) void Heap::scanRange(Tracer& tracer, const void* low, const void* high) {
   auto begin = reinterpret_cast<uintptr_t>(low) & ~uintptr_t(sizeof(void*) - 1);
   auto end = reinterpret_cast<uintptr_t>(high);
   for (uintptr_t p = begin; p + sizeof(void*) <= end; p += sizeof(void*)) {

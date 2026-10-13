@@ -110,7 +110,8 @@ Result<Value> ArrayBufferPrototype_slice(NativeCall& call) {
   double currentLen = double(o->byteLength());
   if (first < currentLen) {
     size_t count = size_t(std::min(newLen, currentLen - first));
-    std::memmove(target->data(), o->data() + size_t(first), count);
+    // An empty buffer's data() may be null, and memmove/memcpy's pointers must not be, even for 0 bytes.
+    if (count > 0) std::memmove(target->data(), o->data() + size_t(first), count);
   }
   return Value(target);
 }
@@ -146,7 +147,7 @@ Result<Value> ArrayBufferCopyAndDetach(NativeCall& call, CopyMode mode, const ch
     std::optional<double> newMaxByteLength;
     if (mode == CopyMode::PreserveResizability && o->isResizable()) newMaxByteLength = double(o->maxByteLength());
     newBuffer = TRY(AllocateArrayBuffer(intrinsic(Intrinsic::ArrayBuffer), newByteLength, newMaxByteLength));
-    std::memcpy(newBuffer->data(), o->data(), copyLength);
+    if (copyLength > 0) std::memcpy(newBuffer->data(), o->data(), copyLength);
   }
   TRY(DetachArrayBuffer(o));
   return Value(newBuffer);
