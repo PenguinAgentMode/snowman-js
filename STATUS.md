@@ -53,8 +53,10 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-None: a1a2a5fc3 covers 7f86ee9 (step 2), 5f1393b (canblock-r, runner + CLI: CanBlock-flagged files 14 → 18 of 18
-scenarios), a1a2a5f (calendars: framework + gregory + chinese/dangi/islamic-umalqura).
+Not in a1a2a5fc3's run:
+- ws/calendars-g2 cb6d5f1 (buddhist, roc, japanese), on base 10979b4. Its gate vs a1a2a5fc3: only the 2
+  CanBlockIsFalse files (Atomics/wait/{,bigint/}cannot-suspend-throws.js), because its base predates 7205b4d,
+  which cb6d5f1 doesn't touch; both pass on the merged main. Full on its base: 52,586 (+358 from group 2).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719

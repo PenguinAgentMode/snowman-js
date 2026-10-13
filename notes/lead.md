@@ -16,10 +16,8 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~15:45 UTC, main a1a2a5f 
 
 ## Merge queue
 
-1. builtins: calendar group 2, ws/calendars-g2 **cb6d5f1** (buddhist/roc/japanese), gated vs 29a14dfdd (running). Before
-   merging, re-gate its JSONL (results/cb6d5f1/full.jsonl on the results branch) against results/a1a2a5fc3{,-full}.json
-   (supervisor: a gate vs 29a14dfdd can't see regressions in the calendar files a1a2a5f made pass).
-2. builtins: calendar group 3, ws/calendars-g3 0bf1332 (arithmetic calendars), to gate vs a1a2a5fc3 or newer.
+1. Merged cb6d5f1 (calendar group 2); not yet measured. Measure main after group 3 merges.
+2. builtins: calendar group 3, ws/calendars-g3 f21aed9 (arithmetic calendars, on main 93b4e17), gating vs a1a2a5fc3.
 
 How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort) <(git diff --name-only $base
 <sha>|sort)` (AGENTS.md older-base rule); merge the exact sha; `make -j4` warning-free; push; list it under
