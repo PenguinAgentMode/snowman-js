@@ -58,7 +58,7 @@ Result<void> evaluateVariableDeclaration(const VariableDeclaration* node) {
     if (id->type == NodeType::Identifier) {
       String* name = identifierName(id->as<Identifier>());
       if (isVar && !declarator->init) continue;
-      Reference lhs = TRY(ResolveBinding(name));
+      Reference lhs = TRY(resolveIdentifier(id->as<Identifier>()));
       Value value = Value::undefined();
       if (declarator->init) value = TRY(evaluateNamed(declarator->init, Value(name)));
       if (isVar) {

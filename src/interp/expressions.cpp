@@ -1,5 +1,10 @@
 // Evaluation of expressions (ECMA-262 13), Reference Records (6.2.5) and identifier resolution (9.4).
+#include <alloca.h>
+
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
 #include <typeinfo>
 #include <unordered_map>
 
@@ -38,9 +43,11 @@ Cell* GetActiveScriptOrModule() {
   return nullptr;
 }
 
-String* identifierName(const Identifier* id) {
-  if (!id->interpCache) id->interpCache = atom(id->name);
-  return static_cast<String*>(id->interpCache);
+IdentifierCache* newIdentifierCache(const Identifier* id) {
+  // Nodes are never freed: the cache lives in the node arena with them.
+  auto* cache = new (arenaAllocate(sizeof(IdentifierCache), alignof(IdentifierCache))) IdentifierCache{atom(id->name)};
+  id->interpCache = cache;
+  return cache;
 }
 
 // AST strings are never freed and atoms live forever, so the atom can be cached by the string's address. Per thread:
@@ -86,34 +93,137 @@ Result<Reference> ResolveBinding(String* name, Environment* env) {
 
 namespace {
 
+using Binding = DeclarativeEnvironment::Binding;
+
 Throw throwNotDefined(String* name) { return ThrowReferenceError(name->toUtf8() + " is not defined"); }
 
-// ResolveBinding + GetValue for an identifier, without materializing the Reference.
-Result<Value> getIdentifierValue(String* name) {
+Throw throwUninitialized(String* name) {
+  return ThrowReferenceError("Cannot access '" + name->toUtf8() + "' before initialization");
+}
+
+// SNOWMAN_VERIFY_IC=1: every identifier cache hit is checked against a walk by name (aborts on a mismatch).
+const bool verifyCaches = std::getenv("SNOWMAN_VERIFY_IC") != nullptr;
+
+bool isDeclarativeKind(const Environment* env) {
+  Environment::Kind kind = env->kind();
+  return kind == Environment::Kind::Declarative || kind == Environment::Kind::Function ||
+         kind == Environment::Kind::Module;
+}
+
+bool isStaticDeclarative(const Environment* env) {
+  return isDeclarativeKind(env) && !static_cast<const DeclarativeEnvironment*>(env)->isDynamic();
+}
+
+// The record `hops` out from env, if every record on the way is a static declarative one; nullptr otherwise.
+Environment* followCache(Environment* env, uint32_t hops) {
+  for (; hops; hops--) {
+    if (!isStaticDeclarative(env)) return nullptr;
+    env = env->outer;
+    if (!env) return nullptr;
+  }
+  return env;
+}
+
+// The binding `name` at `slot` of a declarative record (not a module import, whose value lives elsewhere);
+// nullptr when the slot holds something else.
+Binding* slotBinding(Environment* env, uint32_t slot, String* name) {
+  if (!isDeclarativeKind(env)) return nullptr;
+  Binding* binding = static_cast<DeclarativeEnvironment*>(env)->bindingAt(slot);
+  if (!binding || binding->name != name || binding->indirectModule) return nullptr;
+  return binding;
+}
+
+[[noreturn]] void cacheMismatch(String* name) {
+  fprintf(stderr, "fatal: identifier cache mismatch for '%s'\n", name->toUtf8().c_str());
+  abort();
+}
+
+// SNOWMAN_VERIFY_IC: the walk by name from start reaches target (holding binding, or the global environment)
+// without finding the name before it.
+void verifyCache(Environment* start, Environment* target, Binding* binding, String* name) {
+  for (Environment* env = start; env != target; env = env->outer) {
+    if (!env || !isDeclarativeKind(env) || static_cast<DeclarativeEnvironment*>(env)->find(name)) {
+      cacheMismatch(name);
+    }
+  }
+  if (binding && static_cast<DeclarativeEnvironment*>(target)->find(name) != binding) cacheMismatch(name);
+}
+
+void recordSlot(IdentifierCache* cache, uint32_t hops, DeclarativeEnvironment* env, const Binding* binding) {
+  if (binding->indirectModule) return;
+  cache->kind = IdentifierCache::Kind::Slot;
+  cache->hops = hops;
+  cache->slot = env->slotOf(binding);
+}
+
+void recordGlobal(IdentifierCache* cache, uint32_t hops) {
+  cache->kind = IdentifierCache::Kind::Global;
+  cache->hops = hops;
+}
+
+// GetValue of an identifier resolved to the global environment.
+Result<Value> globalIdentifierValue(GlobalEnvironment* global, String* name, bool strict) {
+  if (Binding* binding = global->declarativeRecord->find(name)) {
+    if (binding->value.isEmpty()) return throwUninitialized(name);
+    return binding->value;
+  }
+  if (std::optional<PropertySlot> slot = global->objectRecord->ownDataSlot(name)) return slot->value;
+  bool exists = TRY(global->objectRecord->HasBinding(name));
+  if (!exists) return throwNotDefined(name);
+  return global->objectRecord->GetBindingValue(name, strict);
+}
+
+// ResolveBinding + GetValue for an identifier node, without materializing the Reference.
+Result<Value> getIdentifierValue(const Identifier* id) {
+  IdentifierCache* cache = identifierCache(id);
+  String* name = cache->name;
   InterpContext* context = runningContext();
-  for (Environment* env = context->lexicalEnvironment; env; env = env->outer) {
+  Environment* start = context->lexicalEnvironment;
+  if (cache->kind != IdentifierCache::Kind::None) {
+    if (Environment* env = followCache(start, cache->hops)) {
+      if (cache->kind == IdentifierCache::Kind::Slot) {
+        if (Binding* binding = slotBinding(env, cache->slot, name)) {
+          if (verifyCaches) verifyCache(start, env, binding, name);
+          if (binding->value.isEmpty()) return throwUninitialized(name);
+          return binding->value;
+        }
+      } else if (env->kind() == Environment::Kind::Global) {
+        if (verifyCaches) verifyCache(start, env, nullptr, name);
+        return globalIdentifierValue(static_cast<GlobalEnvironment*>(env), name, context->strict);
+      }
+    }
+  }
+  uint32_t hops = 0;
+  bool cacheable = true;  // every record passed is a static declarative one
+  for (Environment* env = start; env; env = env->outer, hops++) {
     switch (env->kind()) {
       case Environment::Kind::Declarative:
       case Environment::Kind::Function: {
-        auto* binding = static_cast<DeclarativeEnvironment*>(env)->find(name);
-        if (!binding) continue;
-        if (binding->value.isEmpty()) {
-          return ThrowReferenceError("Cannot access '" + name->toUtf8() + "' before initialization");
+        auto* declarative = static_cast<DeclarativeEnvironment*>(env);
+        Binding* binding = declarative->find(name);
+        if (!binding) {
+          if (declarative->isDynamic()) cacheable = false;
+          continue;
         }
+        if (cacheable) recordSlot(cache, hops, declarative, binding);
+        if (binding->value.isEmpty()) return throwUninitialized(name);
         return binding->value;
       }
-      case Environment::Kind::Module:
-        if (!static_cast<DeclarativeEnvironment*>(env)->hasBindingDirect(name)) continue;
+      case Environment::Kind::Module: {
+        auto* declarative = static_cast<DeclarativeEnvironment*>(env);
+        Binding* binding = declarative->find(name);
+        if (!binding) {
+          if (declarative->isDynamic()) cacheable = false;
+          continue;
+        }
+        if (cacheable) recordSlot(cache, hops, declarative, binding);
         return env->GetBindingValue(name, true);
-      case Environment::Kind::Global: {
-        auto* global = static_cast<GlobalEnvironment*>(env);
-        if (global->declarativeRecord->hasBindingDirect(name)) return global->declarativeRecord->GetBindingValue(name, true);
-        if (std::optional<PropertySlot> slot = global->objectRecord->ownDataSlot(name)) return slot->value;
-        bool exists = TRY(global->objectRecord->HasBinding(name));
-        if (!exists) continue;
-        return global->objectRecord->GetBindingValue(name, context->strict);
       }
+      case Environment::Kind::Global:
+        if (cacheable) recordGlobal(cache, hops);
+        return globalIdentifierValue(static_cast<GlobalEnvironment*>(env), name, context->strict);
       case Environment::Kind::Object: {
+        cacheable = false;
         bool exists = TRY(env->HasBinding(name));
         if (!exists) continue;
         return env->GetBindingValue(name, context->strict);
@@ -124,6 +234,69 @@ Result<Value> getIdentifierValue(String* name) {
 }
 
 }  // namespace
+
+Result<Reference> resolveIdentifier(const Identifier* id) {
+  IdentifierCache* cache = identifierCache(id);
+  String* name = cache->name;
+  InterpContext* context = runningContext();
+  Environment* start = context->lexicalEnvironment;
+  Reference ref;
+  ref.name = name;
+  ref.strict = context->strict;
+  if (cache->kind != IdentifierCache::Kind::None) {
+    if (Environment* env = followCache(start, cache->hops)) {
+      if (cache->kind == IdentifierCache::Kind::Slot) {
+        if (Binding* binding = slotBinding(env, cache->slot, name)) {
+          if (verifyCaches) verifyCache(start, env, binding, name);
+          ref.kind = Reference::Kind::Environment;
+          ref.env = env;
+          ref.slot = cache->slot;
+          return ref;
+        }
+      } else if (env->kind() == Environment::Kind::Global) {
+        if (verifyCaches) verifyCache(start, env, nullptr, name);
+        bool exists = TRY(env->HasBinding(name));
+        if (exists) {
+          ref.kind = Reference::Kind::Environment;
+          ref.env = env;
+        } else {
+          ref.kind = Reference::Kind::Unresolvable;
+        }
+        return ref;
+      }
+    }
+  }
+  uint32_t hops = 0;
+  bool cacheable = true;
+  for (Environment* env = start; env; env = env->outer, hops++) {
+    if (isDeclarativeKind(env)) {
+      auto* declarative = static_cast<DeclarativeEnvironment*>(env);
+      Binding* binding = declarative->find(name);
+      if (!binding) {
+        if (declarative->isDynamic()) cacheable = false;
+        continue;
+      }
+      if (cacheable) recordSlot(cache, hops, declarative, binding);
+      ref.kind = Reference::Kind::Environment;
+      ref.env = env;
+      if (!binding->indirectModule) ref.slot = declarative->slotOf(binding);
+      return ref;
+    }
+    if (env->kind() == Environment::Kind::Global) {
+      if (cacheable) recordGlobal(cache, hops);
+    } else {
+      cacheable = false;
+    }
+    bool exists = TRY(env->HasBinding(name));
+    if (exists) {
+      ref.kind = Reference::Kind::Environment;
+      ref.env = env;
+      return ref;
+    }
+  }
+  ref.kind = Reference::Kind::Unresolvable;
+  return ref;
+}
 
 Result<Value> ResolveThisBinding() {
   Environment* env = GetThisEnvironment(runningContext()->lexicalEnvironment);
@@ -175,6 +348,12 @@ Result<Value> GetValue(Reference& ref) {
       if (ref.name) return throwNotDefined(ref.name);
       return ref.base;  // a value (not a Reference)
     case Reference::Kind::Environment:
+      if (ref.slot != Reference::kNoSlot) {
+        if (Binding* binding = slotBinding(ref.env, ref.slot, ref.name)) {
+          if (binding->value.isEmpty()) return throwUninitialized(ref.name);
+          return binding->value;
+        }
+      }
       return ref.env->GetBindingValue(ref.name, ref.strict);
     case Reference::Kind::Property: {
       if (ref.base.isNullish()) return throwNullishBase(ref.base, ref, "read");
@@ -199,6 +378,11 @@ Result<void> PutValue(Reference& ref, Value value) {
       return Set(GetGlobalObject(), PropertyKey(ref.name), value, false);
     }
     case Reference::Kind::Environment:
+      if (ref.slot != Reference::kNoSlot) {
+        if (Binding* binding = slotBinding(ref.env, ref.slot, ref.name)) {
+          return static_cast<DeclarativeEnvironment*>(ref.env)->setBinding(*binding, ref.name, value, ref.strict);
+        }
+      }
       return ref.env->SetMutableBinding(ref.name, value, ref.strict);
     case Reference::Kind::Property: {
       if (ref.base.isNullish()) return throwNullishBase(ref.base, ref, "set");
@@ -221,6 +405,12 @@ Result<void> PutValue(Reference& ref, Value value) {
 }
 
 Result<void> InitializeReferencedBinding(Reference& ref, Value value) {
+  if (ref.slot != Reference::kNoSlot) {
+    if (Binding* binding = slotBinding(ref.env, ref.slot, ref.name)) {
+      binding->value = value;
+      return {};
+    }
+  }
   return ref.env->InitializeBinding(ref.name, value);
 }
 
@@ -269,9 +459,14 @@ Result<Reference> evaluateMember(const MemberExpression* node, bool* shortCircui
     Value propertyNameValue = TRY(evaluate(node->property));
     return makeSuperPropertyReference(actualThis, propertyNameValue, std::nullopt);
   }
-  Reference baseRef = TRY(evaluateChainBase(node->object, shortCircuit));
-  if (shortCircuit && *shortCircuit) return baseRef;
-  Value baseValue = TRY(GetValue(baseRef));
+  Value baseValue;
+  if (shortCircuit) {
+    Reference baseRef = TRY(evaluateChainBase(node->object, shortCircuit));
+    if (*shortCircuit) return baseRef;
+    baseValue = TRY(GetValue(baseRef));
+  } else {
+    baseValue = TRY(evaluate(node->object));
+  }
   if (node->optional && baseValue.isNullish()) {
     *shortCircuit = true;
     return valueReference(Value::undefined());
@@ -294,6 +489,18 @@ Result<Reference> evaluateMember(const MemberExpression* node, bool* shortCircui
   return ref;
 }
 
+// The TypeError of reading a property of a nullish base. Out of line: the Reference stays out of the frames of
+// the fast paths below (C stack per JS call; see kStackArguments).
+[[gnu::noinline, gnu::cold]] Throw throwNullishPropertyRead(Value base, Value propertyName,
+                                                            const std::optional<PropertyKey>& key) {
+  Reference ref;
+  ref.kind = Reference::Kind::Property;
+  ref.base = base;
+  ref.propertyName = propertyName;
+  ref.key = key;
+  return throwNullishBase(base, ref, "read");
+}
+
 // Evaluation + GetValue of `base.name` / `base[expression]` without materializing the Reference.
 Result<Value> evaluatePropertyValue(const MemberExpression* node) {
   Value baseValue = TRY(evaluate(node->object));
@@ -304,14 +511,7 @@ Result<Value> evaluatePropertyValue(const MemberExpression* node) {
   } else {
     propertyName = TRY(evaluate(node->property));
   }
-  if (baseValue.isNullish()) {
-    Reference ref;
-    ref.kind = Reference::Kind::Property;
-    ref.base = baseValue;
-    ref.propertyName = propertyName;
-    ref.key = key;
-    return throwNullishBase(baseValue, ref, "read");
-  }
+  if (baseValue.isNullish()) return throwNullishPropertyRead(baseValue, propertyName, key);
   if (!key) key = TRY(ToPropertyKey(propertyName));
   if (baseValue.isObject()) return baseValue.asObject()->Get(*key, baseValue);
   Object* baseObj = TRY(ToObject(baseValue));
@@ -360,12 +560,50 @@ Result<Reference> evaluateChainReference(const Node* node, bool* shortCircuit) {
   return evaluateCallLink(node->as<CallExpression>(), shortCircuit);
 }
 
+// `base.name(...)` / `base[key](...)` outside an optional chain, without materializing References. Out of line:
+// its frame isn't on the stack of the other calls (C stack per JS call; see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateMethodCallValue(const CallExpression* node, const MemberExpression* member) {
+  Value baseValue = TRY(evaluate(member->object));
+  Value propertyName;
+  std::optional<PropertyKey> key;
+  if (!member->computed) {
+    key = PropertyKey(identifierName(member->property->as<Identifier>()));
+  } else {
+    propertyName = TRY(evaluate(member->property));
+  }
+  if (baseValue.isNullish()) return throwNullishPropertyRead(baseValue, propertyName, key);
+  if (!key) key = TRY(ToPropertyKey(propertyName));
+  Value func;
+  if (baseValue.isObject()) {
+    func = TRY(baseValue.asObject()->Get(*key, baseValue));
+  } else {
+    Object* baseObj = TRY(ToObject(baseValue));
+    func = TRY(baseObj->Get(*key, baseValue));
+  }
+  return EvaluateCall(func, baseValue, node->arguments);
+}
+
+// Evaluation + GetValue of a call outside an optional chain, without materializing the References of the
+// callee (`base.name(...)` / `base[key](...)`) or of the result.
+Result<Value> evaluateCallValue(const CallExpression* node) {
+  const Node* callee = node->callee;
+  if (callee->type == NodeType::MemberExpression && !node->optional) {
+    auto* member = callee->as<MemberExpression>();
+    if (member->object->type != NodeType::Super && member->property->type != NodeType::PrivateIdentifier &&
+        !member->optional) {
+      return evaluateMethodCallValue(node, member);
+    }
+  }
+  Reference ref = TRY(evaluateCallLink(node, nullptr));
+  return GetValue(ref);
+}
+
 }  // namespace
 
 Result<Reference> evaluateReference(const Node* node) {
   switch (node->type) {
     case NodeType::Identifier:
-      return ResolveBinding(identifierName(node->as<Identifier>()));
+      return resolveIdentifier(node->as<Identifier>());
     case NodeType::MemberExpression:
       return evaluateMember(node->as<MemberExpression>(), nullptr);
     case NodeType::CallExpression:
@@ -408,6 +646,25 @@ Result<Value> evaluateNamed(const Node* node, Value name) {
 
 // ---- Calls ----
 
+namespace {
+
+// An argument list of at most kStackArguments arguments and no spread element is evaluated into an array on
+// the C stack, which the collector scans (no ValueVector to allocate and register). The array is sized to the
+// argument count (alloca), in a frame of its own that only exists while arguments are on the stack: a fixed
+// buffer in the recursive frames would cost every JS call C stack, and the deepest recursion tests (100,000
+// nested calls, for/tco-*-body.js) need more than 432 MB of the 480 MB main stack (tools/lead/stackdepth.mjs).
+constexpr size_t kStackArguments = 8;
+
+bool fitsStackArguments(const std::vector<Node*>& arguments) {
+  if (arguments.size() > kStackArguments) return false;
+  for (const Node* argument : arguments) {
+    if (argument->type == NodeType::SpreadElement) return false;
+  }
+  return true;
+}
+
+}  // namespace
+
 Result<ValueVector> ArgumentListEvaluation(const std::vector<Node*>& arguments) {
   ValueVector list;
   list.reserve(arguments.size());
@@ -427,10 +684,36 @@ Result<ValueVector> ArgumentListEvaluation(const std::vector<Node*>& arguments) 
   return list;
 }
 
-Result<Value> EvaluateCall(Value func, Value thisValue, const std::vector<Node*>& arguments) {
+namespace {
+
+// The arguments' values in argList (count of them, uninitialized memory on the caller's stack).
+Result<void> evaluateStackArguments(const std::vector<Node*>& arguments, Value* argList, size_t count) {
+  std::uninitialized_default_construct_n(argList, count);  // scanned by a collection during the evaluation
+  for (size_t i = 0; i < count; i++) argList[i] = TRY(evaluate(arguments[i]));
+  return {};
+}
+
+[[gnu::noinline]] Result<Value> callWithStackArguments(Value func, Value thisValue,
+                                                       const std::vector<Node*>& arguments) {
+  size_t count = arguments.size();
+  auto* argList = static_cast<Value*>(alloca(count * sizeof(Value)));
+  TRY(evaluateStackArguments(arguments, argList, count));
+  if (!func.isObject() || !func.asObject()->isCallable()) return ThrowTypeError("not a function");
+  return func.asObject()->Call(thisValue, Args(argList, count));
+}
+
+[[gnu::noinline]] Result<Value> callWithArgumentList(Value func, Value thisValue,
+                                                     const std::vector<Node*>& arguments) {
   ValueVector argList = TRY(ArgumentListEvaluation(arguments));
   if (!func.isObject() || !func.asObject()->isCallable()) return ThrowTypeError("not a function");
   return func.asObject()->Call(thisValue, argList);
+}
+
+}  // namespace
+
+Result<Value> EvaluateCall(Value func, Value thisValue, const std::vector<Node*>& arguments) {
+  if (fitsStackArguments(arguments)) return callWithStackArguments(func, thisValue, arguments);
+  return callWithArgumentList(func, thisValue, arguments);
 }
 
 // ---- Literals, templates, property names ----
@@ -521,7 +804,8 @@ namespace {
 
 // ---- Array and object literals ----
 
-Result<Value> evaluateArray(const ArrayExpression* node) {
+// Out of line: a smaller frame for evaluate, which every recursion goes through (see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateArray(const ArrayExpression* node) {
   Object* array = TRY(ArrayCreate(0));
   uint32_t nextIndex = 0;
   for (const Node* element : node->elements) {
@@ -590,7 +874,8 @@ Result<void> definePropertyFromLiteral(Object* object, const Property* property)
   return DefinePropertyOrThrow(object, TRY(ToPropertyKey(propKey)), desc);
 }
 
-Result<Value> evaluateObject(const ObjectExpression* node) {
+// Out of line: a smaller frame for evaluate, which every recursion goes through (see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateObject(const ObjectExpression* node) {
   Object* object = OrdinaryObjectCreate(vm().currentRealm()->intrinsic(Intrinsic::ObjectPrototype));
   for (const Node* member : node->properties) {
     if (member->type == NodeType::SpreadElement) {
@@ -668,7 +953,7 @@ Result<Value> evaluateUnary(const UnaryExpression* node) {
       return Value::undefined();
     case UnaryOperator::Typeof: {
       if (node->argument->type == NodeType::Identifier) {
-        Reference ref = TRY(ResolveBinding(identifierName(node->argument->as<Identifier>())));
+        Reference ref = TRY(resolveIdentifier(node->argument->as<Identifier>()));
         if (ref.kind == Reference::Kind::Unresolvable) return Value(atom(u"undefined"));
         return typeofValue(TRY(GetValue(ref)));
       }
@@ -778,14 +1063,16 @@ Result<Value> evaluateAssignment(const AssignmentExpression* node) {
   return r;
 }
 
-Result<Value> evaluateNew(const NewExpression* node) {
+// A NewExpression whose arguments don't fit the stack (see evaluate for the others).
+[[gnu::noinline]] Result<Value> evaluateNew(const NewExpression* node) {
   Value constructor = TRY(evaluate(node->callee));
   ValueVector argList = TRY(ArgumentListEvaluation(node->arguments));
   if (!IsConstructor(constructor)) return ThrowTypeError("not a constructor");
   return Value(TRY(Construct(constructor.asObject(), argList)));
 }
 
-Result<Value> evaluateTaggedTemplate(const TaggedTemplateExpression* node) {
+// Out of line: a smaller frame for evaluate, which every recursion goes through (see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateTaggedTemplate(const TaggedTemplateExpression* node) {
   Reference tagRef = TRY(evaluateReference(node->tag));
   Value tagFunc = TRY(GetValue(tagRef));
   Value thisValue = thisValueForCall(tagRef);
@@ -796,9 +1083,17 @@ Result<Value> evaluateTaggedTemplate(const TaggedTemplateExpression* node) {
   return tagFunc.asObject()->Call(thisValue, argList);
 }
 
-Result<Value> evaluateMetaProperty(const MetaProperty* node) {
+// Out of line: a smaller frame for evaluate, which every recursion goes through (see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateMetaProperty(const MetaProperty* node) {
   if (node->meta->name == u"new") return GetNewTarget();
   return evaluateImportMeta();
+}
+
+// GetValue(evaluateReference(node)), out of line: the Reference stays out of evaluate's frame, which every
+// recursion goes through (C stack per JS call; see kStackArguments).
+[[gnu::noinline]] Result<Value> evaluateReferenceValue(const Node* node) {
+  Reference ref = TRY(evaluateReference(node));
+  return GetValue(ref);
 }
 
 }  // namespace
@@ -808,7 +1103,7 @@ Result<Value> evaluateMetaProperty(const MetaProperty* node) {
 Result<Value> evaluate(const Node* node) {
   switch (node->type) {
     case NodeType::Identifier:
-      return getIdentifierValue(identifierName(node->as<Identifier>()));
+      return getIdentifierValue(node->as<Identifier>());
     case NodeType::Literal:
       return evaluateLiteral(node->as<Literal>());
     case NodeType::ThisExpression:
@@ -846,17 +1141,27 @@ Result<Value> evaluate(const Node* node) {
           !member->optional) {
         return evaluatePropertyValue(member);
       }
-      Reference ref = TRY(evaluateReference(node));
-      return GetValue(ref);
+      return evaluateReferenceValue(node);
     }
     case NodeType::CallExpression:
+      TRY(CheckStack());
+      return evaluateCallValue(node->as<CallExpression>());
     case NodeType::ChainExpression: {
       TRY(CheckStack());
-      Reference ref = TRY(evaluateReference(node));
-      return GetValue(ref);
+      return evaluateReferenceValue(node);
     }
-    case NodeType::NewExpression:
-      return evaluateNew(node->as<NewExpression>());
+    case NodeType::NewExpression: {
+      // The arguments in this frame (alloca, released when evaluate returns): a frame of their own would cost
+      // every nested `new` C stack (see kStackArguments).
+      auto* expression = node->as<NewExpression>();
+      if (!fitsStackArguments(expression->arguments)) return evaluateNew(expression);
+      Value constructor = TRY(evaluate(expression->callee));
+      size_t count = expression->arguments.size();
+      auto* argList = static_cast<Value*>(alloca(count * sizeof(Value)));
+      TRY(evaluateStackArguments(expression->arguments, argList, count));
+      if (!IsConstructor(constructor)) return ThrowTypeError("not a constructor");
+      return Value(TRY(Construct(constructor.asObject(), Args(argList, count))));
+    }
     case NodeType::SequenceExpression: {
       Value value;
       for (const Node* expression : node->as<SequenceExpression>()->expressions) value = TRY(evaluate(expression));

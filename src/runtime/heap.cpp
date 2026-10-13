@@ -5,12 +5,26 @@
 
 #include <atomic>
 
+#include <malloc.h>
 #include <pthread.h>
 
 #include <algorithm>
 #include <cstdint>
 
 namespace snowman {
+
+namespace {
+
+// A collection frees most of the heap at once. glibc would then return the top of the heap to the system and
+// grow it again right after (brk, slow under gVisor): keep freed memory for reuse and grow in larger steps.
+// Peak usage is unchanged.
+const int kMallocTuned = [] {
+  mallopt(M_TRIM_THRESHOLD, 256 << 20);
+  mallopt(M_TOP_PAD, 16 << 20);
+  return 0;
+}();
+
+}  // namespace
 
 // One heap per thread (agent); cells never cross threads.
 thread_local Heap* tHeap = nullptr;
