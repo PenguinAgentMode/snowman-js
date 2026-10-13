@@ -4,6 +4,7 @@
 
 #include "builtins/util.h"
 #include "interp/interpreter.h"
+#include "interp/module.h"
 #include "interp/promise.h"
 #include "parser/parser.h"
 #include "runtime/function.h"
@@ -158,11 +159,7 @@ Result<Value> ShadowRealmImportValue(String* specifierString, String* exportName
     ExecutionContext evalContext;
     evalContext.realm = evalRealm;
     ContextScope scope(&evalContext);
-    // HostLoadImportedModule(evalRealm, specifierString, ~empty~, innerCapability): the module loader's, not
-    // wired up yet; until then the import fails.
-    (void)specifierString;
-    TRY(rejectCapability(innerCapability, Value(CreateError(evalRealm, Intrinsic::TypeErrorPrototype,
-                                                            "ShadowRealm module loading is not supported"))));
+    ImportModuleForRealm(evalRealm, specifierString, innerCapability);
   }
   BuiltinFunction* onFulfilled = createBuiltinFunction(*callerRealm, ExportGetter, 1, PropertyKey(emptyString()));
   onFulfilled->slots.push_back(Value(exportNameString));
