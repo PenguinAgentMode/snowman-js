@@ -2,6 +2,7 @@
 // type: internal duration records, balancing, RoundRelativeDuration and its nudges, relativeTo.
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/temporal/temporal.h"
 
 namespace snowman::temporal {
@@ -886,7 +887,7 @@ Result<Value> DurationPrototype_toJSON(NativeCall& call) {
 
 Result<Value> DurationPrototype_toLocaleString(NativeCall& call) {
   DurationObject* duration = TRY(thisDuration(call, "Temporal.Duration.prototype.toLocaleString"));
-  return Value(newString(TemporalDurationToString(duration->fields, -1)));
+  return intl::durationToLocaleString(Value(duration), call.args[0], call.args[1]);
 }
 
 Result<Value> DurationPrototype_valueOf(NativeCall&) {

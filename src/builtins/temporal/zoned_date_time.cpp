@@ -1,6 +1,7 @@
 // Temporal.ZonedDateTime (proposal-temporal §6) and the time zone operations temporal.h declares for the core.
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/temporal/temporal.h"
 #include "runtime/bigint.h"
 
@@ -584,7 +585,7 @@ Result<Value> ZonedDateTimePrototype_toString(NativeCall& call) {
 
 Result<Value> ZonedDateTimePrototype_toLocaleString(NativeCall& call) {
   ZonedDateTimeObject* zoned = TRY(thisZoned(call, "Temporal.ZonedDateTime.prototype.toLocaleString"));
-  return Value(newString(TemporalZonedDateTimeToString(zoned, -1, ShowCalendar::Auto, ShowTimeZone::Auto, ShowOffset::Auto)));
+  return intl::zonedDateTimeToLocaleString(Value(zoned), call.args[0], call.args[1]);
 }
 
 Result<Value> ZonedDateTimePrototype_toJSON(NativeCall& call) {

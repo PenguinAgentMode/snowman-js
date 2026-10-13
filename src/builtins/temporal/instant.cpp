@@ -1,6 +1,7 @@
 // Temporal.Instant (proposal-temporal §8): an exact time, nanoseconds since the epoch.
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/temporal/temporal.h"
 #include "runtime/bigint.h"
 
@@ -210,7 +211,7 @@ Result<Value> InstantPrototype_toString(NativeCall& call) {
 
 Result<Value> InstantPrototype_toLocaleString(NativeCall& call) {
   InstantObject* instant = TRY(thisInstant(call, "Temporal.Instant.prototype.toLocaleString"));
-  return Value(newString(TemporalInstantToString(instant->epochNanoseconds, nullptr, -1)));
+  return intl::temporalToLocaleString(Value(instant), call.args[0], call.args[1]);
 }
 
 Result<Value> InstantPrototype_toJSON(NativeCall& call) {

@@ -1,6 +1,7 @@
 // Temporal.PlainDate (proposal-temporal §3).
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/temporal/temporal.h"
 
 namespace snowman::temporal {
@@ -241,7 +242,7 @@ Result<Value> PlainDatePrototype_toString(NativeCall& call) {
 
 Result<Value> PlainDatePrototype_toLocaleString(NativeCall& call) {
   PlainDateObject* d = TRY(thisDate(call, "Temporal.PlainDate.prototype.toLocaleString"));
-  return Value(newString(TemporalDateToString(d->isoDate, d->calendar, ShowCalendar::Auto)));
+  return intl::temporalToLocaleString(Value(d), call.args[0], call.args[1]);
 }
 
 Result<Value> PlainDatePrototype_toJSON(NativeCall& call) {
