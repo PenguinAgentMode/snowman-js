@@ -354,6 +354,17 @@ Node* Parser::parseExprSubscripts(DestructuringErrors* refErrors, bool noIn) {
   Node* expr = parseExprAtom(refErrors, noIn);
   if (expr->is<ArrowFunctionExpression>() && !expr->parenthesized) return expr;
   Node* result = parseSubscripts(expr, start, false, noIn);
+  if (refErrors && result != expr) {
+    // An object or array literal with a property access, call or tagged template after it is an operand, never an
+    // AssignmentPattern, so its CoverInitializedName (`{a = 0}`) and duplicate __proto__ errors stand even inside
+    // a destructuring target: `[{a = 0}.x] = []`.
+    if (refErrors->shorthandAssign >= static_cast<int64_t>(expr->start)) {
+      raise(static_cast<uint32_t>(refErrors->shorthandAssign), "Invalid shorthand property initializer");
+    }
+    if (refErrors->doubleProto >= static_cast<int64_t>(expr->start)) {
+      raise(static_cast<uint32_t>(refErrors->doubleProto), "Duplicate __proto__ fields are not allowed in object literals");
+    }
+  }
   if (refErrors && result->is<MemberExpression>()) {
     if (refErrors->parenthesizedAssign >= static_cast<int64_t>(result->start)) refErrors->parenthesizedAssign = -1;
     if (refErrors->parenthesizedBind >= static_cast<int64_t>(result->start)) refErrors->parenthesizedBind = -1;
