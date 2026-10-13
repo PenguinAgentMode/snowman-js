@@ -96,6 +96,9 @@ struct InterpContext : ExecutionContext {
   // The generator / async function / async generator running in this context, if any.
   Cell* suspendOwner = nullptr;
   SuspendState* suspend = nullptr;
+  // For the legacy f.caller and f.arguments: eval code (not a caller), and a function call's argument list.
+  bool isEval = false;
+  Args args;
 };
 
 // The running execution context as an interpreter context (nullptr when a built-in's context is running).
