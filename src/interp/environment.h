@@ -68,7 +68,10 @@ class DeclarativeEnvironment : public Environment {
   // call creates one). Bindings are trivially copyable.
   class BindingList {
    public:
-    static constexpr uint32_t kInline = 4;
+    // 2, not more: the inline Bindings are paid by every environment, and deep recursion holds ~2 per level at
+    // the stack overflow (a sloppy call: function + lexical environment). 4 took
+    // test/staging/sm/extensions/recursion.js over the runner's 700 MB (702 MB; 676 with 2, main 671).
+    static constexpr uint32_t kInline = 2;
     BindingList() = default;
     BindingList(const BindingList&) = delete;
     BindingList& operator=(const BindingList&) = delete;
