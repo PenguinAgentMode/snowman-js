@@ -16,8 +16,7 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~16:30 UTC, main 317949e 
 
 ## Merge queue
 
-1. builtins: ws/calendars-ref addd9a2 (chinese/dangi reference years, 4 files), gated vs a1a2a5fc3; re-gate its JSONL
-   against 317949e37 before merging.
+1. Merged addd9a2 (reference years, +4); not yet measured (measure with the next batch).
 2. builtins: $262.agent step 3 (ws/agent3 738da48 WIP: SharedBlock, real atomics); then step 4 (agents, waiters).
 
 How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort) <(git diff --name-only $base
