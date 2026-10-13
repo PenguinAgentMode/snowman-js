@@ -29,7 +29,11 @@ namespace snowman {
   X(RangeErrorPrototype) X(ReferenceError) X(ReferenceErrorPrototype) X(Reflect) X(RegExp) X(RegExpPrototype)   \
   X(RegExpStringIteratorPrototype) X(Set) X(SetPrototype) X(SetIteratorPrototype) X(SharedArrayBuffer)          \
   X(SharedArrayBufferPrototype) X(String) X(StringPrototype) X(StringIteratorPrototype) X(Symbol)               \
-  X(SymbolPrototype) X(SuppressedError) X(SuppressedErrorPrototype) X(SyntaxError) X(SyntaxErrorPrototype) X(ThrowTypeError) X(TypedArray)                     \
+  X(SymbolPrototype) X(SuppressedError) X(SuppressedErrorPrototype) X(SyntaxError) X(SyntaxErrorPrototype) X(Temporal) X(TemporalDuration) X(TemporalDurationPrototype)                \
+  X(TemporalInstant) X(TemporalInstantPrototype) X(TemporalNow) X(TemporalPlainDate) X(TemporalPlainDatePrototype)  \
+  X(TemporalPlainDateTime) X(TemporalPlainDateTimePrototype) X(TemporalPlainMonthDay)                              \
+  X(TemporalPlainMonthDayPrototype) X(TemporalPlainTime) X(TemporalPlainTimePrototype) X(TemporalPlainYearMonth)    \
+  X(TemporalPlainYearMonthPrototype) X(TemporalZonedDateTime) X(TemporalZonedDateTimePrototype) X(ThrowTypeError) X(TypedArray)                     \
   X(TypedArrayPrototype) X(TypeError) X(TypeErrorPrototype) X(Uint8Array) X(Uint8ArrayPrototype)                \
   X(Uint8ClampedArray) X(Uint8ClampedArrayPrototype) X(Uint16Array) X(Uint16ArrayPrototype) X(Uint32Array)      \
   X(Uint32ArrayPrototype) X(unescape) X(URIError) X(URIErrorPrototype) X(WeakMap) X(WeakMapPrototype)          \
