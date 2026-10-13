@@ -13,6 +13,22 @@
 
 namespace snowman {
 
+namespace {
+
+// Atoms of the property names the hottest operations look up (atom() hashes the name on every call).
+struct OperationKeys {
+  String* constructor = atom(u"constructor");
+  String* length = atom(u"length");
+  String* prototype = atom(u"prototype");
+};
+
+const OperationKeys& keys() {
+  thread_local OperationKeys k;  // atoms are per thread
+  return k;
+}
+
+}  // namespace
+
 // 7.2.1 RequireObjectCoercible
 Result<void> RequireObjectCoercible(Value argument) {
   if (argument.isNullish()) return ThrowTypeError("Cannot convert undefined or null to object");
@@ -357,7 +373,7 @@ Object* CreateArrayFromList(Args elements) {
 
 // 7.3.18 LengthOfArrayLike
 Result<double> LengthOfArrayLike(Object* object) {
-  Value len = TRY(Get(object, PropertyKey(u"length")));
+  Value len = TRY(Get(object, PropertyKey(keys().length)));
   return ToLength(len);
 }
 
@@ -389,7 +405,7 @@ Result<bool> OrdinaryHasInstance(Value constructor, Value object) {
   Object* c = constructor.asObject();
   if (auto* bound = c->as<BoundFunction>()) return InstanceofOperator(object, bound->boundTargetFunction);
   if (!object.isObject()) return false;
-  Value p = TRY(Get(c, PropertyKey(u"prototype")));
+  Value p = TRY(Get(c, PropertyKey(keys().prototype)));
   if (!p.isObject()) return ThrowTypeError("Function has non-object prototype in instanceof check");
   Object* o = object.asObject();
   while (true) {
@@ -413,7 +429,7 @@ Result<bool> InstanceofOperator(Value value, Value target) {
 
 // 7.3.22 SpeciesConstructor
 Result<Object*> SpeciesConstructor(Object* object, Object* defaultConstructor) {
-  Value c = TRY(Get(object, PropertyKey(u"constructor")));
+  Value c = TRY(Get(object, PropertyKey(keys().constructor)));
   if (c.isUndefined()) return defaultConstructor;
   if (!c.isObject()) return ThrowTypeError("object.constructor is not an object");
   Value s = TRY(Get(c.asObject(), PropertyKey(vm().symbols.species)));
@@ -483,7 +499,7 @@ Result<void> CopyDataProperties(Object* target, Value source, const std::vector<
 
 // 10.1.14 GetPrototypeFromConstructor
 Result<Object*> GetPrototypeFromConstructor(Object* constructor, Intrinsic intrinsicDefaultProto) {
-  Value proto = TRY(Get(constructor, PropertyKey(u"prototype")));
+  Value proto = TRY(Get(constructor, PropertyKey(keys().prototype)));
   if (!proto.isObject()) {
     Realm* realm = TRY(GetFunctionRealm(constructor));
     return realm->intrinsic(intrinsicDefaultProto);

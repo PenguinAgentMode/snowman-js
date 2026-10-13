@@ -116,8 +116,7 @@ Result<bool> DeclarativeEnvironment::DeleteBinding(String* name) {
   Binding* binding = find(name);
   if (!binding->deletable) return false;
   dynamic_ = true;
-  size_t at = size_t(binding - bindings_.data());
-  bindings_.erase(bindings_.begin() + ptrdiff_t(at));
+  bindings_.erase(size_t(binding - bindings_.data()));
   if (index_) {
     index_->clear();
     for (uint32_t i = 0; i < bindings_.size(); i++) (*index_)[bindings_[i].name] = i;
@@ -130,8 +129,6 @@ void DeclarativeEnvironment::trace(Tracer& tracer) {
   for (auto& binding : bindings_) {
     tracer.visit(reinterpret_cast<Cell*>(binding.name));
     tracer.visit(binding.value);
-    tracer.visit(reinterpret_cast<Cell*>(binding.indirectModule));
-    tracer.visit(reinterpret_cast<Cell*>(binding.indirectName));
   }
   tracer.visit(reinterpret_cast<Cell*>(disposeCapability));
 }
@@ -355,10 +352,13 @@ void GlobalEnvironment::trace(Tracer& tracer) {
 
 Result<Value> ModuleEnvironment::GetBindingValue(String* name, bool strict) {
   Binding* binding = find(name);
-  if (binding->indirectModule) {
-    Environment* target = moduleEnvironmentOf(binding->indirectModule);
-    if (!target) return throwUninitialized(name);
-    return target->GetBindingValue(binding->indirectName, true);
+  if (binding->indirect) {
+    for (const Import& import : imports_) {
+      if (import.name != name) continue;
+      Environment* target = moduleEnvironmentOf(import.module);
+      if (!target) return throwUninitialized(name);
+      return target->GetBindingValue(import.targetName, true);
+    }
   }
   return DeclarativeEnvironment::GetBindingValue(name, strict);
 }
@@ -368,8 +368,17 @@ void ModuleEnvironment::CreateImportBinding(String* name, ModuleRecord* module, 
   binding.mutable_ = false;
   binding.strict = true;
   binding.value = Value::undefined();
-  binding.indirectModule = module;
-  binding.indirectName = targetName;
+  binding.indirect = true;
+  imports_.push_back(Import{name, module, targetName});
+}
+
+void ModuleEnvironment::trace(Tracer& tracer) {
+  DeclarativeEnvironment::trace(tracer);
+  for (const Import& import : imports_) {
+    tracer.visit(reinterpret_cast<Cell*>(import.name));
+    tracer.visit(reinterpret_cast<Cell*>(import.module));
+    tracer.visit(reinterpret_cast<Cell*>(import.targetName));
+  }
 }
 
 // ---- Private ----
