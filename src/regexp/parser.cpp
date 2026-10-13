@@ -75,16 +75,34 @@ std::string toUtf8(std::u16string_view s) {
 }
 
 // The pattern as the grammar sees it: code points with u or v (surrogate pairs joined), code units otherwise.
-std::u32string decodePattern(std::u16string_view source, bool unicodeMode) {
-  std::u32string s;
-  s.reserve(source.size());
-  for (size_t i = 0; i < source.size(); i++) {
-    char32_t c = source[i];
-    if (unicodeMode && isLead(c) && i + 1 < source.size() && isTrail(source[i + 1])) c = combineSurrogates(c, source[++i]);
-    s += c;
+// It reads the source in place; only a u or v pattern with a surrogate pair in it gets a decoded copy (4 bytes a
+// code point), so a long pattern costs no copy (staging/sm/RegExp/unicode-braced.js parses 16M characters).
+class PatternText {
+ public:
+  PatternText(std::u16string_view source, bool unicodeMode) : units_(source) {
+    if (!unicodeMode) return;
+    for (size_t i = 0; i + 1 < source.size(); i++) {
+      if (isLead(source[i]) && isTrail(source[i + 1])) {
+        joined_ = true;
+        break;
+      }
+    }
+    if (!joined_) return;
+    decoded_.reserve(source.size());
+    for (size_t i = 0; i < source.size(); i++) {
+      char32_t c = source[i];
+      if (isLead(c) && i + 1 < source.size() && isTrail(source[i + 1])) c = combineSurrogates(c, source[++i]);
+      decoded_ += c;
+    }
   }
-  return s;
-}
+  size_t size() const { return joined_ ? decoded_.size() : units_.size(); }
+  char32_t operator[](size_t i) const { return joined_ ? decoded_[i] : units_[i]; }
+
+ private:
+  std::u16string_view units_;
+  std::u32string decoded_;
+  bool joined_ = false;
+};
 
 // CountLeftCapturingParensWithin, and whether the pattern contains a GroupName (Annex B ParsePattern), found
 // before parsing: in Annex B patterns the meaning of \N depends on the total count.
@@ -92,7 +110,7 @@ struct CaptureScan {
   uint32_t count = 0;
   bool hasNames = false;
 };
-CaptureScan scanCaptures(const std::u32string& s, bool unicodeSets) {
+CaptureScan scanCaptures(const PatternText& s, bool unicodeSets) {
   CaptureScan scan;
   int classDepth = 0;
   for (size_t i = 0; i < s.size(); i++) {
@@ -124,16 +142,19 @@ CaptureScan scanCaptures(const std::u32string& s, bool unicodeSets) {
 // The MV of a DecimalDigits run, saturated: QuantifierPrefix bounds and DecimalEscape numbers.
 struct Digits {
   uint32_t value = 0;
-  std::u32string_view text;  // without leading zeros, for exact comparison
+  size_t start = 0, length = 0;  // the digits without leading zeros, for exact comparison
 };
-bool greaterThan(const Digits& a, const Digits& b) {
-  if (a.text.size() != b.text.size()) return a.text.size() > b.text.size();
-  return a.text > b.text;
+bool greaterThan(const PatternText& s, const Digits& a, const Digits& b) {
+  if (a.length != b.length) return a.length > b.length;
+  for (size_t k = 0; k < a.length; k++) {
+    if (s[a.start + k] != s[b.start + k]) return s[a.start + k] > s[b.start + k];
+  }
+  return false;
 }
 
 class Parser {
  public:
-  Parser(Pattern& pattern, std::u32string source, bool namedGroups, uint32_t totalCaptures)
+  Parser(Pattern& pattern, PatternText source, bool namedGroups, uint32_t totalCaptures)
       : p_(pattern),
         s_(std::move(source)),
         u_(pattern.flags.unicode || pattern.flags.unicodeSets),
@@ -350,7 +371,8 @@ class Parser {
     size_t firstSignificant = start;
     while (firstSignificant + 1 < i && s_[firstSignificant] == '0') firstSignificant++;
     d.value = static_cast<uint32_t>(value);
-    d.text = std::u32string_view(s_).substr(firstSignificant, i - firstSignificant);
+    d.start = firstSignificant;
+    d.length = i - firstSignificant;
     return d;
   }
   // `{` DecimalDigits (`,` DecimalDigits?)? `}` at pos_ (not consumed).
@@ -373,7 +395,7 @@ class Parser {
     b.ok = true;
     b.min = lo.value;
     b.max = unbounded ? Node::kInfinity : hi.value;
-    b.outOfOrder = !unbounded && greaterThan(lo, hi);
+    b.outOfOrder = !unbounded && greaterThan(s_, lo, hi);
     b.end = i + 1;
     return b;
   }
@@ -1036,7 +1058,7 @@ class Parser {
   }
 
   Pattern& p_;
-  const std::u32string s_;
+  const PatternText s_;
   size_t pos_ = 0;
   const bool u_;      // UnicodeMode
   const bool v_;      // UnicodeSetsMode
@@ -1108,7 +1130,7 @@ std::optional<Flags> parseFlags(std::u16string_view text) {
 
 std::unique_ptr<Pattern> parsePattern(std::u16string_view source, const Flags& flags, std::string* error) {
   bool unicodeMode = flags.unicode || flags.unicodeSets;
-  std::u32string s = decodePattern(source, unicodeMode);
+  PatternText s(source, unicodeMode);
   CaptureScan scan = scanCaptures(s, flags.unicodeSets);
   auto pattern = std::make_unique<Pattern>();
   pattern->flags = flags;
