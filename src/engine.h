@@ -15,6 +15,8 @@ struct CliOptions {
   // Global Scripts run before the entry, and after it once it completed normally (INTERFACES.md section 1).
   std::vector<std::string> preludes;
   std::vector<std::string> epilogues;
+  // --can-block=false: the main agent's [[CanBlock]] is false (test262's CanBlockIsFalse flag).
+  bool canBlock = true;
 };
 
 // Each returns the process exit code. `source` is the file's bytes (UTF-8). Errors are printed to stdout

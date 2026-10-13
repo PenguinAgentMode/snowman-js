@@ -5,7 +5,7 @@ It needs node 22 and nothing else. Every command runs from the repo root.
 
 ## The engine's contract
 
-`engine [--prelude h.js]... [--epilogue e.js]... [--module] [--parse-only] file.js`
+`engine [--prelude h.js]... [--epilogue e.js]... [--module] [--parse-only] [--can-block=false] file.js`
 - Exit 0 when the script runs to completion.
 - On an uncaught exception, print `Name: message` (for example `TypeError: x is not a function`) and exit
   non-zero.
@@ -15,6 +15,8 @@ It needs node 22 and nothing else. Every command runs from the repo root.
   test262's INTERPRETING.md).
 - With `--module`, run the file as a module; imports resolve relative to it.
 - With `--parse-only`, parse (including early errors) and exit 0 or report the SyntaxError; run nothing.
+- With `--can-block=false`, the main agent can't suspend: `Atomics.wait` throws a TypeError (`flags:
+  [CanBlockIsFalse]` tests get it).
 - `--prelude` / `--epilogue` files are global Scripts run before the entry and after it completed normally;
   an error in one prints `Test262:HostScriptError <file>` first (INTERFACES.md section 1).
 
