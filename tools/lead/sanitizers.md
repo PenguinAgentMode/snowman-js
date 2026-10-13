@@ -18,3 +18,7 @@ Owner: hardening. The full suite under an ASan+UBSan engine, triaged by top fram
 
 | Top frame | Kind | Tests (example) | Status |
 | --- | --- | --- | --- |
+
+## Runs
+
+- Shard 0/4 (ws/hardening a42b89d engine, --jobs 2): 25,865 scenarios, 25,765 pass, 0 ASan / 0 UBSan reports.
