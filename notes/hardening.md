@@ -27,6 +27,21 @@ Owner: hardening (sanitizer sweep: ASan + UBSan over the full suite). Lead: the 
   $HOME/logs/ubsan2. Reason: GCC's combined ASan+UBSan prints UBSan reports to stderr (tools/lead/sanitizers.md).
 - Notices are held after a notice-started turn (lead): the lead pings at ETAs; check markers when pinged.
 
+## Findings so far (tools/lead/sanitizers.md has the table)
+
+- UBSan: memcpy/memmove with a null data() for 0 bytes at 5 sites (typedarray.cpp InitializeTypedArrayFromTypedArray,
+  %TypedArray%.prototype.set x2; arraybuffer.cpp slice, transfer): guarded.
+- ASan + SNOWMAN_GC_STRESS=1: class.cpp ClassElements collected mid-ClassDefinitionEvaluation: Rooted (lead approved).
+
+## Pipeline now (after the rebase on c2fcc37, HEAD 8d966b9)
+
+- $HOME/wt-asan at 8d966b9 rebuilding -> $HOME/engine-asan2 (marker build-asan2.done).
+- $HOME/logs/run-gcs2.sh (queued): verify the 16 class files (gcsv.done), then GC_STRESS=1 over --shard 0/2 of the
+  lead's directories (gcs2.done / gcs2.fail; reports $HOME/logs/gcs2; per-dir lines in gcs2-progress.txt).
+- Then: rebuild UBSan engine at the final sha, rerun the UBSan-reporting scenarios (the u.PID files name no test:
+  find them by grepping the sweep's JSONL order, or rerun the dirs: TypedArray*, ArrayBuffer), one normal full-suite
+  gate vs results/5f3218f30{,-full}.json (or STATUS.md's newest), statics lint, JSONL to results branch.
+
 ## Next steps
 
 - 4 shards, one at a time: `node t262/runner/run.mjs --engine <asan engine> --suite full --shard k/4 --jobs 2 --vm-mb 0
