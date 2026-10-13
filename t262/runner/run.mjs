@@ -266,6 +266,8 @@ async function runScenario(args, engine, scenario, slot) {
   const isModule = metadata.flags.includes('module');
   const engineArgs = [...engine.slice(1)];
   if (args.parseOnly) engineArgs.push('--parse-only');
+  // CanBlockIsFalse: the test needs a main agent whose [[CanBlock]] is false (INTERPRETING.md).
+  if (metadata.flags.includes('CanBlockIsFalse')) engineArgs.push('--can-block=false');
   const temps = [];
   let entry = file;
   if (!isModule) {

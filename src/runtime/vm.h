@@ -58,6 +58,8 @@ class VM : public RootProvider {
   // The lowest usable address of the stack the running code is on; CheckStack() throws a RangeError near it.
   // Whoever switches stacks (coroutines, the CLI's main stack) keeps it current.
   const char* stackLimit = nullptr;
+  // The agent's [[CanBlock]] (host-defined; the CLI's --can-block=false): Atomics.wait throws when false.
+  bool canBlock = true;
 
   void traceRoots(Tracer& tracer) override;
 
