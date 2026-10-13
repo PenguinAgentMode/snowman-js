@@ -732,9 +732,11 @@ Node* Parser::parseNew() {
 Node* Parser::parseImportExpr(bool forNew) {
   Pos start = here();
   next();  // import
-  if (is(T::LParen) && !forNew) {
+  // ImportCallArguments: ( AssignmentExpression ,? ) or ( AssignmentExpression , AssignmentExpression ,? )
+  auto importCall = [&](ImportPhase phase) {
     auto* node = startNode<ImportExpression>(start);
-    next();
+    node->phase = phase;
+    next();  // (
     node->source = parseMaybeAssign();
     if (eat(T::Comma)) {
       if (!is(T::RParen)) {
@@ -744,6 +746,18 @@ Node* Parser::parseImportExpr(bool forNew) {
     }
     expect(T::RParen);
     return finish(node);
+  };
+  if (is(T::LParen) && !forNew) return importCall(ImportPhase::Evaluation);
+  // import.defer(...) (import defer) and import.source(...) (source phase imports): always called, never after `new`.
+  if (is(T::Dot)) {
+    Token property = peek();
+    if (property.type == T::Name && !property.escaped && (property.str == u"defer" || property.str == u"source")) {
+      ImportPhase phase = property.str == u"defer" ? ImportPhase::Defer : ImportPhase::Source;
+      next();  // .
+      next();  // defer / source
+      if (!is(T::LParen) || forNew) unexpected();
+      return importCall(phase);
+    }
   }
   if (is(T::Dot)) {
     auto* node = startNode<MetaProperty>(start);

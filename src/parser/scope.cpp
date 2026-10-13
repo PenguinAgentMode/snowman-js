@@ -46,6 +46,15 @@ Token Parser::peek() {
   return t;
 }
 
+std::pair<Token, Token> Parser::peek2() {
+  Lexer::State state = lexer_.save();
+  std::pair<Token, Token> t;
+  lexer_.next(t.first);
+  lexer_.next(t.second);
+  lexer_.restore(state);
+  return t;
+}
+
 bool Parser::eat(T t) {
   if (tok_.type != t) return false;
   next();

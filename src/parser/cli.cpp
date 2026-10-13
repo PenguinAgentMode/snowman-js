@@ -195,7 +195,9 @@ class ModuleGraph {
     while (!pending_.empty()) {
       Module* m = pending_.back();
       pending_.pop_back();
-      for (const ast::ModuleRequest& request : m->program->requestedModules) m->requested.push_back(load(m, request));
+      // A source phase import names a module's [[ModuleSource]] (host-provided), not a module to link: not loaded.
+      for (const ast::ModuleRequest& request : m->program->requestedModules)
+        m->requested.push_back(request.phase == ast::ImportPhase::Source ? nullptr : load(m, request));
     }
   }
 
@@ -204,14 +206,14 @@ class ModuleGraph {
       Module* m = module.get();
       if (m->json) continue;
       for (const ast::ImportEntry& ie : m->program->importEntries) {
-        if (ie.isNamespaceObject) continue;
+        if (ie.isNamespaceObject || ie.isSource) continue;
         Resolution r = resolveExport(m->requested[ie.moduleRequest], ie.importName);
         if (r.kind != Resolution::Kind::Found)
           throw SyntaxFailure{"The requested module does not provide an export named '" + parser::utf16ToUtf8(ie.importName) +
                               (r.kind == Resolution::Kind::Ambiguous ? "' (ambiguous)" : "'")};
       }
       for (const ExportEntry& e : m->program->indirectExportEntries) {
-        if (e.importKind == ExportEntry::ImportKind::All) continue;
+        if (e.importKind == ExportEntry::ImportKind::All || e.importKind == ExportEntry::ImportKind::Source) continue;
         Resolution r = resolveExport(m, *e.exportName);
         if (r.kind != Resolution::Kind::Found)
           throw SyntaxFailure{"Cannot resolve the indirect export '" + parser::utf16ToUtf8(*e.exportName) + "'"};
@@ -271,7 +273,7 @@ class ModuleGraph {
     for (const ExportEntry& e : p->indirectExportEntries) {
       if (!e.exportName || *e.exportName != exportName) continue;
       Module* imported = m->requested[*e.moduleRequest];
-      if (e.importKind == ExportEntry::ImportKind::All) {
+      if (e.importKind == ExportEntry::ImportKind::All || e.importKind == ExportEntry::ImportKind::Source) {
         found.module = imported;
         found.isNamespace = true;
         return found;

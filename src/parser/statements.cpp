@@ -1030,13 +1030,18 @@ std::vector<ImportAttribute*> Parser::parseWithClause() {
   return attributes;
 }
 
-uint32_t Parser::addModuleRequest(Literal* source, const std::vector<ImportAttribute*>& attributes) {
+uint32_t Parser::addModuleRequest(Literal* source, const std::vector<ImportAttribute*>& attributes, ImportPhase phase) {
   ModuleRequest request;
   request.specifier = source->string;
+  request.phase = phase;
   for (ImportAttribute* a : attributes) request.attributes.push_back({moduleExportNameString(a->key), a->value->string});
   auto& list = program_->requestedModules;
+  // ModuleRequests: one entry per (ModuleRequestsKeyEqual, [[Phase]]).
   for (uint32_t i = 0; i < list.size(); i++) {
-    if (list[i].specifier != request.specifier || list[i].attributes.size() != request.attributes.size()) continue;
+    if (list[i].specifier != request.specifier || list[i].attributes.size() != request.attributes.size() ||
+        list[i].phase != phase) {
+      continue;
+    }
     bool same = true;
     for (auto& a : request.attributes) {
       bool found = false;
@@ -1049,6 +1054,15 @@ uint32_t Parser::addModuleRequest(Literal* source, const std::vector<ImportAttri
   return static_cast<uint32_t>(list.size() - 1);
 }
 
+bool Parser::isSourcePhaseImport() {
+  // `import source x from "m"`, and `import source from from "m"` (binding `from`); `import source from "m"` and
+  // `import source, ...` import a default binding named source.
+  auto [first, second] = peek2();
+  if (first.type != T::Name) return false;
+  if (first.str == u"from" && !first.escaped) return second.type == T::Name && second.str == u"from" && !second.escaped;
+  return true;
+}
+
 Node* Parser::parseImport(Pos start) {
   auto* node = startNode<ImportDeclaration>(start);
   next();  // import
@@ -1056,13 +1070,35 @@ Node* Parser::parseImport(Pos start) {
   auto bindLocal = [&](Identifier* local) {
     checkLValSimple(local, Bind::Import);
   };
-  if (!is(T::Str)) {
+  if (isContextual(u"defer") && peek().type == T::Star) {
+    // import defer NameSpaceImport FromClause WithClause?
+    node->phase = ImportPhase::Defer;
+    next();
+    auto* spec = startNode<ImportNamespaceSpecifier>();
+    next();  // *
+    expectKw(K::As);
+    spec->local = parseIdent(false);
+    bindLocal(spec->local);
+    node->specifiers.push_back(finish(spec));
+    entries.push_back({0, true, false, u"", spec->local->name, spec});
+    expectKw(K::From);
+  } else if (isContextual(u"source") && isSourcePhaseImport()) {
+    // import source ImportedBinding FromClause WithClause?
+    node->phase = ImportPhase::Source;
+    next();
+    auto* spec = startNode<ImportDefaultSpecifier>();
+    spec->local = parseIdent(false);
+    bindLocal(spec->local);
+    node->specifiers.push_back(finish(spec));
+    entries.push_back({0, false, true, u"", spec->local->name, spec});
+    expectKw(K::From);
+  } else if (!is(T::Str)) {
     if (isName()) {
       auto* spec = startNode<ImportDefaultSpecifier>();
       spec->local = parseIdent(false);
       bindLocal(spec->local);
       node->specifiers.push_back(finish(spec));
-      entries.push_back({0, false, u"default", spec->local->name, spec});
+      entries.push_back({0, false, false, u"default", spec->local->name, spec});
       if (!eat(T::Comma)) goto from;
     }
     if (is(T::Star)) {
@@ -1072,7 +1108,7 @@ Node* Parser::parseImport(Pos start) {
       spec->local = parseIdent(false);
       bindLocal(spec->local);
       node->specifiers.push_back(finish(spec));
-      entries.push_back({0, true, u"", spec->local->name, spec});
+      entries.push_back({0, true, false, u"", spec->local->name, spec});
     } else {
       expect(T::LBrace);
       while (!eat(T::RBrace)) {
@@ -1091,7 +1127,7 @@ Node* Parser::parseImport(Pos start) {
         }
         bindLocal(spec->local);
         node->specifiers.push_back(finish(spec));
-        entries.push_back({0, false, moduleExportNameString(spec->imported), spec->local->name, spec});
+        entries.push_back({0, false, false, moduleExportNameString(spec->imported), spec->local->name, spec});
         if (!is(T::RBrace)) expect(T::Comma);
       }
     }
@@ -1102,7 +1138,7 @@ Node* Parser::parseImport(Pos start) {
   node->source = parseModuleSpecifier();
   node->attributes = parseWithClause();
   semicolon();
-  uint32_t request = addModuleRequest(node->source, node->attributes);
+  uint32_t request = addModuleRequest(node->source, node->attributes, node->phase);
   for (auto& e : entries) {
     e.moduleRequest = request;
     program_->importEntries.push_back(std::move(e));
@@ -1131,7 +1167,7 @@ Node* Parser::parseExport(Pos start) {
     node->source = parseModuleSpecifier();
     node->attributes = parseWithClause();
     semicolon();
-    uint32_t request = addModuleRequest(node->source, node->attributes);
+    uint32_t request = addModuleRequest(node->source, node->attributes, ImportPhase::Evaluation);
     ExportEntry e;
     e.moduleRequest = request;
     e.node = node;
@@ -1218,7 +1254,7 @@ Node* Parser::parseExport(Pos start) {
     next();
     node->source = parseModuleSpecifier();
     node->attributes = parseWithClause();
-    uint32_t request = addModuleRequest(node->source, node->attributes);
+    uint32_t request = addModuleRequest(node->source, node->attributes, ImportPhase::Evaluation);
     for (auto* spec : node->specifiers) {
       ExportEntry e;
       e.exportName = moduleExportNameString(spec->exported);
@@ -1264,7 +1300,9 @@ void Parser::finishModule(Program* program) {
     ExportEntry indirect;
     indirect.exportName = e.exportName;
     indirect.moduleRequest = ie->moduleRequest;
-    indirect.importKind = ie->isNamespaceObject ? ExportEntry::ImportKind::All : ExportEntry::ImportKind::Name;
+    indirect.importKind = ie->isNamespaceObject ? ExportEntry::ImportKind::All
+                          : ie->isSource         ? ExportEntry::ImportKind::Source
+                                                 : ExportEntry::ImportKind::Name;
     indirect.importName = ie->importName;
     indirect.node = e.node;
     program->indirectExportEntries.push_back(std::move(indirect));
