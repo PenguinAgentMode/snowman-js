@@ -38,6 +38,17 @@ Post-merge run: **main c21bcd82e** (`tools/lead/measure.sh suite results/8a5df0b
 
 Previous: main 8a5df0b93, full 44,766 / 53,616 (83.49%), ES-core 43,059 (99.43%).
 
+ES-core residue at c21bcd82e (142 files; memcap, `tools/lead/es-core-residue.md` on ws/measure 4f999b1; node
+fails 138 of them too):
+
+| Files | Cause | Owner / state |
+| ---: | --- | --- |
+| 112 | `$262.agent` (Atomics wait 43, waitAsync 53, notify 16) | unstaffed: per-thread VM, shared SAB blocks, ~800–1,200 lines; first step `agent.sleep`/`monotonicNow` (+3) |
+| 25 | `$262.IsHTMLDDA` (annexB) | memcap ws/runtime-r 40af25e, gating |
+| 2 | `flags: [CanBlockIsFalse]` | runner: a non-blocking main agent |
+| 2 | Promise.try avoids-wrap | fixed on main (e535e4b) |
+| 1 | Object.freeze on a resizable-buffer TypedArray | fixed on main (e535e4b) |
+
 - Memory cap: 5 staging/sm files fail only under it (extensions/recursion.js, RegExp/unicode-{class-,}braced.js,
   regress/regress-610026.js; String/replace-math.js is fixed in e535e4b). memcap is finding the root causes.
 
