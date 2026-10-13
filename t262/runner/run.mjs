@@ -313,6 +313,10 @@ async function main() {
   const engine = args.engine.split(/\s+/).filter(Boolean);
   const all = listScenarios(args.test262, args.suite);
   const mine = all.filter((s) => shardOf(s, n) === k && (!args.filter || s.file.startsWith(args.filter)));
+  // Run in a deterministic scattered order, not sorted: heavy siblings (the tco-* tests at ~500 MB each, the
+  // RegExp property escapes) then rarely run at the same time on the 4 jobs. Aggregation doesn't depend on order.
+  const order = (s) => shardOf({ file: s.file, mode: `${s.mode}#order` }, 2 ** 32);
+  mine.sort((a, b) => order(a) - order(b));
 
   const out = args.out ? fs.createWriteStream(args.out) : process.stdout;
   let next = 0;
