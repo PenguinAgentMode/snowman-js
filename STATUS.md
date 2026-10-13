@@ -3,27 +3,29 @@
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
 | parser | (closed) | `ws/parser` | `src/parser/`, `tools/parser/` | M1a + M1b reached (a43fced; main 2551c6978); agent closed |
-| regexp | regexp | `ws/regexp` | `src/regexp/`, `src/unicode/`, `tools/unicode/` | validator + matcher merged (1761872); RegExp built-in tests |
-| runtime | runtime | `ws/runtime` | `src/runtime/` (implements the lead's headers), `src/builtins/` except interp's files | M2 built-ins + Date, buffers, TypedArrays, Atomics merged (18fad18); RegExp built-in (ws/runtime-regexp) |
-| interp | (broken: harness error; stranded dd7035b/fb5f7d9/e639ee9) | `ws/interp` | — | last pushed a56635f |
-| interp2 | interp2 | `ws/interp2` | `src/interp/` except modules; interp's built-in files; disposable_stack, async_disposable_stack, suppressed_error, array_from_async | detachArrayBuffer, explicit resource management, Array.fromAsync, language failures, perf |
-| modules | modules | `ws/modules` | `src/interp/module*`, import()/import.meta evaluation, `--module` CLI path | re-implementing modules (module-code, dynamic-import, TLA) |
+| regexp | regexp | `ws/regexp` | `src/regexp/`, `src/unicode/`, `tools/unicode/`, iterator_zip/iterator_chunking/atomics_wait_async built-ins | matcher + Iterator.zip/chunks merged (69c2ac0); Atomics.waitAsync |
+| runtime | runtime | `ws/runtime` | `src/runtime/`, `src/builtins/` except others' files | RegExp built-in merged (7a69924); built-in failures, perf |
+| interp | (closed; work recovered at e639ee9 and merged) | `ws/interp` | — | merged |
+| interp2 | interp2 | `ws/interp2` | `src/interp/` except modules; interp's built-in files; disposable_stack, async_disposable_stack, suppressed_error, array_from_async | detachArrayBuffer merged (cf35ee1); speed + GC on, explicit resource management (incl. module-level `using`), Array.fromAsync, language failures, perf |
+| modules | (closed) | `ws/modules` | — | merged 69cadee (TLA rejection order); module-level `using` → interp2 |
 
 Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interfaces), `INTERFACES.md`, `PLAN.md`,
 `t262/`, `results/`, `STATUS.md`, `Makefile`.
 
 ## Latest result
 
-- Engine commit: eff4d1fa9 (main)
-- ES-core (`results/eff4d1fa9.json`): **38,993 / 43,305 files (90.04%)**; scenarios 74,645 / 82,724; test/harness
-  110 / 116; es5_language 4,353 / 4,538 (95.9%)
+- Engine commit: f294bec1b (main)
+- ES-core (`results/f294bec1b.json`): **42,433 / 43,305 files (97.99%)**; scenarios 81,138 / 82,724; test/harness
+  116 / 116; es5_language 4,485 / 4,538 (98.8%); vs eff4d1fa9: +3,440 newly passing, 0 regressions
 - Parse-only (`results/2551c6978-parse.json`): 43,305 / 43,305
-- Milestone: **M7** (M1a, M1b, M2, M3, M4, M5, M6, M7 reached; M8 ≥ 95% not yet)
-- Command: `node t262/runner/milestones.mjs results/eff4d1fa9.json --parse-only results/2551c6978-parse.json`
-- Biggest gaps: RegExp built-in not merged (1,687 files), modules (397 + import 10; interp's module commits
-  unpushed), $262.detachArrayBuffer (~250 TypedArray/DataView/Atomics files), Iterator 230, String 188,
-  Atomics 177 (incl. $262.agent), DisposableStack/AsyncDisposableStack/SuppressedError 219, Uint8Array base64 62.
+- Milestone: **M8** (every rung of the ladder reached)
+- Command: `node t262/runner/milestones.mjs results/f294bec1b.json --parse-only results/2551c6978-parse.json`
+- Known ceiling: ~104 module tests import their own file and can't pass under the current runner
+  (src/interp/module_test_exclusions.txt; decision with the supervisor).
 
 ## Waivers
 
 Each line is a known regression, with its reason.
+
+- TypedArray/prototype/copyWithin/coerced-values-{start,end}-detached(-prototype).js (3): passed by accident before
+  cf35ee1, now near the 10 s timeout; interp2's speed work (waived until it lands).
