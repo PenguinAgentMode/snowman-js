@@ -22,3 +22,4 @@ Owner: hardening. The full suite under an ASan+UBSan engine, triaged by top fram
 ## Runs
 
 - Shard 0/4 (ws/hardening a42b89d engine, --jobs 2): 25,865 scenarios, 25,765 pass, 0 ASan / 0 UBSan reports.
+- Shard 1/4 (--jobs 3, --mem-mb 1200): 25,638 scenarios, 25,550 pass, 1,888 s, machine guard 0, 0 ASan / 0 UBSan reports.
