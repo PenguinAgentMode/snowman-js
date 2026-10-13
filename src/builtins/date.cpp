@@ -282,92 +282,316 @@ double parseISODate(std::u16string_view s) {
   return TimeClip(date);
 }
 
-// The formats Date.prototype.toString and toUTCString produce (and their common variants):
-// "Tue Feb 01 2022 10:20:30 GMT+0100 (CET)", "Tue, 01 Feb 2022 10:20:30 GMT".
-double parseLegacyDate(std::u16string_view s) {
+// Non-standard relaxations of the Date Time String Format that SpiderMonkey accepts: one-digit fields and a
+// space for the 'T' ("1997-3-8 1:1:1.01", "+001997-3-8 11:19:20"), and "±hhmm" offsets. After a 'T' every field
+// keeps its two digits ("1997-3-8T11:19:20" is NaN). Date-only forms are UTC, date-times without an offset local.
+double parseLooseISODate(std::u16string_view s) {
   size_t i = 0, n = s.size();
-  int year = -1, month = -1, day = -1, hour = 0, minute = 0, second = 0;
-  bool hasYear = false, yearNegative = false, sawTime = false, sawZone = false;
-  double offset = 0;
-  while (i < n) {
-    char16_t c = s[i];
-    if (c == u' ' || c == u',') {
+  bool shortField = false, afterT = false;
+  auto digits = [&](size_t count, int& out) {
+    if (i + count > n) return false;
+    out = 0;
+    for (size_t k = 0; k < count; k++) {
+      char16_t c = s[i + k];
+      if (c < u'0' || c > u'9') return false;
+      out = out * 10 + (c - u'0');
+    }
+    i += count;
+    return true;
+  };
+  // One or two digits; one only outside a 'T' date-time.
+  auto field = [&](int& out) {
+    size_t start = i;
+    out = 0;
+    while (i < n && i - start < 2 && s[i] >= u'0' && s[i] <= u'9') out = out * 10 + (s[i++] - u'0');
+    if (i == start) return false;
+    if (i - start < 2) {
+      if (afterT) return false;
+      shortField = true;
+    }
+    return true;
+  };
+  int year, month = 1, day = 1, hour = 0, minute = 0, second = 0, ms = 0;
+  if (i < n && (s[i] == u'+' || s[i] == u'-')) {
+    bool negative = s[i] == u'-';
+    i++;
+    if (!digits(6, year)) return NAN;
+    if (negative && year == 0) return NAN;
+    if (negative) year = -year;
+  } else if (!digits(4, year)) {
+    return NAN;
+  }
+  if (i < n && s[i] == u'-') {
+    i++;
+    if (!field(month)) return NAN;
+    if (i < n && s[i] == u'-') {
       i++;
-    } else if (c == u'(') {
-      int depth = 0;
-      while (i < n) {
-        if (s[i] == u'(') depth++;
-        if (s[i] == u')' && --depth == 0) {
-          i++;
-          break;
-        }
-        i++;
-      }
-    } else if ((c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z')) {
-      size_t start = i;
-      while (i < n && ((s[i] >= u'a' && s[i] <= u'z') || (s[i] >= u'A' && s[i] <= u'Z'))) i++;
-      std::string word(s.begin() + start, s.begin() + i);
-      for (char& ch : word) ch = char(std::tolower(ch));
-      if (word == "gmt" || word == "utc" || word == "ut" || word == "z") {
-        sawZone = true;
-        continue;
-      }
-      bool known = false;
-      for (int m = 0; m < 12; m++) {
-        std::string name = kMonthNames[m];
-        for (char& ch : name) ch = char(std::tolower(ch));
-        if (word.size() >= 3 && word.compare(0, 3, name) == 0) {
-          month = m;
-          known = true;
-        }
-      }
-      for (const char* dayName : kDayNames) {
-        std::string name = dayName;
-        for (char& ch : name) ch = char(std::tolower(ch));
-        if (word.size() >= 3 && word.compare(0, 3, name) == 0) known = true;
-      }
-      if (!known) return NAN;
-    } else if ((c == u'+' || c == u'-') && sawZone) {
-      double sign = c == u'-' ? -1 : 1;
-      i++;
-      size_t start = i;
-      int v = 0;
-      while (i < n && s[i] >= u'0' && s[i] <= u'9') v = v * 10 + (s[i++] - u'0');
-      if (i - start != 4) return NAN;
-      offset = sign * ((v / 100) * msPerHour + (v % 100) * msPerMinute);
-    } else if (c == u'-' && !hasYear && i + 1 < n && s[i + 1] >= u'0' && s[i + 1] <= u'9') {
-      yearNegative = true;
-      i++;
-    } else if (c >= u'0' && c <= u'9') {
-      size_t start = i;
-      int v = 0;
-      while (i < n && s[i] >= u'0' && s[i] <= u'9') v = v * 10 + (s[i++] - u'0');
-      if (i < n && s[i] == u':') {
-        hour = v;
-        i++;
-        minute = 0;
-        while (i < n && s[i] >= u'0' && s[i] <= u'9') minute = minute * 10 + (s[i++] - u'0');
-        if (i < n && s[i] == u':') {
-          i++;
-          second = 0;
-          while (i < n && s[i] >= u'0' && s[i] <= u'9') second = second * 10 + (s[i++] - u'0');
-        }
-        sawTime = true;
-      } else if (i - start >= 3 || yearNegative || day >= 0) {
-        year = yearNegative ? -v : v;
-        hasYear = true;
-      } else {
-        day = v;
-      }
-    } else {
-      return NAN;
+      if (!field(day)) return NAN;
     }
   }
-  if (!hasYear) return NAN;
-  if (month < 0 || day < 1 || day > 31 || hour > 24 || minute > 59 || second > 59) return NAN;
-  (void)sawTime;
-  double date = MakeDate(MakeDay(year, month, day), MakeTime(hour, minute, second, 0));
-  date = sawZone ? date - offset : UTC(date);
+  bool hasTime = false, hasOffset = false;
+  double offset = 0;
+  if (i < n && (s[i] == u'T' || s[i] == u' ')) {
+    if (s[i] == u'T') {
+      if (shortField) return NAN;
+      afterT = true;
+    }
+    hasTime = true;
+    i++;
+    if (!field(hour) || i >= n || s[i] != u':') return NAN;
+    i++;
+    if (!field(minute)) return NAN;
+    if (i < n && s[i] == u':') {
+      i++;
+      if (!field(second)) return NAN;
+      if (i < n && s[i] == u'.') {
+        i++;
+        size_t start = i;
+        int frac = 0, count = 0;
+        while (i < n && s[i] >= u'0' && s[i] <= u'9') {
+          if (count < 3) frac = frac * 10 + (s[i] - u'0');
+          count++;
+          i++;
+        }
+        if (i == start) return NAN;
+        while (count < 3) frac *= 10, count++;
+        ms = frac;
+      }
+    }
+    if (i < n && s[i] == u'Z') {
+      hasOffset = true;
+      i++;
+    } else if (i < n && (s[i] == u'+' || s[i] == u'-')) {
+      double sign = s[i] == u'-' ? -1 : 1;
+      i++;
+      int oh, om;
+      if (!digits(2, oh)) return NAN;
+      if (i < n && s[i] == u':') i++;
+      if (!digits(2, om) || oh > 23 || om > 59) return NAN;
+      hasOffset = true;
+      offset = sign * (oh * msPerHour + om * msPerMinute);
+    }
+  }
+  if (i != n) return NAN;
+  if (month < 1 || month > 12 || day < 1 || day > 31 || hour > 24 || minute > 59 || second > 59) return NAN;
+  if (hour == 24 && (minute || second || ms)) return NAN;
+  double date = MakeDate(MakeDay(year, month - 1, day), MakeTime(hour, minute, second, ms));
+  if (hasOffset) date -= offset;
+  else if (hasTime) date = UTC(date);
+  return TimeClip(date);
+}
+
+// Words of the fallback parser. A word matches an entry it is a prefix of (2 letters or more, any case); the
+// table is searched from the end, so "ma" is May and "ju" July.
+enum class DateWord { Ignore, AM, PM, Month, Zone };
+struct DateWordEntry {
+  const char* name;
+  DateWord kind;
+  int value;  // Month: 1-12; Zone: minutes west of UTC
+};
+const DateWordEntry kDateWords[] = {
+    {"am", DateWord::AM, 0},         {"pm", DateWord::PM, 0},         {"monday", DateWord::Ignore, 0},
+    {"tuesday", DateWord::Ignore, 0}, {"wednesday", DateWord::Ignore, 0}, {"thursday", DateWord::Ignore, 0},
+    {"friday", DateWord::Ignore, 0}, {"saturday", DateWord::Ignore, 0}, {"sunday", DateWord::Ignore, 0},
+    {"january", DateWord::Month, 1}, {"february", DateWord::Month, 2}, {"march", DateWord::Month, 3},
+    {"april", DateWord::Month, 4},   {"may", DateWord::Month, 5},     {"june", DateWord::Month, 6},
+    {"july", DateWord::Month, 7},    {"august", DateWord::Month, 8},  {"september", DateWord::Month, 9},
+    {"october", DateWord::Month, 10}, {"november", DateWord::Month, 11}, {"december", DateWord::Month, 12},
+    {"gmt", DateWord::Zone, 0},      {"ut", DateWord::Zone, 0},       {"utc", DateWord::Zone, 0},
+    {"est", DateWord::Zone, 5 * 60}, {"edt", DateWord::Zone, 4 * 60}, {"cst", DateWord::Zone, 6 * 60},
+    {"cdt", DateWord::Zone, 5 * 60}, {"mst", DateWord::Zone, 7 * 60}, {"mdt", DateWord::Zone, 6 * 60},
+    {"pst", DateWord::Zone, 8 * 60}, {"pdt", DateWord::Zone, 7 * 60},
+};
+
+const DateWordEntry* findDateWord(std::u16string_view word) {
+  if (word.size() < 2) return nullptr;
+  for (size_t k = std::size(kDateWords); k-- > 0;) {
+    const char* name = kDateWords[k].name;
+    size_t j = 0;
+    while (j < word.size() && name[j] && char16_t(name[j]) == (word[j] | 0x20)) j++;
+    if (j == word.size()) return &kDateWords[k];
+  }
+  return nullptr;
+}
+
+// The fallback for strings in no ISO form (21.4.3.2 lets an implementation use its own heuristics), following
+// SpiderMonkey's: what toString and toUTCString produce ("Tue Feb 01 2022 10:20:30 GMT+0100 (CET)", "Tue, 01 Feb
+// 2022 10:20:30 GMT"), month/day/year and year/month/day ("1/2/99", "99/1/2"), a month name before, between or
+// after the day and the year ("may 1 99", "1 99 may"), a leading "1997-3-8" date, AM/PM, US zone names and
+// "(comments)". A year written with one or two digits is 2000-2049 below 50, else 1950-1999.
+double parseLegacyDate(std::u16string_view s) {
+  size_t i = 0, n = s.size();
+  // The numeric fields, -1 until seen; a "full" field was written with 3+ digits (no two-digit-year rule).
+  double year = -1, mon = -1, mday = -1, hour = -1, min = -1, sec = -1;
+  bool yearFull = false, monFull = false, mdayFull = false, negativeYear = false;
+  double tzOffset = -1;  // minutes west of UTC; -1: none given (local time)
+  char16_t prevc = 0;    // the last delimiter: '+', '-', '/', ':' or 0
+  bool seenPlusMinus = false, seenMonthName = false;
+  auto isDigit = [&](size_t k) { return k < n && s[k] >= u'0' && s[k] <= u'9'; };
+  auto number = [&](size_t& k, double& value) {
+    size_t start = k;
+    value = 0;
+    while (isDigit(k)) value = value * 10 + (s[k++] - u'0');
+    return k - start;
+  };
+
+  // A leading dashed date, [+-]YYYY-M-D before the end or a space.
+  {
+    size_t k = n > 0 && (s[0] == u'+' || s[0] == u'-') ? 1 : 0;
+    double y, m, d;
+    if (number(k, y) >= 4 && k < n && s[k] == u'-') {
+      k++;
+      size_t monthDigits = number(k, m);
+      if (monthDigits >= 1 && monthDigits <= 2 && k < n && s[k] == u'-') {
+        k++;
+        size_t dayDigits = number(k, d);
+        if (dayDigits >= 1 && dayDigits <= 2 && (k == n || s[k] <= u' ')) {
+          year = y, mon = m, mday = d;
+          yearFull = true;
+          negativeYear = s[0] == u'-';
+          i = k;
+        }
+      }
+    }
+  }
+
+  while (i < n) {
+    char16_t c = s[i++];
+    if (c <= u' ' || c == u',' || c == 0x202F) continue;
+    if (c == u'-') {
+      if (isDigit(i)) prevc = c;
+      continue;
+    }
+    if (c == u'/' || c == u':' || c == u'+') {
+      prevc = c;
+      continue;
+    }
+    if (c == u'(') {  // a comment, possibly nested
+      int depth = 1;
+      while (i < n) {
+        char16_t d = s[i++];
+        if (d == u'(') depth++;
+        else if (d == u')' && --depth == 0) break;
+      }
+      continue;
+    }
+    if (c >= u'0' && c <= u'9') {
+      i--;
+      double v;
+      size_t digits = number(i, v);
+      bool atEnd = i >= n;
+      char16_t next = atEnd ? 0 : s[i];
+      if (prevc == u'-' && (tzOffset != 0 || seenPlusMinus) && digits >= 4 && year < 0) {
+        // "Jan 01 -0001": a negative year (an offset follows a zone name, "GMT-0800").
+        year = v;
+        yearFull = negativeYear = true;
+      } else if (prevc == u'+' || prevc == u'-') {
+        // An offset: hours below 24 ("GMT-3"), else hhmm ("GMT+0430"); minutes may follow a ':' ("GMT-3:30").
+        seenPlusMinus = true;
+        double minutes = v < 24 ? v * 60 : std::fmod(v, 100) + std::floor(v / 100) * 60;
+        if (prevc == u'+') minutes = -minutes;  // east of UTC
+        if (tzOffset != 0 && tzOffset != -1) return NAN;
+        tzOffset = minutes;
+      } else if (prevc == u'/' && mon >= 0 && mday >= 0 && year < 0) {
+        if (!atEnd && next > u' ' && next != u',' && next != u'/') return NAN;
+        year = v;
+        yearFull = digits >= 3;
+      } else if (next == u':') {
+        if (hour < 0) hour = v;
+        else if (min < 0) min = v;
+        else return NAN;
+      } else if (next == u'/') {
+        if (mon < 0) mon = v, monFull = digits >= 3;
+        else if (mday < 0) mday = v, mdayFull = digits >= 3;
+        else return NAN;
+      } else if (!atEnd && next != u',' && next > u' ' && next != u'-' && next != u'(' && next != 0x202F) {
+        return NAN;
+      } else if (seenPlusMinus && v < 60) {
+        tzOffset = tzOffset < 0 ? tzOffset - v : tzOffset + v;
+      } else if (hour >= 0 && min < 0) {
+        min = v;
+      } else if (prevc == u':' && min >= 0 && sec < 0) {
+        sec = v;
+      } else if (mon < 0) {
+        mon = v, monFull = digits >= 3;
+      } else if (mday < 0) {
+        mday = v, mdayFull = digits >= 3;
+      } else if (year < 0) {
+        year = v, yearFull = digits >= 3;
+      } else {
+        return NAN;
+      }
+      prevc = 0;
+      continue;
+    }
+    if (!((c >= u'a' && c <= u'z') || (c >= u'A' && c <= u'Z'))) return NAN;
+    size_t start = i - 1;
+    while (i < n && ((s[i] >= u'a' && s[i] <= u'z') || (s[i] >= u'A' && s[i] <= u'Z'))) i++;
+    const DateWordEntry* word = findDateWord(s.substr(start, i - start));
+    if (!word) return NAN;
+    switch (word->kind) {
+      case DateWord::Ignore:
+        break;
+      case DateWord::AM:
+      case DateWord::PM:
+        // 12:30 AM is 00:30, 12:30 PM is 12:30.
+        if (hour < 0 || hour > 12) return NAN;
+        if (word->kind == DateWord::AM && hour == 12) hour = 0;
+        else if (word->kind == DateWord::PM && hour != 12) hour += 12;
+        break;
+      case DateWord::Month:
+        // The numbers before the name shift up: "1 may 99" is day 1, "1 99 may" (or "99 1 may") day and year.
+        if (seenMonthName) return NAN;
+        seenMonthName = true;
+        if (mon < 0) {
+          mon = word->value;
+        } else if (mday < 0) {
+          mday = mon, mdayFull = monFull;
+          mon = word->value;
+        } else if (year < 0) {
+          year = mon, yearFull = monFull;
+          mon = word->value;
+        } else {
+          return NAN;
+        }
+        break;
+      case DateWord::Zone:
+        tzOffset = word->value;
+        break;
+    }
+    prevc = 0;
+  }
+
+  if (year < 0 || mon < 0 || mday < 0) return NAN;
+  if (seenMonthName) {
+    // With a month name, the year is the greater of the two numbers, or the other one when the day is 0
+    // ("may 32 1", "1 0 may"), unless it was written in full.
+    if (!yearFull && year > 0 && (mday == 0 || mday > year)) {
+      std::swap(year, mday);
+      std::swap(yearFull, mdayFull);
+    }
+    if (mday <= 0 || mday > 31) return NAN;
+  } else if (mon > 0 && mon <= 12 && mday > 0 && mday <= 31) {
+    // month/day/year
+  } else if (!negativeYear && mon > 31 && mday > 0 && mday <= 12 && year > 0 && year <= 31) {
+    // year/month/day
+    double y = mon;
+    bool full = monFull;
+    mon = mday;
+    mday = year;
+    year = y;
+    yearFull = full;
+  } else {
+    return NAN;
+  }
+  if (!yearFull) year += year < 50 ? 2000 : year < 100 ? 1900 : 0;
+  if (negativeYear) year = -year;
+  if (hour < 0) hour = 0;
+  if (min < 0) min = 0;
+  if (sec < 0) sec = 0;
+  if (hour > 24 || min > 59 || sec > 59) return NAN;
+  double date = MakeDate(MakeDay(year, mon - 1, mday), MakeTime(hour, min, sec, 0));
+  date = tzOffset == -1 ? UTC(date) : date + tzOffset * msPerMinute;
   return TimeClip(date);
 }
 
@@ -375,6 +599,8 @@ double parseDate(String* string) {
   std::u16string_view s = string->view();
   double iso = parseISODate(s);
   if (!std::isnan(iso)) return iso;
+  double loose = parseLooseISODate(s);
+  if (!std::isnan(loose)) return loose;
   return parseLegacyDate(s);
 }
 
