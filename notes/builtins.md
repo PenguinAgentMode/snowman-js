@@ -26,9 +26,13 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
    module work (hook ec0f102) is on main (the lead says when). Prototyped on e535e4b + ec0f102 (local branch proto-import in
    ~/repo/wt2): importValue 20/20 scenarios, and the 3 formerly accidental files reject through the real paths (missing export
    -> ExportGetter TypeError; syntax error / throwing / missing module -> onRejected TypeError).
-2. Date slowdown: staging/sm/Date/dst-offset-caching-{2..8}-of-8 take 8-10 s alone on main (797c7f7) and were faster on
-   8a5df0b93. Bisect candidates: temporal 00dc9d9, temporal2 9f1e7e5, intl 9a1a42b. Fix it if it's in builtins/date.cpp's
-   local-time path; else report cause + fix to the lead (time_zone.cpp = temporal2, intl/* = intl/survey).
+2. Date slowdown: DONE (no fix in my files). staging/sm/Date/dst-offset-caching-{2..8}-of-8 take 8.0-9.6 s CPU alone on
+   every commit from 8a5df0b to main (8a5df0b 8.6 s, 00dc9d9 8.6, 9f1e7e5 8.5, 9a1a42b 8.9, 797c7f7 9.0): no regression in
+   the range, they were always near the 10 s timeout and time out under load. gprof (main 46746ad, -pg): Date path ~1.3% of
+   6.95 s (2.97 M Date constructions + getTimezoneOffset + setTime); the rest is the interpreter: ResolveBinding 7.8% (27 M
+   calls), DeclarativeEnvironment::find 4.2% (160 M), evaluateStatement/evaluateMember/calls ~20%,
+   FunctionDeclarationInstantiation 2.3%, GC mark ~10%. A per-second localtime_r cache in date.cpp gave no measurable gain:
+   dropped. Routed to the lead as interpreter performance (src/interp/, interp2's unmerged perf work).
 
 ## Left with others (agreed with the lead)
 
