@@ -1,11 +1,12 @@
 {
   "name": "snowman-intl-tools",
   "private": true,
-  "description": "CLDR 48.0 supplemental data for the Intl generators (aliases, likely subtags, plural rules, BCP 47 keys), and Unicode 17.0 segmentation properties. Locale display data comes from node's own Intl (ICU, CLDR 48.0).",
+  "description": "CLDR 48.0 data for the Intl generators: supplemental data node does not expose (cldr-core: aliases, likely subtags, plural rules; cldr-bcp47: BCP 47 keys), the date patterns and names (cldr-dates-full), and Unicode 17.0 segmentation properties. Other locale display data comes from node's own Intl (ICU 78, CLDR 48.0).",
   "type": "module",
   "devDependencies": {
     "cldr-core": "48.0.0",
     "cldr-bcp47": "48.0.0",
-    "@unicode/unicode-17.0.0": "2.0.7"
+    "@unicode/unicode-17.0.0": "2.0.7",
+    "cldr-dates-full": "48.0.0"
   }
 }

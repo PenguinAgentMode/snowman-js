@@ -710,6 +710,10 @@ Result<void> InitializeNumberFormat(NumberFormatObject* nf, Value locales, Value
   return {};
 }
 
+std::u16string decimalSeparator(const std::string& locale, const std::string& numberingSystem) {
+  return symbolsFor(locale, numberingSystem).decimal;
+}
+
 Result<NumberFormatObject*> createNumberFormat(Value locales, Value options) {
   NumberFormatObject* nf = make<NumberFormatObject>(builtins::intrinsic(Intrinsic::IntlNumberFormatPrototype));
   TRY(InitializeNumberFormat(nf, locales, options));

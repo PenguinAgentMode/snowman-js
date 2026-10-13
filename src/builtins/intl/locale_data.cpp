@@ -91,12 +91,27 @@ bool isSanctionedSimpleUnit(std::string_view unit) {
                             [](std::string_view a, std::string_view b) { return a < b; });
 }
 
-std::optional<std::string> primaryTimeZone(std::string_view name) {
+namespace {
+
+// The kTimeZones entry for a name, compared case-insensitively.
+const AliasEntry* timeZoneEntry(std::string_view name) {
   std::string key = asciiLower(name);
   const AliasEntry* end = std::end(kTimeZones);
   const AliasEntry* it = std::lower_bound(std::begin(kTimeZones), end, key,
-                                          [](const AliasEntry& e, const std::string& k) { return std::string_view(e.from) < k; });
-  if (it != end && key == it->from) return std::string(it->to);
+                                          [](const AliasEntry& e, const std::string& k) { return asciiLower(e.from) < k; });
+  if (it != end && key == asciiLower(it->from)) return it;
+  return nullptr;
+}
+
+}  // namespace
+
+std::optional<std::string> primaryTimeZone(std::string_view name) {
+  if (const AliasEntry* e = timeZoneEntry(name)) return std::string(e->to);
+  return std::nullopt;
+}
+
+std::optional<std::string> timeZoneIdentifier(std::string_view name) {
+  if (const AliasEntry* e = timeZoneEntry(name)) return std::string(e->from);
   return std::nullopt;
 }
 

@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <ctime>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/temporal/temporal.h"
 #include "builtins/util.h"
 #include "runtime/function.h"
@@ -600,6 +601,13 @@ Result<Value> formatter(NativeCall& call) {
   return Value::undefined();
 }
 
+// ECMA-402 21.2.1-3 Date.prototype.toLocaleString / toLocaleDateString / toLocaleTimeString ( [ locales [ , options ] ] )
+template <intl::DateRequired required>
+Result<Value> toLocaleFormatter(NativeCall& call) {
+  DateObject* d = TRY(thisDate(call.thisValue));
+  return intl::dateToLocaleString(d->dateValue, call.args[0], call.args[1], required);
+}
+
 // 21.4.4.37 Date.prototype.toJSON ( key )
 Result<Value> DatePrototype_toJSON(NativeCall& call) {
   Object* o = TRY(ToObject(call.thisValue));
@@ -689,9 +697,9 @@ void installDate(Realm& realm) {
       {u"toDateString", 0, formatter<Format::DateOnly>},
       {u"toISOString", 0, formatter<Format::ISO>},
       {u"toJSON", 1, DatePrototype_toJSON},
-      {u"toLocaleDateString", 0, formatter<Format::DateOnly>},
-      {u"toLocaleString", 0, formatter<Format::Full>},
-      {u"toLocaleTimeString", 0, formatter<Format::TimeOnly>},
+      {u"toLocaleDateString", 0, toLocaleFormatter<intl::DateRequired::Date>},
+      {u"toLocaleString", 0, toLocaleFormatter<intl::DateRequired::Any>},
+      {u"toLocaleTimeString", 0, toLocaleFormatter<intl::DateRequired::Time>},
       {u"toString", 0, formatter<Format::Full>},
       {u"toTemporalInstant", 0, DatePrototype_toTemporalInstant},
       {u"toTimeString", 0, formatter<Format::TimeOnly>},
