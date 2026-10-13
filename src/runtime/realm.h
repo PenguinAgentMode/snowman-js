@@ -11,6 +11,7 @@ namespace snowman {
 // The well-known intrinsics (ECMA-262 Table 6), named %Name% → Name and %Name.prototype% → NamePrototype.
 // Add entries here (append-only within each line is not required; keep alphabetical order).
 #define SNOWMAN_INTRINSICS(X)                                                                                   \
+  X(AbstractModuleSource) X(AbstractModuleSourcePrototype)                                                     \
   X(AggregateError) X(AggregateErrorPrototype) X(Array) X(ArrayPrototype) X(ArrayPrototypeValues)               \
   X(ArrayBuffer) X(ArrayBufferPrototype) X(ArrayIteratorPrototype) X(AsyncFromSyncIteratorPrototype)            \
   X(AsyncDisposableStack) X(AsyncDisposableStackPrototype) X(DisposableStack) X(DisposableStackPrototype)       \
