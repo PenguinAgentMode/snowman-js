@@ -2,7 +2,7 @@
 
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
-| memcap | memcap | `ws/memcap` | `src/interp/coroutine.{h,cpp}`, stack-size users; `t262/runner/run.mjs` (authorized) | watchdog merged (8e39780); 85210ca13: main stack 480 MB, 256 KB coroutine stacks, stack budget, parser depth guard, `ulimit -v` 1024 MB; ES-core gate running |
+| memcap | (closed) | `ws/memcap` | | merged 5ff85e8: 480 MB main stack, 256 KB coroutine stacks + budgets (RangeError), parser depth guard, `ulimit -v` 1024 MB; 0 regressions. Open: dropped suspended generators keep their stack until exit (cap ~1,000; needs 2 heap.h methods); no CheckStack on nested array/object literals (SIGSEGV past ~400 levels in a generator; no test hits it) |
 | temporal | temporal | `ws/temporal` | `src/builtins/temporal/` core (temporal.h, parser, options) + Duration, Plain* (3,166 files); additive Intrinsics in realm.h; Date.prototype.toTemporalInstant | started: shared core first |
 | temporal2 | temporal2 | `ws/temporal2` | `src/builtins/temporal/{instant,zoned_date_time,now,time_zone}.cpp`, `time_zone.h`, `tz*`, `tools/temporal/` (1,434 files + tz data for intl402/Temporal) | started: time_zone.h first |
 | intl | intl | `ws/intl` | `src/builtins/intl/`, `tools/intl/`; additive Intrinsics in realm.h | started: plumbing for all constructors first |
@@ -16,14 +16,14 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-- Engine commit: f294bec1b (main)
-- ES-core (`results/f294bec1b.json`): **42,433 / 43,305 files (97.99%)**; scenarios 81,138 / 82,724; test/harness
-  116 / 116; es5_language 4,485 / 4,538 (98.8%); vs eff4d1fa9: +3,440 newly passing, 0 regressions
-- Parse-only (`results/2551c6978-parse.json`): 43,305 / 43,305
-- Milestone: **M8** (every rung of the ladder reached)
-- Command: `node t262/runner/milestones.mjs results/f294bec1b.json --parse-only results/2551c6978-parse.json`
-- Known ceiling: ~104 module tests import their own file and can't pass under the current runner
-  (src/interp/module_test_exclusions.txt; decision with the supervisor).
+- Engine commit: 85210ca13 (merged to main as 5ff85e8)
+- ES-core (`results/85210ca13.json`): **43,059 / 43,305 files (99.43%)**; scenarios 82,336 / 82,724; 1,339 s at 4
+  jobs; vs 7e957a05a-estimated: 0 regressions. Milestone: **M8**.
+- Command: `node t262/runner/milestones.mjs results/85210ca13.json`
+- f294bec1b's 42,433 was measured at 16 jobs; most of the gap is the 626 files fixed after it (survey re-run).
+- Full suite: no measured run yet (first `tools/lead/measure.sh suite` on main is next). Provisional, mixed commits:
+  ~44,770 / 53,616 (~83.5%).
+- Known ceiling: 104 module tests import their own file (runner change approved: INTERFACES.md §1).
 
 ## Decisions
 
@@ -38,11 +38,8 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Gate baseline
 
-- Until memcap's gated ES-core run lands: `git show origin/results:results/7e957a05a/es-core-estimated.json >
-  /tmp/baseline.json` (43,059 passing files: f294bec1b's passing files plus its failures that pass on 7e957a05a in
-  survey's re-run). Check: `node tools/lead/gate.mjs /tmp/baseline.json /tmp/core.jsonl` (AGENTS.md).
-- Then: memcap's run at its branch sha becomes `results/<sha>.json` on main, the first measured baseline since
-  f294bec1b, followed by the first `tools/lead/measure.sh suite` run on main.
+- `results/85210ca13.json` on main (43,059 passing files). Check: `node tools/lead/gate.mjs results/85210ca13.json
+  /tmp/core.jsonl` (AGENTS.md). For full-suite branches: `results/<sha>-full.json` once the first suite run lands.
 
 ## Survey interim (main 7e957a05a)
 
