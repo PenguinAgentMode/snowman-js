@@ -63,6 +63,7 @@ int runProgram(const CliOptions& options, const std::string& source) {
   vm().initialRealm = realm;
   interp::setUpRealm(realm);
   std::u16string text = utf8ToUtf16(source);
+  interp::setHostMainPath(options.file);
 
   if (options.module) {
     Result<void> result = interp::runModuleFile(realm, options.file, std::move(text));
