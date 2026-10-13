@@ -57,6 +57,9 @@ Not in a1a2a5fc3's run:
 - ws/calendars-g2 cb6d5f1 (buddhist, roc, japanese), on base 10979b4. Its gate vs a1a2a5fc3: only the 2
   CanBlockIsFalse files (Atomics/wait/{,bigint/}cannot-suspend-throws.js), because its base predates 7205b4d,
   which cb6d5f1 doesn't touch; both pass on the merged main. Full on its base: 52,586 (+358 from group 2).
+- ws/calendars-g3 f21aed9 (coptic, ethiopic, ethioaa, indian, persian, islamic-civil, islamic-tbla, hebrew). Gate vs
+  a1a2a5fc3: ES-core 0, full 0 regressions; full 52,230 → 53,414 (+1,184 with group 2). Main's src after the merge
+  is byte-identical to f21aed9 (the only conflicts were with its rebased copy of group 2).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
