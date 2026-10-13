@@ -11,6 +11,7 @@
 // only the baseline's suite is compared. Re-run a regression that is a timeout alone (run.mjs --filter <file>)
 // before calling it flaky.
 import fs from 'node:fs';
+import { check as checkStatics } from './statics.mjs';
 
 const argv = process.argv.slice(2);
 const expectedIndex = argv.indexOf('--expected');
@@ -48,12 +49,15 @@ for (const file of baseline.passing_files) {
 }
 const passing = [...scenarios].filter(([, lines]) => lines.every((l) => l.status === 'pass')).length;
 const unexpected = regressions.filter((r) => !expected.has(r.file));
+// The mutable-static lint (statics.mjs) over this checkout's src/: a new static fails the gate like a regression.
+const statics = checkStatics();
 console.log(`baseline ${baseline.label} (${baseline.suite}): ${baseline.passing_files.length} passing files; ` +
   `branch run: ${passing} passing of ${scenarios.size} files; regressions: ${unexpected.length}; ` +
-  `expected: ${regressions.length - unexpected.length}; not run: ${missing.length}`);
+  `expected: ${regressions.length - unexpected.length}; not run: ${missing.length}; new statics: ${statics.fresh.length}`);
 for (const { file, failing } of regressions) {
   const tag = expected.has(file) ? 'EXPECTED' : 'REGRESSION';
   for (const l of failing) console.log(`${tag} ${file} [${l.mode}] ${l.status} ${l.ms}ms ${l.error_name ?? ''}: ${l.message ?? ''}`);
 }
 if (missing.length) console.log(`not run (first 10): ${missing.slice(0, 10).join(', ')}`);
-process.exitCode = missing.length ? 2 : unexpected.length ? 1 : 0;
+for (const f of statics.fresh) console.log(`NEW-STATIC ${f.file} ${f.name}: ${f.text} (thread_local, atomic, mutex or immutable after init? then tools/lead/statics-allowlist.txt)`);
+process.exitCode = missing.length ? 2 : unexpected.length || statics.fresh.length ? 1 : 0;
