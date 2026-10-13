@@ -191,7 +191,7 @@ Result<Value> Math_sumPrecise(NativeCall& call) {
   return num(NAN);
 }
 
-uint64_t randomState[2];
+thread_local uint64_t randomState[2];
 
 // 21.3.2.27 Math.random ( ): xorshift128+.
 Result<Value> Math_random(NativeCall&) {
