@@ -1,16 +1,14 @@
 # Lead handoff (snowman-js)
 
 Updated at every merge and measurement. A new lead (or the supervisor directly) continues from this file,
-STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~15:10 UTC, main 9df2b3f.
+STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~15:45 UTC, main a1a2a5f + results.
 
 ## Numbers and baselines
 
-- Latest measured main: **29a14dfdd**, full **51,639 / 53,616 (96.31%)**, ES-core **43,194 / 43,305 (99.74%)**, M8.
-  `node t262/runner/milestones.mjs results/29a14dfdd.json --full results/29a14dfdd-full.json`
-- Gate baselines: `results/29a14dfdd.json` (ES-core) and `results/29a14dfdd-full.json` (full); JSONL on the
-  results branch at `results/29a14dfdd/suite.jsonl`.
-- Merged since then, not measured: 7f86ee9 (builtins step 2, thread_local), 5f1393b (canblock-r 7205b4d, runner +
-  CLI). Their gates: ES-core 0 / full 0 regressions (7205b4d: ES-core 43,196, full 51,641).
+- Latest measured main: **a1a2a5fc3**, full **52,230 / 53,616 (97.41%)**, ES-core **43,196 / 43,305 (99.75%)**, M8.
+  `node t262/runner/milestones.mjs results/a1a2a5fc3.json --full results/a1a2a5fc3-full.json`
+- Gate baselines: `results/a1a2a5fc3.json` (ES-core) and `results/a1a2a5fc3-full.json` (full); JSONL on the
+  results branch at `results/a1a2a5fc3/suite.jsonl`. Nothing merged since.
 - Measure: `TMPDIR=$HOME/tmp tools/lead/measure.sh suite results/<previous>.json` in the background with a monitor
   (~22 min at 4 jobs). Then `gate.mjs <prev>-full.json results/<sha>/suite.jsonl` and `clusters.mjs <sha>-full.json
   <prev>-full.json`. Commit `results/<sha>{,-full}.json` to main, push the JSONL to the results branch (worktree
@@ -18,10 +16,10 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~15:10 UTC, main 9df2b3f.
 
 ## Merge queue
 
-1. builtins: ws/calendars-b **10979b4** (temporal2's framework 67c5b59 + gregory + chinese/dangi/islamic-umalqura).
-   Slices vs 29a14dfdd: +589 files, 0 regressions; built-ins/Temporal 4,605. Its full gate is running on builtins'
-   machine. Merge exactly the gated sha. Then measure main.
-2. builtins next: calendar group 2 (buddhist/roc/japanese, ws/calendars-g2), then group 3 (arithmetic).
+1. builtins: calendar group 2, ws/calendars-g2 **cb6d5f1** (buddhist/roc/japanese), gated vs 29a14dfdd (running). Before
+   merging, re-gate its JSONL (results/cb6d5f1/full.jsonl on the results branch) against results/a1a2a5fc3{,-full}.json
+   (supervisor: a gate vs 29a14dfdd can't see regressions in the calendar files a1a2a5f made pass).
+2. builtins: calendar group 3, ws/calendars-g3 0bf1332 (arithmetic calendars), to gate vs a1a2a5fc3 or newer.
 
 How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort) <(git diff --name-only $base
 <sha>|sort)` (AGENTS.md older-base rule); merge the exact sha; `make -j4` warning-free; push; list it under
