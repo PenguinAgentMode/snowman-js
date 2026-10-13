@@ -29,7 +29,12 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   supervisor: agent stacks 8-16 MB inside kStackBytesBudget; one process-wide memory budget (700 MB RSS watchdog is per
   process); test under the real runner with the max agent count any Atomics test uses; join/kill agents on exit, uncaught
   error and timeout, nothing outlives a SIGKILL, normal exit doesn't hang on a blocked agent.
-- Quick win option: nonextensible-applies-to-private (src/interp/class.cpp).
+- Step 2 design: notes/agent-design.md (pushed efe9ee3); waiting for the lead's review and per-file approval.
+- nonextensible-applies-to-private: ws/builtins6 dd70aa8 (src/interp/class.cpp, IsExtensible check after the duplicate
+  check in PrivateFieldAdd / PrivateMethodOrAccessorAdd): 2 class files + staging/sm/PrivateName pass;
+  import-defer/evaluation-triggers/ignore-private-name-access.js needs `import defer` (temporal2). Gate after step 1's.
+- importValue: the change is saved as ~/tools/importvalue.patch (also on local branch proto-import in ~/repo/wt2, on
+  e535e4b + ec0f102); apply on main once temporal2's module work is there.
 - Baselines now: results/c21bcd82e.json (ES-core 43,163), results/c21bcd82e-full.json (full 50,887).
 
 ## Earlier batch
