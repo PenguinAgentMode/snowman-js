@@ -16,25 +16,29 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-Post-merge run: **main 19dc92105** (`tools/lead/measure.sh suite results/317949e37.json`, 4 jobs, run by the lead;
-`results/19dc92105{,-full}.json`; JSONL `results/19dc92105/suite.jsonl` on the results branch).
+Post-merge run: **main 5f3218f30** (`tools/lead/measure.sh suite results/19dc92105.json`, 4 jobs, 1,732 s, run by
+the lead; `results/5f3218f30{,-full}.json`; JSONL `results/5f3218f30/suite.jsonl` on the results branch).
 
-- milestones.mjs: highest **M8**; **ES-core: 43,196 / 43,305 files (99.75%)**; **full suite: 53,452 / 53,616 files
-  (99.69%)**.
-- vs 317949e37: ES-core +0, 0 regressions; full +38, 0 regressions.
-- Command: `node t262/runner/milestones.mjs results/19dc92105.json --full results/19dc92105-full.json`
+- milestones.mjs: highest **M8**; **ES-core: 43,305 / 43,305 files (100%)**; **full suite: 53,587 / 53,616 files
+  (99.95%)**; scenarios 102,962 / 102,994.
+- vs 19dc92105: ES-core +109 ($262.agent), 0 regressions; full +135, 0 regressions; new statics 0.
+- Command: `node t262/runner/milestones.mjs results/5f3218f30.json --full results/5f3218f30-full.json`
 
-| Cluster | Passing (19dc92105) | Files | % | vs 317949e37 |
+| Cluster | Passing (5f3218f30) | Files | % | vs 19dc92105 |
 | --- | ---: | ---: | ---: | ---: |
-| ES-core | 43,196 | 43,305 | 99.75 | +0 |
+| ES-core | 43,305 | 43,305 | 100.00 | +109 |
 | built-ins/Temporal | 4,605 | 4,605 | 100.00 | +0 |
-| intl402/Temporal | 2,028 | 2,029 | 99.95 | +19 |
-| intl402 (other) | 1,353 | 1,353 | 100.00 | +17 |
-| staging | 1,451 | 1,483 | 97.84 | +2 |
-| proposals (in ES-core dirs) | 819 | 841 | 97.38 | +0 |
-| **full suite** | **53,452** | **53,616** | **99.69** | **+38** |
+| intl402/Temporal | 2,028 | 2,029 | 99.95 | +0 |
+| intl402 (other) | 1,353 | 1,353 | 100.00 | +0 |
+| staging | 1,455 | 1,483 | 98.11 | +4 |
+| proposals (in ES-core dirs) | 841 | 841 | 100.00 | +22 |
+| **full suite** | **53,587** | **53,616** | **99.95** | **+135** |
 
-Earlier: 317949e37 full 53,414 (99.62%); a1a2a5fc3 52,230 (97.41%); 29a14dfdd 51,639 (96.31%); 3edca9940 51,607 (96.25%); c21bcd82e 50,887 (94.91%); 8a5df0b93 44,766 (83.49%).
+The 29 files left: 28 staging (13 sm/strict runner artefact, on stability's ws/runner-strict; 12 legacy f.caller on
+ws/staging-caller bc68f1d7e, to gate; 2 contradict ES-core; 1 regress-610026 parser memory) and 1 intl402/Temporal
+(links.js, tz data).
+
+Earlier: 19dc92105 full 53,452 (99.69%); 317949e37 53,414 (99.62%); a1a2a5fc3 52,230 (97.41%); 29a14dfdd 51,639 (96.31%); 3edca9940 51,607 (96.25%); c21bcd82e 50,887 (94.91%); 8a5df0b93 44,766 (83.49%).
 Previous: main 8a5df0b93, full 44,766 / 53,616 (83.49%), ES-core 43,059 (99.43%).
 
 ES-core residue at c21bcd82e (142 files; memcap, `tools/lead/es-core-residue.md` on ws/measure 4f999b1; node
@@ -53,12 +57,8 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-Not in 19dc92105's run:
-- c47ec06 ws/agent4 17f576c ($262.agent step 4: agents as threads, mailboxes, process-wide waiter lists, _Exit once
-  agents exist, one heap budget; audit fixes for per-thread statics). Gate vs 19dc92105: ES-core 0 / full 0
-  regressions, +109: **ES-core 43,305 / 43,305 on its branch**. Atomics 5× through an exit-code/stderr wrapper: 760/760
-  each, 0 abnormal exits; TSan on 3 multi-agent tests: 0 races.
-- 2853690 ws/statics-lint bdd3485 (tools only: the mutable-static lint, run by gate.mjs).
+None: 5f3218f30 covers c47ec06 ($262.agent step 4), 2853690 (statics lint), 5f3218f (decorators2 5eada31 +
+staging-regexp 41e448c27, integrated and gated by the lead as 38e96b9).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
@@ -103,8 +103,8 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Gate baseline
 
-- ES-core: `results/19dc92105.json` (43,196 passing files); full suite: `results/19dc92105-full.json` (53,452).
-  Check: `node tools/lead/gate.mjs results/19dc92105.json <jsonl>` and `... results/19dc92105-full.json <jsonl>`
+- ES-core: `results/5f3218f30.json` (43,305 passing files); full suite: `results/5f3218f30-full.json` (53,587).
+  Check: `node tools/lead/gate.mjs results/5f3218f30.json <jsonl>` and `... results/5f3218f30-full.json <jsonl>`
   (AGENTS.md). Gates already running against c21bcd82e stay valid (a subset of this baseline).
 
 ## Survey interim (main 7e957a05a)
