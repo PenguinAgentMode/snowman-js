@@ -90,6 +90,7 @@ Result<Value> getIdentifierValue(String* name) {
       case Environment::Kind::Global: {
         auto* global = static_cast<GlobalEnvironment*>(env);
         if (global->declarativeRecord->hasBindingDirect(name)) return global->declarativeRecord->GetBindingValue(name, true);
+        if (std::optional<PropertySlot> slot = global->objectRecord->ownDataSlot(name)) return slot->value;
         bool exists = TRY(global->objectRecord->HasBinding(name));
         if (!exists) continue;
         return global->objectRecord->GetBindingValue(name, context->strict);

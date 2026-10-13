@@ -1,6 +1,8 @@
 // Environment Records (9.1) and PrivateEnvironment Records (9.2).
 #include "interp/environment.h"
 
+#include <typeinfo>
+
 #include "interp/function.h"
 #include "runtime/errors.h"
 #include "runtime/operations.h"
@@ -169,7 +171,23 @@ void FunctionEnvironment::trace(Tracer& tracer) {
 
 // ---- Object ----
 
+namespace {
+
+// An object whose essential internal methods are all ordinary (the global object): reading or writing one of
+// its own data properties directly is unobservable.
+bool isOrdinaryObject(Object* object) { return typeid(*object) == typeid(Object); }
+
+}  // namespace
+
+std::optional<PropertySlot> ObjectEnvironment::ownDataSlot(String* name) {
+  if (isWithEnvironment || !isOrdinaryObject(bindingObject)) return std::nullopt;
+  std::optional<PropertySlot> slot = bindingObject->properties().get(PropertyKey(name));
+  if (slot && slot->accessor) return std::nullopt;
+  return slot;
+}
+
 Result<bool> ObjectEnvironment::HasBinding(String* name) {
+  if (ownDataSlot(name)) return true;
   bool found = TRY(HasProperty(bindingObject, PropertyKey(name)));
   if (!found) return false;
   if (!isWithEnvironment) return true;
@@ -194,6 +212,11 @@ Result<void> ObjectEnvironment::InitializeBinding(String* name, Value value) {
 }
 
 Result<void> ObjectEnvironment::SetMutableBinding(String* name, Value value, bool strict) {
+  std::optional<PropertySlot> slot = ownDataSlot(name);
+  if (slot && slot->writable()) {
+    bindingObject->properties().setValue(PropertyKey(name), value);
+    return {};
+  }
   PropertyKey key(name);
   bool stillExists = TRY(HasProperty(bindingObject, key));
   if (!stillExists && strict) return throwNotDefined(name);
@@ -201,6 +224,7 @@ Result<void> ObjectEnvironment::SetMutableBinding(String* name, Value value, boo
 }
 
 Result<Value> ObjectEnvironment::GetBindingValue(String* name, bool strict) {
+  if (std::optional<PropertySlot> slot = ownDataSlot(name)) return slot->value;
   PropertyKey key(name);
   bool value = TRY(HasProperty(bindingObject, key));
   if (!value) {

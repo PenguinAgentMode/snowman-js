@@ -110,6 +110,7 @@ int runMain(const CliOptions& options, const std::string& source) {
   // the system and faulting it back in after every collection.
   mallopt(M_TRIM_THRESHOLD, 1 << 30);
   mallopt(M_TOP_PAD, 64 << 20);
+  mallopt(M_MMAP_THRESHOLD, 256 << 20);
   MainData data{&options, &source};
   interp::Coroutine main(mainEntry, &data, interp::Coroutine::kMainStackSize);
   main.resume();

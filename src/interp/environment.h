@@ -4,10 +4,12 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <unordered_map>
 #include <vector>
 
 #include "runtime/object.h"
+#include "runtime/property_map.h"
 #include "runtime/result.h"
 #include "runtime/string.h"
 #include "runtime/value.h"
@@ -130,6 +132,9 @@ class ObjectEnvironment final : public Environment {
   Value WithBaseObject() const override {
     return isWithEnvironment ? Value(bindingObject) : Value::undefined();
   }
+  // The binding object's own data property `name`, when it can be read and written directly (an ordinary
+  // binding object, not a with environment); nullopt otherwise or when there is none.
+  std::optional<PropertySlot> ownDataSlot(String* name);
 
   void trace(Tracer& tracer) override;
 
