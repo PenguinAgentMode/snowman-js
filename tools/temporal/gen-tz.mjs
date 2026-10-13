@@ -9,6 +9,7 @@
 // Reproducible: the output depends only on tz-names.txt and the node binary (its ICU/tz/CLDR versions are in the
 // header of the .inc); everything is sorted and there are no timestamps. To check a checked-in table, run with
 // the node version its header names, then: git diff --exit-code src/builtins/temporal/tz_data.inc
+// tools/temporal/check-tz.mjs then checks a built engine against node through the Temporal API.
 //
 // Identifiers: every name in tz-names.txt that node's Intl.DateTimeFormat accepts, plus
 // Intl.supportedValuesOf("timeZone"). Names that ICU resolves to the same zone share one zone record, so a
