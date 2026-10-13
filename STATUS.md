@@ -133,6 +133,10 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Known gaps (not regressions)
 
+- test/staging, 18 files (tools/lead/staging-residue.md): 13 sm/strict/* fail because the runner's strict
+  scenario also puts the harness in strict mode (node fails the same 13; t262/ left as is); 2 contradict ES-core
+  (B.3.2.1 `arguments` block functions); 1 regress-610026 (parser/eval AST memory); 2 decorators (decorators2).
+
 - (fixed in 1c12abb: the 9 Chinese-calendar files, by an astronomical computation for 1900–2100.)
 - intl402/Temporal/ZonedDateTime/links.js: tzdb 2026d made CST6CDT etc. Zones again; we follow node's data.
 
