@@ -122,7 +122,7 @@ This is a content heuristic, approximate (±10%):
 | `$262.IsHTMLDDA` | 2 | `sm/expressions/nullish-coalescing`, `sm/generators/yield-star-throw-htmldda` (shared with ES-core's 25, §6) | host feature |
 | `Date.parse` fallback formats | 2 | `sm/Date/non-iso` ("1997-3-8 1:1:1"), `sm/Date/two-digit-years` ("1/2/99"). Implementation-defined. | host-defined, `builtins/date.cpp` |
 | Proposals | 9 | Temporal 3, decorators 2, source-phase 2, nonextensible-private 1, legacy RegExp statics 1 (`sm/statements/regress-642975`, via `RegExp.lastMatch`) | proposals (§2) |
-| Annex B block-function edge cases | 4 | `sm/regress/regress-602621` and `sm/lexical-environment/block-scoped-functions-annex-b-{arguments,label}` (block `function arguments(){}` and labelled function declarations); `…-deprecated-redecl` | engine (`interp/declarations.cpp`); node verdict below |
+| Annex B block-function edge cases | 4 | `sm/regress/regress-602621` and `sm/lexical-environment/block-scoped-functions-annex-b-{arguments,label}` (block `function arguments(){}` and labelled function declarations); `…-deprecated-redecl` | engine (`interp/declarations.cpp`): node passes all 4. Per B.3.2.1, evaluating a block `function arguments(){}` still sets the function-level `arguments` binding; probably related to 2d134b3 ("block functions named arguments are not hoisted") |
 | **Engine bugs** | **8** | `staging/built-ins/{Object/preventExtensions,Object/seal,Reflect/preventExtensions}/*-variable-length-typed-arrays` (3): integrity ops on length-tracking TAs (same root cause as ES-core's Object.freeze gap); `sm/Proxy/revoke-as-side-effect`: **SIGSEGV** when a handler trap lookup revokes the proxy; `sm/String/replace-math`: **abort on std::bad_alloc** where a catchable RangeError (string too long) is expected; `sm/regress/regress-610026`: **abort on bad_alloc** in `eval` of 2^21 `{}` blocks (AST memory under a 2.9 GB cap); `sm/destructuring/bug1396261`: missing early error for `[{a = 0}.x] = []` (CoverInitializedName); `sm/extensions/recursion`: "fatal: cannot map a coroutine stack" (the generator-stack memory issue already being fixed) | engine |
 
 Engine-bug files:
@@ -209,4 +209,67 @@ This is the combined tag set of each file. Errors are the first failing scenario
 
 ## 8. Node 22 comparison
 
-Pending: node through `t262/hosts/node-host.mjs`, run over the extra set without the Temporal dirs (node 22 has no Temporal). Will be appended.
+Node v22.23.3 ran through `t262/hosts/node-host.mjs` with the main runner (watchdog, `--jobs 4`, 700 MB RSS cap) over the extra set **without** `built-ins/Temporal`, `intl402/Temporal` and `staging/Temporal` (node 22 has no Temporal): 3,675 files / 6,998 scenarios. In those same 3,675 files, node passes 2,677 and we pass 1,709.
+
+- **Intl:** node (full ICU) passes **1,052 / 1,353** non-Temporal intl402 files. That is what an ICU-backed Intl reaches; node has no DurationFormat (0 / 110) and fails DateTimeFormat 77, Locale 88, PluralRules 10. This is consistent with §4: our heuristic puts about 1,076 files within reach without ICU (pass + plumbing + BCP 47 + en-data), but only by writing the BCP 47 and en locale data ourselves.
+- **Proposals:** node 22 is level with us on every proposal tag (it passes 1 more source-phase file and 1 legacy-regexp file), so node is no reference here. Every proposal failure is engine work.
+- **staging:** node passes 22 of our 42 non-proposal staging failures, which confirms them as reachable. Node also fails the runner artefacts.
+  - Node passes: `sm/Proxy/revoke-as-side-effect`, `sm/String/replace-math`, `sm/destructuring/bug1396261`, `sm/extensions/recursion`, `sm/Date/{non-iso,two-digit-years}`, all 4 Annex B edge cases (so they are engine gaps, not SM-only semantics), 10 of the 12 `function.caller` / `f.arguments` tests (`function-caller-restrictions` fails in node too), and `sm/statements/regress-642975` (RegExp.lastMatch).
+  - Node fails too:
+    - `sm/strict/*` (13; runner artefact confirmed).
+    - `module-export-name-star` (self-import).
+    - Both IsHTMLDDA tests (node-host has no `IsHTMLDDA`).
+    - The 3 length-tracking-TA integrity tests (node 22 predates the spec change).
+    - `sm/regress/regress-610026`: node is also killed by the 700 MB watchdog. The test is memory-hungry everywhere, so for us the fix is "throw or survive instead of aborting".
+    - The proposal ones (decorators, source-phase, Temporal, PrivateName).
+  - We pass, node fails: 83 files, mostly `staging/explicit-resource-management` (48, which node 22 lacks), `staging/sm` 29 and `staging/built-ins` 4.
+
+| Cluster | Files | We pass | Node passes | Node passes, we fail | We pass, node fails |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| intl402/NumberFormat | 251 | 0 | 249 | 249 | 0 |
+| intl402/DateTimeFormat | 245 | 0 | 168 | 168 | 0 |
+| intl402/Locale | 190 | 0 | 102 | 102 | 0 |
+| intl402/ListFormat | 81 | 0 | 81 | 81 | 0 |
+| intl402/RelativeTimeFormat | 80 | 0 | 79 | 79 | 0 |
+| intl402/Segmenter | 79 | 0 | 79 | 79 | 0 |
+| intl402/Collator | 65 | 0 | 62 | 62 | 0 |
+| intl402/Intl | 66 | 0 | 61 | 61 | 0 |
+| intl402/DisplayNames | 57 | 0 | 57 | 57 | 0 |
+| intl402/PluralRules | 53 | 0 | 43 | 43 | 0 |
+| staging/sm | 1406 | 1364 | 1357 | 22 | 29 |
+| intl402/(top-level) | 22 | 0 | 20 | 20 | 0 |
+| intl402/String | 19 | 7 | 17 | 10 | 0 |
+| intl402/BigInt | 11 | 5 | 11 | 6 | 0 |
+| intl402/Date | 12 | 8 | 12 | 4 | 0 |
+| intl402/Number | 7 | 3 | 7 | 4 | 0 |
+| proposal:source-phase-imports | 143 | 86 | 87 | 1 | 0 |
+| proposal:legacy-regexp | 26 | 0 | 1 | 1 | 0 |
+| intl402/Array | 2 | 1 | 2 | 1 | 0 |
+| intl402/FallbackSymbol | 2 | 0 | 1 | 1 | 0 |
+| proposal:import-defer | 251 | 94 | 94 | 0 | 0 |
+| intl402/DurationFormat | 110 | 0 | 0 | 0 | 0 |
+| proposal:source-phase-imports+source-phase-imports-module-source | 108 | 63 | 63 | 0 | 0 |
+| proposal:await-dictionary | 89 | 2 | 2 | 0 | 0 |
+| proposal:ShadowRealm | 64 | 0 | 0 | 0 | 0 |
+| proposal:immutable-arraybuffer | 61 | 2 | 2 | 0 | 0 |
+| staging/explicit-resource-management | 53 | 53 | 5 | 0 | 48 |
+| proposal:error-stack-accessor | 35 | 1 | 0 | 0 | 1 |
+| proposal:decorators | 24 | 2 | 2 | 0 | 0 |
+| proposal:Iterator.prototype.join | 18 | 2 | 2 | 0 | 0 |
+| proposal:Temporal | 8 | 0 | 0 | 0 | 0 |
+| staging/built-ins | 8 | 5 | 1 | 0 | 4 |
+| proposal:import-text | 6 | 0 | 0 | 0 | 0 |
+| proposal:immutable-arraybuffer+import-bytes | 5 | 0 | 0 | 0 | 0 |
+| staging/decorators | 3 | 1 | 1 | 0 | 0 |
+| staging/set-methods | 3 | 3 | 3 | 0 | 0 |
+| proposal:nonextensible-applies-to-private | 2 | 0 | 0 | 0 | 0 |
+| staging/source-phase-imports | 2 | 0 | 0 | 0 | 0 |
+| proposal:import-defer+nonextensible-applies-to-private | 1 | 0 | 0 | 0 | 0 |
+| intl402/TypedArray | 1 | 1 | 1 | 0 | 0 |
+| staging/set-is-subset-of-empty-index | 1 | 1 | 1 | 0 | 0 |
+| staging/set-is-subset-on-set-like | 1 | 1 | 1 | 0 | 0 |
+| staging/set-is-subset-table-receiver-cleared | 1 | 1 | 1 | 0 | 0 |
+| staging/set-is-subset-table-transition | 1 | 1 | 1 | 0 | 0 |
+| staging/top-level-await | 1 | 1 | 1 | 0 | 0 |
+| staging/Uint8Array | 1 | 1 | 0 | 0 | 1 |
+| **total** | **3675** | **1709** | **2677** | **1051** | **83** |
