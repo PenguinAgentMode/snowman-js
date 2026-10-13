@@ -1,6 +1,8 @@
 // Ordinary objects: the essential internal methods of ECMA-262 10.1, and the descriptor algorithms.
 #include "runtime/object.h"
 
+#include <typeinfo>
+
 #include "runtime/errors.h"
 #include "runtime/operations.h"
 #include "runtime/property_map.h"
@@ -82,8 +84,15 @@ Result<Value> Object::Get(const PropertyKey& key, Value receiver) {
   return snowman::Call(getter, receiver);
 }
 
+bool Object::hasOrdinaryPropertyStorage() const { return typeid(*this) == typeid(Object); }
+
 // 10.1.9.1 OrdinarySet
 Result<bool> Object::Set(const PropertyKey& key, Value value, Value receiver) {
+  // An own writable data property of an ordinary receiver: OrdinarySet ends in OrdinaryDefineOwnProperty
+  // replacing just the value.
+  if (receiver.isObject() && receiver.asObject() == this && hasOrdinaryPropertyStorage() &&
+      properties_->setWritableValue(key, value))
+    return true;
   auto ownDesc = TRY(GetOwnProperty(key));
   return OrdinarySetWithOwnDescriptor(this, key, value, receiver, ownDesc);
 }

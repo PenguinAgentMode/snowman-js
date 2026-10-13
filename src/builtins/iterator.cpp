@@ -219,7 +219,8 @@ Result<Value> makeHelper(NativeCall& call, HelperKind kind) {
     double numLimit = TRY_CLOSE(iterated, ToNumber(call.args[0]));
     if (std::isnan(numLimit)) return closeIteratorWithThrow(iterated, ThrowRangeError("limit must be a number").value);
     limit = TRY(ToIntegerOrInfinity(num(numLimit)));
-    if (limit < 0) return closeIteratorWithThrow(iterated, ThrowRangeError("limit must be non-negative").value);
+    if (limit < 0 || (limit != INFINITY && limit > 9007199254740991.0))
+      return closeIteratorWithThrow(iterated, ThrowRangeError("limit must be between 0 and 2^53 - 1").value);
   } else {
     fn = call.args[0];
     if (!IsCallable(fn)) return closeIteratorWithThrow(iterated, ThrowTypeError("callback is not a function").value);
@@ -263,6 +264,37 @@ Result<Value> IteratorPrototype_reduce(NativeCall& call) {
     if (!value) return accumulator;
     accumulator = TRY_CLOSE(iterated, Call(reducer, Value::undefined(), {accumulator, *value, num(counter)}));
     counter++;
+  }
+}
+
+// Iterator.prototype.includes ( searchElement [ , skippedElements ] )
+Result<Value> IteratorPrototype_includes(NativeCall& call) {
+  Value o = call.thisValue;
+  if (!o.isObject()) return ThrowTypeError("Iterator.prototype.includes called on non-object");
+  IteratorRecord iterated{o.asObject(), Value::undefined(), false};
+  double toSkip = 0;
+  Value skipped = call.args[1];
+  if (!skipped.isUndefined()) {
+    if (!skipped.isNumber() || std::isnan(skipped.asNumber()) ||
+        (std::isfinite(skipped.asNumber()) && !IsIntegralNumber(skipped)))
+      return closeIteratorWithThrow(iterated, ThrowTypeError("skippedElements must be an integral number").value);
+    toSkip = skipped.asNumber();
+    if (toSkip < 0 || (toSkip != INFINITY && toSkip > 9007199254740991.0))
+      return closeIteratorWithThrow(iterated, ThrowRangeError("skippedElements is out of range").value);
+  }
+  iterated = TRY(GetIteratorDirect(o.asObject()));
+  double count = 0;
+  while (true) {
+    std::optional<Value> value = TRY(IteratorStepValue(iterated));
+    if (!value) return boolean(false);
+    if (count < toSkip) {
+      count++;
+      continue;
+    }
+    if (SameValueZero(*value, call.args[0])) {
+      TRY(IteratorClose(iterated, Result<void>()));
+      return boolean(true);
+    }
   }
 }
 
@@ -375,6 +407,7 @@ void installIterator(Realm& realm) {
   defineFunction(realm, proto, PropertyKey(u"find"), 1, IteratorPrototype_find);
   defineFunction(realm, proto, PropertyKey(u"flatMap"), 1, IteratorPrototype_flatMap);
   defineFunction(realm, proto, PropertyKey(u"forEach"), 1, IteratorPrototype_forEach);
+  defineFunction(realm, proto, PropertyKey(u"includes"), 1, IteratorPrototype_includes);
   defineFunction(realm, proto, PropertyKey(u"map"), 1, IteratorPrototype_map);
   defineFunction(realm, proto, PropertyKey(u"reduce"), 1, IteratorPrototype_reduce);
   defineFunction(realm, proto, PropertyKey(u"some"), 1, IteratorPrototype_some);

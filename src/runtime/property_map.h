@@ -38,6 +38,8 @@ class PropertyMap {
   void put(const PropertyKey& key, const PropertySlot& slot);
   // Replaces the [[Value]] of an existing data property; false if there is none.
   bool setValue(const PropertyKey& key, Value value);
+  // Same, only for a writable data property.
+  bool setWritableValue(const PropertyKey& key, Value value);
   // Removes the property; false if there was none.
   bool remove(const PropertyKey& key);
   size_t size() const;

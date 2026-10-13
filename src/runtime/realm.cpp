@@ -31,6 +31,7 @@ std::vector<Registration>& registry() {
 class ImmutablePrototypeObject : public Object {
  public:
   using Object::Object;
+  bool hasOrdinaryPropertyStorage() const override { return true; }
   // 10.4.7.2 SetImmutablePrototype
   Result<bool> SetPrototypeOf(Object* prototype) override {
     Object* current = TRY(GetPrototypeOf());

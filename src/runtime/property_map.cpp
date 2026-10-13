@@ -119,6 +119,24 @@ bool PropertyMap::setValue(const PropertyKey& key, Value value) {
   return true;
 }
 
+bool PropertyMap::setWritableValue(const PropertyKey& key, Value value) {
+  if (key.isIndex()) {
+    uint32_t i = key.asIndex();
+    if (i < dense_.size() && !dense_[i].isEmpty()) {
+      dense_[i] = value;
+      return true;
+    }
+    auto it = sparse_.find(i);
+    if (it == sparse_.end() || it->second.accessor || !it->second.writable()) return false;
+    it->second.value = value;
+    return true;
+  }
+  int i = findNamed(key);
+  if (i < 0 || named_[i].slot.accessor || !named_[i].slot.writable()) return false;
+  named_[i].slot.value = value;
+  return true;
+}
+
 bool PropertyMap::remove(const PropertyKey& key) {
   if (key.isIndex()) {
     uint32_t i = key.asIndex();

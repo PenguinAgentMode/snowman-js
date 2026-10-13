@@ -278,24 +278,12 @@ Result<Value> TypedArrayPrototype_copyWithin(NativeCall& call) {
   if (count > 0) {
     if (IsTypedArrayOutOfBounds(o)) return ThrowTypeError("typed array is detached or out of bounds");
     len = TypedArrayLength(o);
-    double elementSize = double(ElementSize(o->elementType));
-    double byteOffset = o->byteOffset;
-    double bufferByteLimit = len * elementSize + byteOffset;
-    double toByteIndex = targetIndex * elementSize + byteOffset;
-    double fromByteIndex = startIndex * elementSize + byteOffset;
-    double countBytes = count * elementSize;
-    double direction = 1;
-    if (fromByteIndex < toByteIndex && toByteIndex < fromByteIndex + countBytes) {
-      direction = -1;
-      fromByteIndex += countBytes - 1;
-      toByteIndex += countBytes - 1;
-    }
-    uint8_t* data = o->buffer->data();
-    while (countBytes > 0 && fromByteIndex < bufferByteLimit && toByteIndex < bufferByteLimit) {
-      data[size_t(toByteIndex)] = data[size_t(fromByteIndex)];
-      fromByteIndex += direction;
-      toByteIndex += direction;
-      countBytes--;
+    // Side effects may have shrunk O: copy the longest still-applicable prefix.
+    count = std::min({count, len - startIndex, len - targetIndex});
+    if (count > 0) {
+      size_t elementSize = ElementSize(o->elementType);
+      uint8_t* data = o->buffer->data() + size_t(o->byteOffset);
+      std::memmove(data + size_t(targetIndex) * elementSize, data + size_t(startIndex) * elementSize, size_t(count) * elementSize);
     }
   }
   return Value(o);
@@ -525,7 +513,10 @@ Result<Value> TypedArrayPrototype_slice(NativeCall& call) {
       size_t targetByteIndex = size_t(a->byteOffset);
       size_t count = size_t(countBytes) * elementSize;
       size_t limit = std::min(count, a->buffer->byteLength() - std::min(targetByteIndex, a->buffer->byteLength()));
-      std::memmove(a->buffer->data() + targetByteIndex, o->buffer->data() + srcByteIndex, limit);
+      // Byte by byte, front to back, as the spec copies (it matters when A shares O's buffer).
+      uint8_t* to = a->buffer->data() + targetByteIndex;
+      const uint8_t* from = o->buffer->data() + srcByteIndex;
+      for (size_t i = 0; i < limit; i++) to[i] = from[i];
     } else {
       double n = 0;
       for (double k = startIndex; k < endIndex; k++, n++) {
