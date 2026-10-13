@@ -63,7 +63,6 @@ int runProgram(const CliOptions& options, const std::string& source) {
   vm().initialRealm = realm;
   interp::setUpRealm(realm);
   std::u16string text = utf8ToUtf16(source);
-  interp::setHostMainPath(options.file);
 
   if (options.module) {
     Result<void> result = interp::runModuleFile(realm, options.file, std::move(text));
@@ -74,6 +73,8 @@ int runProgram(const CliOptions& options, const std::string& source) {
     return 0;
   }
 
+  size_t slash = options.file.rfind('/');
+  interp::setScriptDirectory(slash == std::string::npos ? "." : options.file.substr(0, slash));
   parser::ParseResult parsed = parser::parseProgram(std::move(text));
   if (!parsed.ok()) {
     printLine("SyntaxError: " + parsed.error->message);

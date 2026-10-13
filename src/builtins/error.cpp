@@ -52,6 +52,19 @@ Result<Value> AggregateError_construct(NativeCall& call) {
   return Value(o);
 }
 
+// SuppressedError ( error, suppressed, message )
+Result<Value> SuppressedError_construct(NativeCall& call) {
+  Object* newTarget = newTargetOrCallee(call);
+  ErrorObject* o = TRY(OrdinaryCreateFromConstructor<ErrorObject>(newTarget, Intrinsic::SuppressedErrorPrototype));
+  if (!call.args[2].isUndefined()) {
+    String* msg = TRY(ToString(call.args[2]));
+    TRY(CreateNonEnumerableDataPropertyOrThrow(o, PropertyKey(u"message"), msg));
+  }
+  TRY(CreateNonEnumerableDataPropertyOrThrow(o, PropertyKey(u"error"), call.args[0]));
+  TRY(CreateNonEnumerableDataPropertyOrThrow(o, PropertyKey(u"suppressed"), call.args[1]));
+  return Value(o);
+}
+
 // 20.5.2.1 Error.isError ( arg )
 Result<Value> Error_isError(NativeCall& call) {
   return Value::boolean(call.args[0].isObject() && call.args[0].asObject()->is<ErrorObject>());
@@ -101,6 +114,14 @@ void installErrors(Realm& realm) {
                                                  PropertyKey(u"AggregateError"), aggregateProto,
                                                  Intrinsic::AggregateErrorPrototype);
   aggregate->setPrototypeDirect(error);
+
+  Object* suppressedProto = OrdinaryObjectCreate(errorProto);
+  BuiltinFunction* suppressed = defineConstructor(realm, Intrinsic::SuppressedError, SuppressedError_construct, 3,
+                                                  PropertyKey(u"SuppressedError"), suppressedProto,
+                                                  Intrinsic::SuppressedErrorPrototype);
+  suppressed->setPrototypeDirect(error);
+  defineValue(suppressedProto, PropertyKey(u"message"), Value(emptyString()));
+  defineValue(suppressedProto, PropertyKey(u"name"), str(u"SuppressedError"));
   defineValue(aggregateProto, PropertyKey(u"message"), Value(emptyString()));
   defineValue(aggregateProto, PropertyKey(u"name"), str(u"AggregateError"));
 }

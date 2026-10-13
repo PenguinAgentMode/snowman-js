@@ -1,11 +1,9 @@
-// Modules (16.2): Cyclic Module Records (Source Text Module Records and JSON modules), the host's module
-// loading (specifiers resolve relative to the referrer's file, as test262's INTERPRETING.md says), linking,
-// evaluation with top-level await, import() and import.meta. Loading is synchronous: HostLoadImportedModule
-// calls FinishLoadingImportedModule before it returns.
+// Modules (16.2): the host's loader (files resolved relative to the importing module), Source Text Module
+// Records (ParseModule, ResolveExport, InitializeEnvironment, ExecuteModule), JSON modules, the Cyclic Module
+// Record algorithms (Link, Evaluate with top-level await), module namespace objects, import() and import.meta.
 #include "interp/module.h"
 
 #include <algorithm>
-#include <filesystem>
 #include <fstream>
 #include <sstream>
 
@@ -13,113 +11,184 @@
 #include "runtime/builtins.h"
 #include "runtime/errors.h"
 #include "runtime/operations.h"
+#include "runtime/property_map.h"
+#include "runtime/symbol.h"
+#include "runtime/vm.h"
 
 namespace snowman::interp {
 
 void ModuleRecord::trace(Tracer& tracer) {
-  Object::trace(tracer);
   tracer.visit(reinterpret_cast<Cell*>(realm));
   tracer.visit(environment);
   tracer.visit(namespaceObject);
+  tracer.visit(syntheticDefault);
   tracer.visit(importMeta);
-  tracer.visit(jsonValue);
   tracer.visit(evaluationError);
-  for (ModuleRecord* module : loadedModules) tracer.visit(module);
   tracer.visit(cycleRoot);
   tracer.visit(topLevelCapability);
-  for (ModuleRecord* module : asyncParentModules) tracer.visit(module);
+  for (ModuleRecord* m : asyncParentModules) tracer.visit(m);
+  for (ModuleRecord* m : loadedModules) tracer.visit(m);
 }
 
 Environment* moduleEnvironmentOf(ModuleRecord* module) { return module->environment; }
 
 namespace {
 
-std::string mainPath;
+std::string gScriptDirectory = ".";
 
-// The order in which modules had [[AsyncEvaluation]] set to true.
-uint64_t asyncEvaluationCounter = 0;
-
-Realm* currentRealm() { return vm().currentRealm(); }
-
-PromiseCapability* newPromiseCapability() {
-  return NewPromiseCapability(Value(currentRealm()->intrinsic(Intrinsic::Promise))).release();
+std::string directoryOf(const std::string& path) {
+  size_t slash = path.rfind('/');
+  if (slash == std::string::npos) return ".";
+  if (slash == 0) return "/";
+  return path.substr(0, slash);
 }
 
-PromiseObject* promiseOf(PromiseCapability* capability) {
-  return capability->promise.asObject()->as<PromiseObject>();
-}
-
-// A built-in closure with internal slots.
-BuiltinFunction* closure(NativeFn fn, int length, std::initializer_list<Value> slots) {
-  BuiltinFunction* function = createBuiltinFunction(*currentRealm(), fn, length, PropertyKey(emptyString()));
-  for (Value slot : slots) function->slots.push_back(slot);
-  return function;
-}
-
-// GetImportedModule(referrer, request) for a request of referrer's program.
-ModuleRecord* GetImportedModule(ModuleRecord* referrer, uint32_t request) { return referrer->loadedModules[request]; }
-
-const std::u16string kDefault = u"default";
-
-// ---- Exports ----
-
-// GetExportedNames(exportStarSet)
-void GetExportedNames(ModuleRecord* module, std::vector<ModuleRecord*>& exportStarSet,
-                      std::vector<std::u16string>& exportedNames) {
-  if (std::find(exportStarSet.begin(), exportStarSet.end(), module) != exportStarSet.end()) return;
-  exportStarSet.push_back(module);
-  if (module->isJSON()) {
-    exportedNames.push_back(kDefault);
-    return;
+// The specifier resolved against a directory, with "." and ".." segments removed.
+std::optional<std::string> resolveSpecifier(const std::string& directory, const std::string& specifier) {
+  if (!specifier.starts_with("./") && !specifier.starts_with("../") && !specifier.starts_with("/")) {
+    return std::nullopt;
   }
-  const ast::Program* program = module->program;
-  for (const auto& e : program->localExportEntries) exportedNames.push_back(*e.exportName);
-  for (const auto& e : program->indirectExportEntries) exportedNames.push_back(*e.exportName);
-  for (const auto& e : program->starExportEntries) {
-    ModuleRecord* requestedModule = GetImportedModule(module, *e.moduleRequest);
-    std::vector<std::u16string> starNames;
-    GetExportedNames(requestedModule, exportStarSet, starNames);
-    for (std::u16string& n : starNames) {
-      if (n == kDefault) continue;
-      if (std::find(exportedNames.begin(), exportedNames.end(), n) == exportedNames.end()) {
-        exportedNames.push_back(std::move(n));
+  std::string joined = specifier.starts_with("/") ? specifier : directory + "/" + specifier;
+  bool absolute = joined.starts_with("/");
+  std::vector<std::string> parts;
+  std::stringstream stream(joined);
+  std::string part;
+  while (std::getline(stream, part, '/')) {
+    if (part.empty() || part == ".") continue;
+    if (part == ".." && !parts.empty() && parts.back() != "..") {
+      parts.pop_back();
+      continue;
+    }
+    parts.push_back(part);
+  }
+  std::string result = absolute ? "/" : "";
+  for (size_t i = 0; i < parts.size(); i++) {
+    if (i > 0) result += "/";
+    result += parts[i];
+  }
+  return result;
+}
+
+std::optional<std::string> readFile(const std::string& path) {
+  std::ifstream in(path, std::ios::binary);
+  if (!in) return std::nullopt;
+  std::ostringstream text;
+  text << in.rdbuf();
+  return text.str();
+}
+
+bool isJsonRequest(const ast::ModuleRequest& request) {
+  for (const auto& attribute : request.attributes) {
+    if (attribute.key == u"type" && attribute.value == u"json") return true;
+  }
+  return false;
+}
+
+// ParseModule for a file's text, or a JSON module (CreateDefaultExportSyntheticModule of ParseJSONModule).
+Result<ModuleRecord*> createModule(Realm* realm, const std::string& path, std::u16string source, bool json) {
+  auto* module = snowman::make<ModuleRecord>(realm, path);
+  if (json) {
+    Object* jsonObject = realm->intrinsic(Intrinsic::JSON);
+    if (!jsonObject) return ThrowSyntaxError("JSON modules need the JSON built-in");
+    Value parse = TRY(Get(jsonObject, PropertyKey(u"parse")));
+    module->syntheticDefault = TRY(Call(parse, Value::undefined(), {Value(newString(std::move(source)))}));
+    module->status = ModuleRecord::Status::Unlinked;
+    return module;
+  }
+  parser::ParseOptions options;
+  options.goal = ast::SourceType::Module;
+  parser::ParseResult parsed = parser::parseProgram(std::move(source), options);
+  if (!parsed.ok()) return throwParseError(*parsed.error);
+  module->code = parsed.program;
+  module->hasTLA = parsed.program->hasTopLevelAwait;
+  module->loadedModules.assign(parsed.program->requestedModules.size(), nullptr);
+  module->status = ModuleRecord::Status::Unlinked;
+  return module;
+}
+
+// HostLoadImportedModule + FinishLoadingImportedModule: one module per resolved path (and type) per realm.
+Result<ModuleRecord*> hostLoadImportedModule(Realm* realm, const std::string& directory,
+                                             const ast::ModuleRequest& request) {
+  std::string specifier = utf16ToUtf8(request.specifier);
+  std::optional<std::string> path = resolveSpecifier(directory, specifier);
+  if (!path) return ThrowTypeError("Cannot resolve module specifier '" + specifier + "'");
+  bool json = isJsonRequest(request);
+  std::string key = json ? *path + "#json" : *path;
+  RealmState* state = realmState(realm);
+  for (auto& [loadedPath, module] : state->moduleMap) {
+    if (loadedPath == key) return module;
+  }
+  std::optional<std::string> text = readFile(*path);
+  if (!text) return ThrowTypeError("Cannot find module '" + *path + "'");
+  ModuleRecord* module = TRY(createModule(realm, *path, utf8ToUtf16(*text), json));
+  state->moduleMap.emplace_back(key, module);
+  return module;
+}
+
+// LoadRequestedModules, synchronously: every module of the graph is loaded (or the first error thrown).
+Result<void> loadRequestedModules(ModuleRecord* root) {
+  std::vector<ModuleRecord*> visited;
+  std::vector<ModuleRecord*> pending{root};
+  while (!pending.empty()) {
+    ModuleRecord* module = pending.back();
+    pending.pop_back();
+    if (module->isSynthetic() || std::find(visited.begin(), visited.end(), module) != visited.end()) continue;
+    visited.push_back(module);
+    const auto& requests = module->code->requestedModules;
+    for (size_t i = 0; i < requests.size(); i++) {
+      if (!module->loadedModules[i]) {
+        module->loadedModules[i] = TRY(hostLoadImportedModule(module->realm, directoryOf(module->path), requests[i]));
       }
+      pending.push_back(module->loadedModules[i]);
     }
   }
+  return {};
 }
+
+ModuleRecord* GetImportedModule(ModuleRecord* module, uint32_t request) { return module->loadedModules[request]; }
+
+// ResolvedBinding Record; bindingName nullptr means NAMESPACE.
+struct ResolvedBinding {
+  enum class Kind { Null, Ambiguous, Binding } kind = Kind::Null;
+  ModuleRecord* module = nullptr;
+  String* bindingName = nullptr;
+};
 
 struct ResolveSetEntry {
   ModuleRecord* module;
-  std::u16string_view exportName;
+  std::u16string exportName;
 };
 
-ResolvedBinding resolved(ModuleRecord* module, String* bindingName) {
-  return {ResolvedBinding::Kind::Resolved, module, bindingName};
-}
-
-// ResolveExport(exportName, resolveSet)
-ResolvedBinding resolveExport(ModuleRecord* module, std::u16string_view exportName,
+// 16.2.1.6.3 ResolveExport(exportName, resolveSet)
+ResolvedBinding ResolveExport(ModuleRecord* module, const std::u16string& exportName,
                               std::vector<ResolveSetEntry>& resolveSet) {
-  if (module->isJSON()) return exportName == kDefault ? resolved(module, atom(kDefault)) : ResolvedBinding{};
-  for (const ResolveSetEntry& r : resolveSet) {
-    if (r.module == module && r.exportName == exportName) return {};  // a circular import request
+  if (module->isSynthetic()) {
+    if (exportName == u"default") return {ResolvedBinding::Kind::Binding, module, atom(u"default")};
+    return {};
+  }
+  for (const auto& r : resolveSet) {
+    if (r.module == module && r.exportName == exportName) return {};
   }
   resolveSet.push_back({module, exportName});
-  const ast::Program* program = module->program;
-  for (const auto& e : program->localExportEntries) {
-    if (*e.exportName == exportName) return resolved(module, atom(*e.localName));
+  const ast::Program* code = module->code;
+  for (const auto& e : code->localExportEntries) {
+    if (e.exportName && *e.exportName == exportName) {
+      return {ResolvedBinding::Kind::Binding, module, atom(*e.localName)};
+    }
   }
-  for (const auto& e : program->indirectExportEntries) {
-    if (*e.exportName != exportName) continue;
+  for (const auto& e : code->indirectExportEntries) {
+    if (!e.exportName || *e.exportName != exportName) continue;
     ModuleRecord* importedModule = GetImportedModule(module, *e.moduleRequest);
-    if (e.importKind == ast::ExportEntry::ImportKind::All) return resolved(importedModule, nullptr);
-    return resolveExport(importedModule, e.importName, resolveSet);
+    if (e.importKind == ast::ExportEntry::ImportKind::All) {
+      return {ResolvedBinding::Kind::Binding, importedModule, nullptr};
+    }
+    return ResolveExport(importedModule, e.importName, resolveSet);
   }
-  if (exportName == kDefault) return {};
+  if (exportName == u"default") return {};
   ResolvedBinding starResolution;
-  for (const auto& e : program->starExportEntries) {
+  for (const auto& e : code->starExportEntries) {
     ModuleRecord* importedModule = GetImportedModule(module, *e.moduleRequest);
-    ResolvedBinding resolution = resolveExport(importedModule, exportName, resolveSet);
+    ResolvedBinding resolution = ResolveExport(importedModule, exportName, resolveSet);
     if (resolution.kind == ResolvedBinding::Kind::Ambiguous) return resolution;
     if (resolution.kind == ResolvedBinding::Kind::Null) continue;
     if (starResolution.kind == ResolvedBinding::Kind::Null) {
@@ -131,328 +200,257 @@ ResolvedBinding resolveExport(ModuleRecord* module, std::u16string_view exportNa
   return starResolution;
 }
 
-ResolvedBinding resolveExport(ModuleRecord* module, std::u16string_view exportName) {
+ResolvedBinding ResolveExport(ModuleRecord* module, const std::u16string& exportName) {
   std::vector<ResolveSetEntry> resolveSet;
-  return resolveExport(module, exportName, resolveSet);
+  return ResolveExport(module, exportName, resolveSet);
 }
 
-}  // namespace
-
-ResolvedBinding ResolveExport(ModuleRecord* module, String* exportName) {
-  return resolveExport(module, exportName->view());
-}
-
-// 16.2.1.11 GetModuleNamespace(module)
-ModuleNamespace* GetModuleNamespace(ModuleRecord* module) {
-  if (module->namespaceObject) return module->namespaceObject;
-  std::vector<ModuleRecord*> exportStarSet;
+// 16.2.1.6.2 GetExportedNames(exportStarSet)
+std::vector<std::u16string> GetExportedNames(ModuleRecord* module, std::vector<ModuleRecord*>& exportStarSet) {
+  if (module->isSynthetic()) return {u"default"};
+  if (std::find(exportStarSet.begin(), exportStarSet.end(), module) != exportStarSet.end()) return {};
+  exportStarSet.push_back(module);
   std::vector<std::u16string> exportedNames;
-  GetExportedNames(module, exportStarSet, exportedNames);
-  std::vector<String*> unambiguousNames;
-  for (const std::u16string& name : exportedNames) {
-    if (resolveExport(module, name).isResolved()) unambiguousNames.push_back(atom(name));
-  }
-  module->namespaceObject = snowman::make<ModuleNamespace>(module, std::move(unambiguousNames));
-  return module->namespaceObject;
-}
-
-void setHostMainPath(const std::string& path) {
-  std::error_code error;
-  std::filesystem::path absolute = std::filesystem::absolute(path, error);
-  mainPath = (error ? std::filesystem::path(path) : absolute).lexically_normal().string();
-}
-
-// ---- Loading ----
-
-namespace {
-
-// GraphLoadingState Record. Loading is synchronous, so it lives on the stack of LoadRequestedModules.
-struct GraphLoadingState {
-  PromiseCapability* promiseCapability = nullptr;
-  bool isLoading = true;
-  size_t pendingModulesCount = 1;
-  std::vector<ModuleRecord*> visited;
-};
-
-// HostGetSupportedImportAttributes is « "type" ».
-bool AllImportAttributesSupported(const std::vector<ast::ImportAttributeEntry>& attributes) {
-  for (const auto& attribute : attributes) {
-    if (attribute.key != u"type") return false;
-  }
-  return true;
-}
-
-const std::u16string* typeAttribute(const std::vector<ast::ImportAttributeEntry>& attributes) {
-  for (const auto& attribute : attributes) {
-    if (attribute.key == u"type") return &attribute.value;
-  }
-  return nullptr;
-}
-
-const std::string& referrerPath(Cell* referrer) {
-  if (auto* module = dynamic_cast<ModuleRecord*>(referrer)) return module->path;
-  return mainPath;
-}
-
-Realm* referrerRealm(Cell* referrer) {
-  if (auto* module = dynamic_cast<ModuleRecord*>(referrer)) return module->realm;
-  if (auto* script = dynamic_cast<ScriptRecord*>(referrer)) return script->realm;
-  return currentRealm();
-}
-
-// The specifier as a path relative to the referrer's directory.
-std::string resolveSpecifier(const std::string& referrer, std::u16string_view specifier) {
-  std::filesystem::path base = std::filesystem::path(referrer).parent_path();
-  return (base / utf16ToUtf8(specifier)).lexically_normal().string();
-}
-
-bool readFile(const std::string& path, std::string& out) {
-  std::error_code error;
-  if (!std::filesystem::is_regular_file(path, error)) return false;
-  std::ifstream file(path, std::ios::binary);
-  if (!file) return false;
-  std::ostringstream contents;
-  contents << file.rdbuf();
-  out = contents.str();
-  return true;
-}
-
-ModuleRecord* newModule(Realm* realm, std::string path, ast::Program* program) {
-  auto* module = snowman::make<ModuleRecord>(realm, std::move(path));
-  module->program = program;
-  if (program) {
-    module->hasTLA = program->hasTopLevelAwait;
-    module->loadedModules.resize(program->requestedModules.size(), nullptr);
-  }
-  return module;
-}
-
-// ParseModule(sourceText, realm, hostDefined)
-Result<ModuleRecord*> ParseModule(std::u16string source, Realm* realm, std::string path) {
-  parser::ParseOptions options;
-  options.goal = ast::SourceType::Module;
-  parser::ParseResult parsed = parser::parseProgram(std::move(source), options);
-  if (!parsed.ok()) return throwParseError(*parsed.error);
-  return newModule(realm, std::move(path), parsed.program);
-}
-
-// ParseJSONModule(source) + CreateDefaultExportSyntheticModule(json)
-Result<ModuleRecord*> ParseJSONModule(std::u16string source, Realm* realm, std::string path) {
-  Value parse = TRY(Get(realm->intrinsic(Intrinsic::JSON), PropertyKey(u"parse")));
-  Value json = TRY(Call(parse, Value::undefined(), {Value(newString(std::move(source)))}));
-  ModuleRecord* module = newModule(realm, std::move(path), nullptr);
-  module->jsonValue = json;
-  return module;
-}
-
-// HostLoadImportedModule(referrer, moduleRequest, ...) up to FinishLoadingImportedModule: the module for the
-// request, from the referrer realm's module map or newly parsed.
-Result<ModuleRecord*> loadImportedModule(Cell* referrer, const std::u16string& specifier,
-                                         const std::vector<ast::ImportAttributeEntry>& attributes) {
-  Realm* realm = referrerRealm(referrer);
-  std::string path = resolveSpecifier(referrerPath(referrer), specifier);
-  const std::u16string* type = typeAttribute(attributes);
-  if (type && *type != u"json") {
-    return ThrowTypeError("unsupported module type '" + utf16ToUtf8(*type) + "'");
-  }
-  bool json = type != nullptr;
-  std::string key = json ? "json:" + path : path;
-  auto& moduleMap = realmState(realm)->moduleMap;
-  for (auto& entry : moduleMap) {
-    if (entry.first == key) return entry.second;
-  }
-  std::string bytes;
-  if (!readFile(path, bytes)) return ThrowTypeError("Cannot find module '" + utf16ToUtf8(specifier) + "'");
-  std::u16string source = utf8ToUtf16(bytes);
-  ModuleRecord* module = json ? TRY(ParseJSONModule(std::move(source), realm, path))
-                              : TRY(ParseModule(std::move(source), realm, path));
-  moduleMap.emplace_back(std::move(key), module);
-  return module;
-}
-
-void InnerModuleLoading(GraphLoadingState& state, ModuleRecord* module);
-
-// ContinueModuleLoading(state, moduleCompletion)
-void ContinueModuleLoading(GraphLoadingState& state, Result<ModuleRecord*> moduleCompletion) {
-  if (!state.isLoading) return;
-  if (moduleCompletion.isNormal()) {
-    InnerModuleLoading(state, moduleCompletion.value());
-    return;
-  }
-  state.isLoading = false;
-  (void)rejectCapability(state.promiseCapability, moduleCompletion.thrown());
-}
-
-// InnerModuleLoading(state, module)
-void InnerModuleLoading(GraphLoadingState& state, ModuleRecord* module) {
-  bool visited = std::find(state.visited.begin(), state.visited.end(), module) != state.visited.end();
-  if (module->status == ModuleRecord::Status::New && !visited) {
-    state.visited.push_back(module);
-    if (module->program) {
-      const auto& requests = module->program->requestedModules;
-      state.pendingModulesCount += requests.size();
-      for (uint32_t i = 0; i < requests.size(); i++) {
-        if (!AllImportAttributesSupported(requests[i].attributes)) {
-          ContinueModuleLoading(state, ThrowSyntaxError("unsupported import attribute"));
-        } else if (module->loadedModules[i]) {
-          InnerModuleLoading(state, module->loadedModules[i]);
-        } else {
-          Result<ModuleRecord*> result = loadImportedModule(module, requests[i].specifier, requests[i].attributes);
-          // FinishLoadingImportedModule: record the module in [[LoadedModules]].
-          if (result.isNormal()) module->loadedModules[i] = result.value();
-          ContinueModuleLoading(state, result);
-        }
-        if (!state.isLoading) return;
-      }
+  const ast::Program* code = module->code;
+  for (const auto& e : code->localExportEntries) exportedNames.push_back(*e.exportName);
+  for (const auto& e : code->indirectExportEntries) exportedNames.push_back(*e.exportName);
+  for (const auto& e : code->starExportEntries) {
+    ModuleRecord* requestedModule = GetImportedModule(module, *e.moduleRequest);
+    for (const auto& n : GetExportedNames(requestedModule, exportStarSet)) {
+      if (n == u"default") continue;
+      if (std::find(exportedNames.begin(), exportedNames.end(), n) == exportedNames.end()) exportedNames.push_back(n);
     }
   }
-  state.pendingModulesCount--;
-  if (state.pendingModulesCount != 0) return;
-  state.isLoading = false;
-  for (ModuleRecord* loaded : state.visited) {
-    if (loaded->status == ModuleRecord::Status::New) loaded->status = ModuleRecord::Status::Unlinked;
+  return exportedNames;
+}
+
+Object* GetModuleNamespace(ModuleRecord* module);
+
+// 10.4.6 Module namespace exotic objects.
+class ModuleNamespace final : public Object {
+ public:
+  ModuleNamespace(ModuleRecord* module, std::vector<String*> exports)
+      : Object(nullptr), module_(module), exports_(std::move(exports)) {
+    extensible_ = false;
   }
-  (void)resolveCapability(state.promiseCapability, Value::undefined());
-}
 
-// LoadRequestedModules(): a promise settled by the time it returns.
-PromiseCapability* LoadRequestedModules(ModuleRecord* module) {
-  GraphLoadingState state;
-  state.promiseCapability = newPromiseCapability();
-  InnerModuleLoading(state, module);
-  return state.promiseCapability;
-}
+  Result<Object*> GetPrototypeOf() override { return static_cast<Object*>(nullptr); }
+  Result<bool> SetPrototypeOf(Object* prototype) override { return prototype == nullptr; }
+  Result<bool> IsExtensible() override { return false; }
+  Result<bool> PreventExtensions() override { return true; }
 
-// ---- Linking ----
-
-Throw unresolvable(const std::u16string& name, ResolvedBinding resolution) {
-  std::string text = utf16ToUtf8(name);
-  if (resolution.kind == ResolvedBinding::Kind::Ambiguous) {
-    return ThrowSyntaxError("The requested module contains conflicting star exports for name '" + text + "'");
+  Result<std::optional<PropertyDescriptor>> GetOwnProperty(const PropertyKey& key) override {
+    if (key.isSymbol()) return Object::GetOwnProperty(key);
+    if (!isExport(key)) return std::optional<PropertyDescriptor>();
+    Value value = TRY(Get(key, Value(this)));
+    return std::optional<PropertyDescriptor>(PropertyDescriptor::data(value, Attr::Writable | Attr::Enumerable));
   }
-  return ThrowSyntaxError("The requested module does not provide an export named '" + text + "'");
+
+  Result<bool> DefineOwnProperty(const PropertyKey& key, const PropertyDescriptor& desc) override {
+    if (key.isSymbol()) return Object::DefineOwnProperty(key, desc);
+    auto current = TRY(GetOwnProperty(key));
+    if (!current) return false;
+    if (desc.configurable && *desc.configurable) return false;
+    if (desc.enumerable && !*desc.enumerable) return false;
+    if (desc.isAccessorDescriptor()) return false;
+    if (desc.writable && !*desc.writable) return false;
+    if (desc.value) return SameValue(*desc.value, *current->value);
+    return true;
+  }
+
+  Result<bool> HasProperty(const PropertyKey& key) override {
+    if (key.isSymbol()) return Object::HasProperty(key);
+    return isExport(key);
+  }
+
+  Result<Value> Get(const PropertyKey& key, Value receiver) override {
+    if (key.isSymbol()) return Object::Get(key, receiver);
+    if (!isExport(key)) return Value::undefined();
+    ResolvedBinding binding = ResolveExport(module_, std::u16string(key.toValue().asString()->view()));
+    ModuleRecord* targetModule = binding.module;
+    if (!binding.bindingName) return Value(GetModuleNamespace(targetModule));
+    if (targetModule->isSynthetic()) return targetModule->syntheticDefault;
+    Environment* targetEnv = targetModule->environment;
+    if (!targetEnv) return ThrowReferenceError("Cannot access a binding of a module that is not linked");
+    return targetEnv->GetBindingValue(binding.bindingName, true);
+  }
+
+  Result<bool> Set(const PropertyKey&, Value, Value) override { return false; }
+
+  Result<bool> Delete(const PropertyKey& key) override {
+    if (key.isSymbol()) return Object::Delete(key);
+    return !isExport(key);
+  }
+
+  Result<std::vector<PropertyKey>> OwnPropertyKeys() override {
+    std::vector<PropertyKey> keys;
+    for (String* name : exports_) keys.emplace_back(name);
+    std::vector<PropertyKey> own = TRY(Object::OwnPropertyKeys());
+    for (const PropertyKey& key : own) {
+      if (key.isSymbol()) keys.push_back(key);
+    }
+    return keys;
+  }
+
+  void trace(Tracer& tracer) override {
+    Object::trace(tracer);
+    tracer.visit(module_);
+    for (String* name : exports_) tracer.visit(reinterpret_cast<Cell*>(name));
+  }
+
+ private:
+  bool isExport(const PropertyKey& key) const {
+    Value name = key.toValue();
+    for (String* e : exports_) {
+      if (equals(e, name.asString())) return true;
+    }
+    return false;
+  }
+
+  ModuleRecord* module_;
+  std::vector<String*> exports_;  // sorted by code unit order
+};
+
+// 16.2.1.10 GetModuleNamespace
+Object* GetModuleNamespace(ModuleRecord* module) {
+  if (module->namespaceObject) return module->namespaceObject;
+  std::vector<ModuleRecord*> exportStarSet;
+  std::vector<std::u16string> exportedNames = GetExportedNames(module, exportStarSet);
+  std::vector<std::u16string> unambiguousNames;
+  for (const auto& name : exportedNames) {
+    if (ResolveExport(module, name).kind == ResolvedBinding::Kind::Binding) unambiguousNames.push_back(name);
+  }
+  std::sort(unambiguousNames.begin(), unambiguousNames.end());
+  std::vector<String*> exports;
+  for (const auto& name : unambiguousNames) exports.push_back(atom(name));
+  auto* ns = snowman::make<ModuleNamespace>(module, std::move(exports));
+  ns->properties().put(PropertyKey(vm().symbols.toStringTag), PropertySlot::data(Value(atom(u"Module")), Attr::None));
+  module->namespaceObject = ns;
+  return ns;
 }
 
-// InitializeEnvironment() (16.2.1.6.4); a JSON module's is the Synthetic Module Record's Link().
+// 16.2.1.6.4 InitializeEnvironment
 Result<void> InitializeEnvironment(ModuleRecord* module) {
-  auto* env = snowman::make<ModuleEnvironment>(globalEnvironment(module->realm));
+  Realm* realm = module->realm;
+  auto* env = snowman::make<ModuleEnvironment>(globalEnvironment(realm));
   module->environment = env;
-  if (module->isJSON()) {
-    env->createInitializedBinding(atom(kDefault), Value::undefined());
+  if (module->isSynthetic()) {
+    env->createInitializedBinding(atom(u"default"), module->syntheticDefault);
     return {};
   }
-  const ast::Program* program = module->program;
-  for (const auto& e : program->indirectExportEntries) {
-    ResolvedBinding resolution = resolveExport(module, *e.exportName);
-    if (!resolution.isResolved()) return unresolvable(*e.exportName, resolution);
+  const ast::Program* code = module->code;
+  for (const auto& e : code->indirectExportEntries) {
+    ResolvedBinding resolution = ResolveExport(module, *e.exportName);
+    if (resolution.kind != ResolvedBinding::Kind::Binding) {
+      return ThrowSyntaxError("The requested module does not provide an export named '" + utf16ToUtf8(*e.exportName) +
+                              "'" + (resolution.kind == ResolvedBinding::Kind::Ambiguous ? " (ambiguous)" : ""));
+    }
   }
-  for (const auto& in : program->importEntries) {
+  for (const auto& in : code->importEntries) {
     ModuleRecord* importedModule = GetImportedModule(module, in.moduleRequest);
     String* localName = atom(in.localName);
     if (in.isNamespaceObject) {
       env->createInitializedBinding(localName, Value(GetModuleNamespace(importedModule)), false);
       continue;
     }
-    ResolvedBinding resolution = resolveExport(importedModule, in.importName);
-    if (!resolution.isResolved()) return unresolvable(in.importName, resolution);
+    ResolvedBinding resolution = ResolveExport(importedModule, in.importName);
+    if (resolution.kind != ResolvedBinding::Kind::Binding) {
+      return ThrowSyntaxError("The requested module does not provide an export named '" + utf16ToUtf8(in.importName) +
+                              "'" + (resolution.kind == ResolvedBinding::Kind::Ambiguous ? " (ambiguous)" : ""));
+    }
     if (!resolution.bindingName) {
       env->createInitializedBinding(localName, Value(GetModuleNamespace(resolution.module)), false);
     } else {
       env->CreateImportBinding(localName, resolution.module, resolution.bindingName);
     }
   }
-
   InterpContext moduleContext;
-  moduleContext.realm = module->realm;
+  moduleContext.realm = realm;
   moduleContext.scriptOrModule = module;
   moduleContext.variableEnvironment = env;
   moduleContext.lexicalEnvironment = env;
   moduleContext.strict = true;
   ContextScope scope(&moduleContext);
-  for (const std::u16string& name : program->varNames) {
-    String* dn = atom(name);
-    if (!env->hasBindingDirect(dn)) env->createInitializedBinding(dn, Value::undefined());
+  for (const auto& dn : code->varNames) {
+    String* name = atom(dn);
+    if (env->hasBindingDirect(name)) continue;
+    env->createInitializedBinding(name, Value::undefined());
   }
-  for (const auto& d : program->lexicallyScopedDeclarations) {
-    for (const std::u16string& name : d.boundNames) {
-      String* dn = atom(name);
+  for (const auto& d : code->lexicallyScopedDeclarations) {
+    for (const auto& dn : d.boundNames) {
+      String* name = atom(dn);
       if (d.isConstant) {
-        TRY(env->CreateImmutableBinding(dn, true));
+        TRY(env->CreateImmutableBinding(name, true));
       } else {
-        TRY(env->CreateMutableBinding(dn, false));
+        TRY(env->CreateMutableBinding(name, false));
       }
       if (d.node->type == ast::NodeType::FunctionDeclaration) {
         Value fo = TRY(InstantiateFunctionObject(d.node->as<ast::FunctionDeclaration>(), env, nullptr));
-        TRY(env->InitializeBinding(dn, fo));
+        TRY(env->InitializeBinding(name, fo));
       }
     }
   }
   return {};
 }
 
-// InnerModuleLinking(module, stack, index)
+// 16.2.1.5.1.1 InnerModuleLinking
 Result<uint32_t> InnerModuleLinking(ModuleRecord* module, std::vector<ModuleRecord*>& stack, uint32_t index) {
-  using Status = ModuleRecord::Status;
-  if (module->status != Status::Unlinked) return index;
-  module->status = Status::Linking;
+  using S = ModuleRecord::Status;
+  if (module->status == S::Linking || module->status == S::Linked || module->status == S::EvaluatingAsync ||
+      module->status == S::Evaluated) {
+    return index;
+  }
+  module->status = S::Linking;
   module->dfsIndex = index;
   module->dfsAncestorIndex = index;
   index++;
   stack.push_back(module);
   for (ModuleRecord* requiredModule : module->loadedModules) {
     index = TRY(InnerModuleLinking(requiredModule, stack, index));
-    if (requiredModule->status == Status::Linking) {
+    if (requiredModule->status == S::Linking) {
       module->dfsAncestorIndex = std::min(module->dfsAncestorIndex, requiredModule->dfsAncestorIndex);
     }
   }
   TRY(InitializeEnvironment(module));
   if (module->dfsAncestorIndex == module->dfsIndex) {
-    ModuleRecord* requiredModule;
-    do {
-      requiredModule = stack.back();
+    while (true) {
+      ModuleRecord* requiredModule = stack.back();
       stack.pop_back();
-      requiredModule->status = Status::Linked;
-    } while (requiredModule != module);
+      requiredModule->status = S::Linked;
+      if (requiredModule == module) break;
+    }
   }
   return index;
 }
 
-// Link()
+// 16.2.1.5.1 Link()
 Result<void> Link(ModuleRecord* module) {
   std::vector<ModuleRecord*> stack;
   Result<uint32_t> result = InnerModuleLinking(module, stack, 0);
   if (result.isThrow()) {
-    for (ModuleRecord* m : stack) m->status = ModuleRecord::Status::Unlinked;
-    module->status = ModuleRecord::Status::Unlinked;
+    for (ModuleRecord* m : stack) {
+      m->status = ModuleRecord::Status::Unlinked;
+      m->environment = nullptr;
+    }
     return Throw{result.thrown()};
   }
   return {};
 }
 
-// ---- Evaluation ----
-
-using Status = ModuleRecord::Status;
-
-void AsyncModuleExecutionRejected(ModuleRecord* module, Value error);
-
-ModuleRecord* moduleInSlot(NativeCall& call, size_t slot) {
-  return static_cast<ModuleRecord*>(call.callee->slots[slot].asObject());
-}
-
-PromiseCapability* capabilityInSlot(NativeCall& call, size_t slot) {
-  return static_cast<PromiseCapability*>(call.callee->slots[slot].asObject());
-}
-
-// The body of a module with top-level await, on its async coroutine.
-Result<Value> asyncModuleBody(SuspendableObject* self) {
-  auto* module = static_cast<ModuleRecord*>(self->context.scriptOrModule);
-  TRY(evaluateStatementList(module->program->body));
+// The statements of a module body (Evaluation of ModuleBody).
+Result<Value> evaluateModuleBody(ModuleRecord* module) {
+  Completion completion = TRY(evaluateStatementList(module->code->body));
+  (void)completion;
   return Value::undefined();
 }
 
-// ExecuteModule([capability]); a JSON module's is the Synthetic Module Record's evaluation steps.
+Result<Value> moduleNativeBody(SuspendableObject* self) {
+  return evaluateModuleBody(static_cast<ModuleRecord*>(self->nativeData));
+}
+
+// 16.2.1.6.5 ExecuteModule([capability])
 Result<void> ExecuteModule(ModuleRecord* module, PromiseCapability* capability = nullptr) {
-  if (module->isJSON()) return module->environment->SetMutableBinding(atom(kDefault), module->jsonValue, true);
+  if (module->isSynthetic()) return {};
   InterpContext moduleContext;
   moduleContext.realm = module->realm;
   moduleContext.scriptOrModule = module;
@@ -461,41 +459,22 @@ Result<void> ExecuteModule(ModuleRecord* module, PromiseCapability* capability =
   moduleContext.strict = true;
   if (!module->hasTLA) {
     ContextScope scope(&moduleContext);
-    TRY(evaluateStatementList(module->program->body));
+    TRY(evaluateModuleBody(module));
     return {};
   }
-  AsyncNativeBlockStart(capability, asyncModuleBody, Value::undefined(), moduleContext);
+  AsyncNativeBlockStart(capability, moduleNativeBody, module, moduleContext);
   return {};
 }
 
-void AsyncModuleExecutionFulfilled(ModuleRecord* module);
+uint64_t gModuleAsyncEvaluationCount = 1;
 
-Result<Value> asyncModuleFulfilled(NativeCall& call) {
-  AsyncModuleExecutionFulfilled(moduleInSlot(call, 0));
-  return Value::undefined();
-}
+void ExecuteAsyncModule(ModuleRecord* module);
 
-Result<Value> asyncModuleRejected(NativeCall& call) {
-  AsyncModuleExecutionRejected(moduleInSlot(call, 0), call.args[0]);
-  return Value::undefined();
-}
-
-// ExecuteAsyncModule(module)
-void ExecuteAsyncModule(ModuleRecord* module) {
-  PromiseCapability* capability = newPromiseCapability();
-  BuiltinFunction* onFulfilled = closure(asyncModuleFulfilled, 0, {Value(module)});
-  BuiltinFunction* onRejected = closure(asyncModuleRejected, 0, {Value(module)});
-  PerformPromiseThen(promiseOf(capability), Value(onFulfilled), Value(onRejected));
-  (void)ExecuteModule(module, capability);
-}
-
-// GatherAvailableAncestors(module, execList)
+// 16.2.1.5.3.3 GatherAvailableAncestors
 void GatherAvailableAncestors(ModuleRecord* module, std::vector<ModuleRecord*>& execList) {
   for (ModuleRecord* m : module->asyncParentModules) {
     if (std::find(execList.begin(), execList.end(), m) != execList.end()) continue;
-    // A module whose synchronous evaluation threw has no [[CycleRoot]] but has the error itself.
-    ModuleRecord* root = m->cycleRoot ? m->cycleRoot : m;
-    if (root->hasEvaluationError) continue;
+    if (m->cycleRoot->hasEvaluationError) continue;
     m->pendingAsyncDependencies--;
     if (m->pendingAsyncDependencies == 0) {
       execList.push_back(m);
@@ -504,11 +483,22 @@ void GatherAvailableAncestors(ModuleRecord* module, std::vector<ModuleRecord*>& 
   }
 }
 
-// AsyncModuleExecutionFulfilled(module)
-void AsyncModuleExecutionFulfilled(ModuleRecord* module) {
-  if (module->status == Status::Evaluated) return;  // it already has an evaluation error
+// 16.2.1.5.3.5 AsyncModuleExecutionRejected
+void AsyncModuleExecutionRejected(ModuleRecord* module, Value error) {
+  if (module->status == ModuleRecord::Status::Evaluated) return;
+  module->hasEvaluationError = true;
+  module->evaluationError = error;
+  module->status = ModuleRecord::Status::Evaluated;
   module->asyncEvaluation = false;
-  module->status = Status::Evaluated;
+  for (ModuleRecord* m : module->asyncParentModules) AsyncModuleExecutionRejected(m, error);
+  if (module->topLevelCapability) (void)rejectCapability(module->topLevelCapability, error);
+}
+
+// 16.2.1.5.3.4 AsyncModuleExecutionFulfilled
+void AsyncModuleExecutionFulfilled(ModuleRecord* module) {
+  if (module->status == ModuleRecord::Status::Evaluated) return;
+  module->asyncEvaluation = false;
+  module->status = ModuleRecord::Status::Evaluated;
   if (module->topLevelCapability) (void)resolveCapability(module->topLevelCapability, Value::undefined());
   std::vector<ModuleRecord*> execList;
   GatherAvailableAncestors(module, execList);
@@ -516,7 +506,7 @@ void AsyncModuleExecutionFulfilled(ModuleRecord* module) {
     return a->asyncEvaluationOrder < b->asyncEvaluationOrder;
   });
   for (ModuleRecord* m : execList) {
-    if (m->status == Status::Evaluated) continue;
+    if (m->status == ModuleRecord::Status::Evaluated) continue;
     if (m->hasTLA) {
       ExecuteAsyncModule(m);
       continue;
@@ -527,30 +517,62 @@ void AsyncModuleExecutionFulfilled(ModuleRecord* module) {
       continue;
     }
     m->asyncEvaluation = false;
-    m->status = Status::Evaluated;
+    m->status = ModuleRecord::Status::Evaluated;
     if (m->topLevelCapability) (void)resolveCapability(m->topLevelCapability, Value::undefined());
   }
 }
 
-// AsyncModuleExecutionRejected(module, error)
-void AsyncModuleExecutionRejected(ModuleRecord* module, Value error) {
-  if (module->status == Status::Evaluated) return;
-  module->hasEvaluationError = true;
-  module->evaluationError = error;
-  module->status = Status::Evaluated;
-  module->asyncEvaluation = false;
-  for (ModuleRecord* m : module->asyncParentModules) AsyncModuleExecutionRejected(m, error);
-  if (module->topLevelCapability) (void)rejectCapability(module->topLevelCapability, error);
+// A module held in a closure's slot (an object wrapper, since slots hold Values).
+class ModuleHolder final : public Object {
+ public:
+  explicit ModuleHolder(ModuleRecord* module) : Object(nullptr), module(module) {}
+  void trace(Tracer& tracer) override {
+    Object::trace(tracer);
+    tracer.visit(module);
+  }
+  ModuleRecord* module;
+};
+
+ModuleRecord* heldModule(NativeCall& call) { return call.callee->slots[0].asObject()->as<ModuleHolder>()->module; }
+
+Result<Value> asyncModuleFulfilled(NativeCall& call) {
+  AsyncModuleExecutionFulfilled(heldModule(call));
+  return Value::undefined();
 }
 
-// InnerModuleEvaluation(module, stack, index)
+Result<Value> asyncModuleRejected(NativeCall& call) {
+  AsyncModuleExecutionRejected(heldModule(call), call.args[0]);
+  return Value::undefined();
+}
+
+BuiltinFunction* moduleClosure(NativeFn fn, int length, ModuleRecord* module) {
+  BuiltinFunction* function = createBuiltinFunction(*vm().currentRealm(), fn, length, PropertyKey(emptyString()));
+  function->slots.push_back(Value(snowman::make<ModuleHolder>(module)));
+  return function;
+}
+
+PromiseCapability* intrinsicCapability() {
+  return NewPromiseCapability(Value(vm().currentRealm()->intrinsic(Intrinsic::Promise))).release();
+}
+
+// 16.2.1.5.3.2 ExecuteAsyncModule
+void ExecuteAsyncModule(ModuleRecord* module) {
+  PromiseCapability* capability = intrinsicCapability();
+  BuiltinFunction* onFulfilled = moduleClosure(asyncModuleFulfilled, 0, module);
+  BuiltinFunction* onRejected = moduleClosure(asyncModuleRejected, 0, module);
+  PerformPromiseThen(capability->promise.asObject()->as<PromiseObject>(), Value(onFulfilled), Value(onRejected));
+  (void)ExecuteModule(module, capability);
+}
+
+// 16.2.1.5.3.1 InnerModuleEvaluation
 Result<uint32_t> InnerModuleEvaluation(ModuleRecord* module, std::vector<ModuleRecord*>& stack, uint32_t index) {
-  if (module->status == Status::EvaluatingAsync || module->status == Status::Evaluated) {
-    if (module->hasEvaluationError) return Throw{module->evaluationError};
-    return index;
+  using S = ModuleRecord::Status;
+  if (module->status == S::EvaluatingAsync || module->status == S::Evaluated) {
+    if (!module->hasEvaluationError) return index;
+    return Throw{module->evaluationError};
   }
-  if (module->status == Status::Evaluating) return index;
-  module->status = Status::Evaluating;
+  if (module->status == S::Evaluating) return index;
+  module->status = S::Evaluating;
   module->dfsIndex = index;
   module->dfsAncestorIndex = index;
   module->pendingAsyncDependencies = 0;
@@ -558,7 +580,7 @@ Result<uint32_t> InnerModuleEvaluation(ModuleRecord* module, std::vector<ModuleR
   stack.push_back(module);
   for (ModuleRecord* requiredModule : module->loadedModules) {
     index = TRY(InnerModuleEvaluation(requiredModule, stack, index));
-    if (requiredModule->status == Status::Evaluating) {
+    if (requiredModule->status == S::Evaluating) {
       module->dfsAncestorIndex = std::min(module->dfsAncestorIndex, requiredModule->dfsAncestorIndex);
     } else {
       requiredModule = requiredModule->cycleRoot;
@@ -571,36 +593,37 @@ Result<uint32_t> InnerModuleEvaluation(ModuleRecord* module, std::vector<ModuleR
   }
   if (module->pendingAsyncDependencies > 0 || module->hasTLA) {
     module->asyncEvaluation = true;
-    module->asyncEvaluationOrder = ++asyncEvaluationCounter;
+    module->asyncEvaluationOrder = gModuleAsyncEvaluationCount++;
     if (module->pendingAsyncDependencies == 0) ExecuteAsyncModule(module);
   } else {
     TRY(ExecuteModule(module));
   }
   if (module->dfsAncestorIndex == module->dfsIndex) {
-    ModuleRecord* requiredModule;
-    do {
-      requiredModule = stack.back();
+    while (true) {
+      ModuleRecord* requiredModule = stack.back();
       stack.pop_back();
-      requiredModule->status = requiredModule->asyncEvaluation ? Status::EvaluatingAsync : Status::Evaluated;
+      requiredModule->status = requiredModule->asyncEvaluation ? S::EvaluatingAsync : S::Evaluated;
       requiredModule->cycleRoot = module;
-    } while (requiredModule != module);
+      if (requiredModule == module) break;
+    }
   }
   return index;
 }
 
-// Evaluate(): the module's top-level promise capability.
-PromiseCapability* Evaluate(ModuleRecord* module) {
-  if ((module->status == Status::EvaluatingAsync || module->status == Status::Evaluated) && module->cycleRoot) {
+// 16.2.1.5.3 Evaluate(): the module's promise.
+Value Evaluate(ModuleRecord* module) {
+  using S = ModuleRecord::Status;
+  if ((module->status == S::EvaluatingAsync || module->status == S::Evaluated) && module->cycleRoot) {
     module = module->cycleRoot;
   }
-  if (module->topLevelCapability) return module->topLevelCapability;
+  if (module->topLevelCapability) return module->topLevelCapability->promise;
   std::vector<ModuleRecord*> stack;
-  PromiseCapability* capability = newPromiseCapability();
+  PromiseCapability* capability = intrinsicCapability();
   module->topLevelCapability = capability;
   Result<uint32_t> result = InnerModuleEvaluation(module, stack, 0);
   if (result.isThrow()) {
     for (ModuleRecord* m : stack) {
-      m->status = Status::Evaluated;
+      m->status = S::Evaluated;
       m->hasEvaluationError = true;
       m->evaluationError = result.thrown();
     }
@@ -608,33 +631,48 @@ PromiseCapability* Evaluate(ModuleRecord* module) {
   } else if (!module->asyncEvaluation) {
     (void)resolveCapability(capability, Value::undefined());
   }
-  return capability;
+  return capability->promise;
 }
 
-// ---- import() ----
+// The directory and realm a referrer (Script Record, Module Record, or none) loads modules for.
+void referrerLocation(Cell* referrer, std::string& directory, Realm*& realm) {
+  realm = vm().currentRealm();
+  directory = gScriptDirectory;
+  if (auto* module = dynamic_cast<ModuleRecord*>(referrer)) {
+    directory = directoryOf(module->path);
+    realm = module->realm;
+  } else if (auto* script = dynamic_cast<ScriptRecord*>(referrer)) {
+    realm = script->realm;
+  }
+}
 
-Result<Value> rejectDynamicImport(NativeCall& call) {
-  (void)rejectCapability(capabilityInSlot(call, 0), call.args[0]);
+// slots: [capability]
+Result<Value> dynamicImportRejected(NativeCall& call) {
+  (void)rejectCapability(call.callee->slots[0].asObject()->as<PromiseCapability>(), call.args[0]);
   return Value::undefined();
 }
 
-Result<Value> fulfillDynamicImport(NativeCall& call) {
-  (void)resolveCapability(capabilityInSlot(call, 0), Value(GetModuleNamespace(moduleInSlot(call, 1))));
+// slots: [module holder, capability]
+Result<Value> dynamicImportEvaluated(NativeCall& call) {
+  ModuleRecord* module = heldModule(call);
+  auto* capability = call.callee->slots[1].asObject()->as<PromiseCapability>();
+  (void)resolveCapability(capability, Value(GetModuleNamespace(module)));
   return Value::undefined();
 }
 
-Result<Value> linkAndEvaluateDynamicImport(NativeCall& call) {
-  PromiseCapability* promiseCapability = capabilityInSlot(call, 0);
-  ModuleRecord* module = moduleInSlot(call, 1);
+// slots: [module holder, capability, onRejected]
+Result<Value> dynamicImportLinkAndEvaluate(NativeCall& call) {
+  ModuleRecord* module = heldModule(call);
+  auto* capability = call.callee->slots[1].asObject()->as<PromiseCapability>();
   Result<void> link = Link(module);
   if (link.isThrow()) {
-    (void)rejectCapability(promiseCapability, link.thrown());
+    (void)rejectCapability(capability, link.thrown());
     return Value::undefined();
   }
-  PromiseCapability* evaluatePromise = Evaluate(module);
-  BuiltinFunction* onFulfilled = closure(fulfillDynamicImport, 0, {Value(promiseCapability), Value(module)});
-  BuiltinFunction* onRejected = closure(rejectDynamicImport, 1, {Value(promiseCapability)});
-  PerformPromiseThen(promiseOf(evaluatePromise), Value(onFulfilled), Value(onRejected));
+  Value evaluatePromise = Evaluate(module);
+  BuiltinFunction* onFulfilled = moduleClosure(dynamicImportEvaluated, 0, module);
+  onFulfilled->slots.push_back(Value(capability));
+  PerformPromiseThen(evaluatePromise.asObject()->as<PromiseObject>(), Value(onFulfilled), call.callee->slots[2]);
   return Value::undefined();
 }
 
@@ -645,56 +683,72 @@ void ContinueDynamicImport(PromiseCapability* promiseCapability, Result<ModuleRe
     return;
   }
   ModuleRecord* module = moduleCompletion.value();
-  PromiseCapability* loadPromise = LoadRequestedModules(module);
-  BuiltinFunction* onRejected = closure(rejectDynamicImport, 1, {Value(promiseCapability)});
-  BuiltinFunction* linkAndEvaluate =
-      closure(linkAndEvaluateDynamicImport, 0, {Value(promiseCapability), Value(module)});
-  PerformPromiseThen(promiseOf(loadPromise), Value(linkAndEvaluate), Value(onRejected));
+  PromiseCapability* loadCapability = intrinsicCapability();
+  Result<void> loaded = loadRequestedModules(module);
+  if (loaded.isThrow()) {
+    (void)rejectCapability(loadCapability, loaded.thrown());
+  } else {
+    (void)resolveCapability(loadCapability, Value::undefined());
+  }
+  BuiltinFunction* onRejected = createBuiltinFunction(*vm().currentRealm(), dynamicImportRejected, 1, PropertyKey(emptyString()));
+  onRejected->slots.push_back(Value(promiseCapability));
+  BuiltinFunction* linkAndEvaluate = moduleClosure(dynamicImportLinkAndEvaluate, 0, module);
+  linkAndEvaluate->slots.push_back(Value(promiseCapability));
+  linkAndEvaluate->slots.push_back(Value(onRejected));
+  PerformPromiseThen(loadCapability->promise.asObject()->as<PromiseObject>(), Value(linkAndEvaluate), Value(onRejected));
 }
 
-// The import attributes of import()'s options (EvaluateImportCall steps 10–11).
-Result<std::vector<ast::ImportAttributeEntry>> importCallAttributes(Value options) {
-  std::vector<ast::ImportAttributeEntry> attributes;
-  if (options.isUndefined()) return attributes;
-  if (!options.isObject()) return ThrowTypeError("The second argument of import() must be an object");
-  Value attributesObj = TRY(Get(options.asObject(), PropertyKey(u"with")));
-  if (attributesObj.isUndefined()) return attributes;
-  if (!attributesObj.isObject()) return ThrowTypeError("The 'with' option of import() must be an object");
-  ValueVector entries = TRY(EnumerableOwnProperties(attributesObj.asObject(), EnumerableOwnKind::KeyValue));
-  for (Value entry : entries) {
-    Value key = TRY(Get(entry.asObject(), PropertyKey::index(0)));
-    Value value = TRY(Get(entry.asObject(), PropertyKey::index(1)));
-    if (!value.isString()) return ThrowTypeError("Import attribute values must be strings");
-    attributes.push_back({std::u16string(key.asString()->view()), std::u16string(value.asString()->view())});
-  }
-  if (!AllImportAttributesSupported(attributes)) return ThrowTypeError("Unsupported import attribute");
-  std::sort(attributes.begin(), attributes.end(),
-            [](const ast::ImportAttributeEntry& a, const ast::ImportAttributeEntry& b) { return a.key < b.key; });
-  return attributes;
+Value rejectedWithTypeError(PromiseCapability* capability, const char* message) {
+  (void)rejectCapability(capability, Value(CreateError(vm().currentRealm(), Intrinsic::TypeErrorPrototype, message)));
+  return capability->promise;
 }
 
 }  // namespace
 
-// 13.3.10.1 EvaluateImportCall(specifierExpression, optionsExpression)
+// 13.3.10.2 EvaluateImportCall
 Result<Value> evaluateImportCall(const ast::ImportExpression* node) {
-  Cell* referrer = GetActiveScriptOrModule();  // nullptr: the current Realm Record
+  Cell* referrer = GetActiveScriptOrModule();
   Value specifier = TRY(evaluate(node->source));
   Value options = Value::undefined();
   if (node->options) options = TRY(evaluate(node->options));
-  PromiseCapability* promiseCapability = newPromiseCapability();
+  PromiseCapability* promiseCapability = intrinsicCapability();
   Result<String*> specifierString = ToString(specifier);
   if (specifierString.isThrow()) {
     (void)rejectCapability(promiseCapability, specifierString.thrown());
     return promiseCapability->promise;
   }
-  Result<std::vector<ast::ImportAttributeEntry>> attributes = importCallAttributes(options);
-  if (attributes.isThrow()) {
-    (void)rejectCapability(promiseCapability, attributes.thrown());
-    return promiseCapability->promise;
+  ast::ModuleRequest request;
+  request.specifier = std::u16string(specifierString.value()->view());
+  if (!options.isUndefined()) {
+    if (!options.isObject()) return rejectedWithTypeError(promiseCapability, "The second argument of import() must be an object");
+    Result<Value> attributesObj = Get(options.asObject(), PropertyKey(u"with"));
+    if (attributesObj.isThrow()) {
+      (void)rejectCapability(promiseCapability, attributesObj.thrown());
+      return promiseCapability->promise;
+    }
+    if (!attributesObj.value().isUndefined()) {
+      if (!attributesObj.value().isObject()) return rejectedWithTypeError(promiseCapability, "The 'with' option must be an object");
+      Result<ValueVector> entries = EnumerableOwnProperties(attributesObj.value().asObject(), EnumerableOwnKind::KeyValue);
+      if (entries.isThrow()) {
+        (void)rejectCapability(promiseCapability, entries.thrown());
+        return promiseCapability->promise;
+      }
+      for (Value entry : entries.value()) {
+        Value key = Get(entry.asObject(), PropertyKey::index(0)).release();
+        Value value = Get(entry.asObject(), PropertyKey::index(1)).release();
+        if (!key.isString()) continue;
+        if (!value.isString()) return rejectedWithTypeError(promiseCapability, "Import attribute values must be strings");
+        request.attributes.push_back({std::u16string(key.asString()->view()), std::u16string(value.asString()->view())});
+      }
+      for (const auto& attribute : request.attributes) {
+        if (attribute.key != u"type") return rejectedWithTypeError(promiseCapability, "Unsupported import attribute");
+      }
+    }
   }
-  // HostLoadImportedModule(referrer, moduleRequest, empty, promiseCapability), which finishes at once.
-  std::u16string name(specifierString.value()->view());
-  ContinueDynamicImport(promiseCapability, loadImportedModule(referrer, name, attributes.value()));
+  std::string directory;
+  Realm* realm;
+  referrerLocation(referrer, directory, realm);
+  ContinueDynamicImport(promiseCapability, hostLoadImportedModule(realm, directory, request));
   return promiseCapability->promise;
 }
 
@@ -706,32 +760,27 @@ Result<Value> evaluateImportMeta() {
   return Value(module->importMeta);
 }
 
-// ---- The CLI ----
+Result<void> runModuleFile(Realm* realm, const std::string& path, std::u16string source) {
+  std::string resolved = resolveSpecifier(".", path.starts_with("/") ? path : "./" + path).value();
+  setScriptDirectory(directoryOf(resolved));
+  ModuleRecord* module = TRY(createModule(realm, resolved, std::move(source), false));
+  realmState(realm)->moduleMap.emplace_back(resolved, module);
+  ExecutionContext context;
+  context.realm = realm;
+  ContextScope scope(&context);
+  TRY(loadRequestedModules(module));
+  TRY(Link(module));
+  Value promise = Evaluate(module);
+  TRY(vm().runJobs());
+  auto* evaluated = promise.asObject()->as<PromiseObject>();
+  if (evaluated->state == PromiseObject::State::Rejected) return Throw{evaluated->result};
+  return {};
+}
 
 namespace {
 
-// A settled promise's rejection reason, if it was rejected.
-bool rejected(PromiseCapability* capability, Value& reason) {
-  PromiseObject* promise = promiseOf(capability);
-  if (promise->state != PromiseObject::State::Rejected) return false;
-  promise->isHandled = true;
-  reason = promise->result;
-  return true;
-}
-
 }  // namespace
 
-Result<void> runModuleFile(Realm* realm, const std::string& path, std::u16string source) {
-  setHostMainPath(path);
-  ModuleRecord* module = TRY(ParseModule(std::move(source), realm, mainPath));
-  realmState(realm)->moduleMap.emplace_back(mainPath, module);
-  Value reason;
-  if (rejected(LoadRequestedModules(module), reason)) return Throw{reason};
-  TRY(Link(module));
-  PromiseCapability* evaluation = Evaluate(module);
-  TRY(vm().runJobs());
-  if (rejected(evaluation, reason)) return Throw{reason};
-  return {};
-}
+void setScriptDirectory(const std::string& directory) { gScriptDirectory = directory; }
 
 }  // namespace snowman::interp

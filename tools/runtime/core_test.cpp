@@ -216,6 +216,18 @@ int main() {
   auto tag2 = Call(Get(realm->intrinsic(Intrinsic::ObjectPrototype), PropertyKey(u"toString")).release(), ta.value(), {});
   CHECK(str(tag2.value().asString()) == "[object Uint8Array]");
 
+  auto b64 = Call(Get(u8, PropertyKey(u"fromBase64")).release(), u8, {Value(newStringFromUtf8(" SGVs bG8= "))});
+  CHECK(b64.isNormal() && str(Invoke(b64.value(), PropertyKey(u"toHex")).release().asString()) == "48656c6c6f");
+  CHECK(str(Invoke(b64.value(), PropertyKey(u"toBase64")).release().asString()) == "SGVsbG8=");
+  auto badB64 = Call(Get(u8, PropertyKey(u"fromBase64")).release(), u8, {Value(newStringFromUtf8("SGVsbG8"))});
+  CHECK(badB64.isNormal());
+  Object* strictOpts = OrdinaryObjectCreate(nullptr);
+  (void)CreateDataProperty(strictOpts, PropertyKey(u"lastChunkHandling"), Value(newStringFromUtf8("strict")));
+  CHECK(Call(Get(u8, PropertyKey(u"fromBase64")).release(), u8, {Value(newStringFromUtf8("SGVsbG8")), Value(strictOpts)}).isThrow());
+  auto sum = Call(Get(Get(global, PropertyKey(u"Math")).release().asObject(), PropertyKey(u"sumPrecise")).release(), Value(),
+                  {Value(CreateArrayFromList({Value::number(1e20), Value::number(0.1), Value::number(-1e20)}))});
+  CHECK(sum.isNormal() && sum.value().asNumber() == 0.1);
+
   auto far = Construct(dateCtor, {Value::number(-8.64e15)});
   auto farIso = Invoke(far.value(), PropertyKey(u"toISOString"));
   CHECK(farIso.isNormal() && str(farIso.value().asString()) == "-271821-04-20T00:00:00.000Z");

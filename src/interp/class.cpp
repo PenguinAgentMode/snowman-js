@@ -237,6 +237,32 @@ void addPrivateMethod(std::vector<PrivateElement>& container, const PrivateEleme
   container.push_back(element);
 }
 
+// The element lists of a class being defined: a cell, so the collector sees the closures they hold.
+class ClassElements final : public Cell {
+ public:
+  void trace(Tracer& tracer) override {
+    for (auto* list : {&instancePrivateMethods, &staticPrivateMethods}) {
+      for (auto& element : *list) {
+        tracer.visit(element.key);
+        tracer.visit(element.value);
+        tracer.visit(element.getter);
+        tracer.visit(element.setter);
+      }
+    }
+    for (auto* list : {&instanceFields, &staticElements}) {
+      for (auto& field : *list) {
+        if (field.key) field.key->trace(tracer);
+        tracer.visit(field.privateName);
+        tracer.visit(field.initializer);
+      }
+    }
+  }
+  std::vector<PrivateElement> instancePrivateMethods;
+  std::vector<PrivateElement> staticPrivateMethods;
+  std::vector<ClassFieldDefinition> instanceFields;
+  std::vector<ClassFieldDefinition> staticElements;
+};
+
 // Restores the running context's environments and strictness when the class definition ends.
 class ClassScope {
  public:
@@ -334,10 +360,11 @@ Result<Value> ClassDefinitionEvaluation(const Class* node, String* classBinding,
   if (node->superClass) F->derived = true;
   TRY(DefineMethodProperty(proto, Value(atom(u"constructor")), F, false));
 
-  std::vector<PrivateElement> instancePrivateMethods;
-  std::vector<PrivateElement> staticPrivateMethods;
-  std::vector<ClassFieldDefinition> instanceFields;
-  std::vector<ClassFieldDefinition> staticElements;
+  auto* elements = snowman::make<ClassElements>();
+  auto& instancePrivateMethods = elements->instancePrivateMethods;
+  auto& staticPrivateMethods = elements->staticPrivateMethods;
+  auto& instanceFields = elements->instanceFields;
+  auto& staticElements = elements->staticElements;
   for (const Node* e : node->body->body) {
     if (e->type == NodeType::MethodDefinition && e->as<MethodDefinition>()->kind == MethodKind::Constructor) continue;
     bool isStatic = isStaticElement(e);

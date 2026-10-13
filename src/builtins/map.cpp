@@ -98,6 +98,29 @@ Result<Value> MapPrototype_set(NativeCall& call) {
   return call.thisValue;
 }
 
+// Map.prototype.getOrInsert ( key, value )
+Result<Value> MapPrototype_getOrInsert(NativeCall& call) {
+  MapObject* m = TRY(thisMap(call.thisValue, "getOrInsert"));
+  Value key = CanonicalizeKeyedCollectionKey(call.args[0]);
+  long i = m->mapData.find(key);
+  if (i >= 0) return m->mapData.entries()[size_t(i)].value;
+  m->mapData.set(key, call.args[1]);
+  return call.args[1];
+}
+
+// Map.prototype.getOrInsertComputed ( key, callbackfn )
+Result<Value> MapPrototype_getOrInsertComputed(NativeCall& call) {
+  MapObject* m = TRY(thisMap(call.thisValue, "getOrInsertComputed"));
+  if (!IsCallable(call.args[1])) return ThrowTypeError("Map.prototype.getOrInsertComputed: callback is not a function");
+  Value key = CanonicalizeKeyedCollectionKey(call.args[0]);
+  long i = m->mapData.find(key);
+  if (i >= 0) return m->mapData.entries()[size_t(i)].value;
+  Value value = TRY(Call(call.args[1], Value::undefined(), {key}));
+  // The callback may have inserted the key itself: overwrite in place.
+  m->mapData.set(key, value);
+  return value;
+}
+
 Result<Value> MapPrototype_size(NativeCall& call) {
   MapObject* m = TRY(thisMap(call.thisValue, "size"));
   return num(double(m->mapData.liveCount()));
@@ -177,6 +200,8 @@ void installMap(Realm& realm) {
   BuiltinFunction* entries = defineFunction(realm, proto, PropertyKey(u"entries"), 0, MapPrototype_entries);
   defineFunction(realm, proto, PropertyKey(u"forEach"), 1, MapPrototype_forEach);
   defineFunction(realm, proto, PropertyKey(u"get"), 1, MapPrototype_get);
+  defineFunction(realm, proto, PropertyKey(u"getOrInsert"), 2, MapPrototype_getOrInsert);
+  defineFunction(realm, proto, PropertyKey(u"getOrInsertComputed"), 2, MapPrototype_getOrInsertComputed);
   defineFunction(realm, proto, PropertyKey(u"has"), 1, MapPrototype_has);
   defineFunction(realm, proto, PropertyKey(u"keys"), 0, MapPrototype_keys);
   defineFunction(realm, proto, PropertyKey(u"set"), 2, MapPrototype_set);

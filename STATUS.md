@@ -2,10 +2,12 @@
 
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
-| parser | parser | `ws/parser` | `src/parser/`, `tools/parser/` | M1a + M1b reached (a43fced; measured on main 2551c6978) — done |
+| parser | (closed) | `ws/parser` | `src/parser/`, `tools/parser/` | M1a + M1b reached (a43fced; main 2551c6978); agent closed |
 | regexp | regexp | `ws/regexp` | `src/regexp/`, `src/unicode/`, `tools/unicode/` | validator + matcher merged (1761872); RegExp built-in tests |
 | runtime | runtime | `ws/runtime` | `src/runtime/` (implements the lead's headers), `src/builtins/` except interp's files | M2 built-ins + Date, buffers, TypedArrays, Atomics merged (18fad18); RegExp built-in (ws/runtime-regexp) |
-| interp | interp | `ws/interp` | `src/interp/`; `src/builtins/` function_constructor, eval, generator, async_function, async_generator, async_from_sync_iterator, promise | evaluator merged (bc8b128, links; untested: no parser yet); modules; M2 |
+| interp | (broken: harness error; stranded dd7035b/fb5f7d9/e639ee9) | `ws/interp` | — | last pushed a56635f |
+| interp2 | interp2 | `ws/interp2` | `src/interp/` except modules; interp's built-in files; disposable_stack, async_disposable_stack, suppressed_error, array_from_async | detachArrayBuffer, explicit resource management, Array.fromAsync, language failures, perf |
+| modules | modules | `ws/modules` | `src/interp/module*`, import()/import.meta evaluation, `--module` CLI path | re-implementing modules (module-code, dynamic-import, TLA) |
 
 Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interfaces), `INTERFACES.md`, `PLAN.md`,
 `t262/`, `results/`, `STATUS.md`, `Makefile`.

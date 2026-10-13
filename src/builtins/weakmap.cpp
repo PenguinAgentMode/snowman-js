@@ -52,6 +52,28 @@ Result<Value> WeakMapPrototype_has(NativeCall& call) {
   return boolean(m->entries.count(call.args[0].asCell()) > 0);
 }
 
+// WeakMap.prototype.getOrInsert ( key, value )
+Result<Value> WeakMapPrototype_getOrInsert(NativeCall& call) {
+  WeakMapObject* m = TRY(thisWeakMap(call.thisValue, "getOrInsert"));
+  if (!CanBeHeldWeakly(call.args[0])) return ThrowTypeError("Invalid value used as weak map key");
+  auto it = m->entries.find(call.args[0].asCell());
+  if (it != m->entries.end()) return it->second;
+  m->entries[call.args[0].asCell()] = call.args[1];
+  return call.args[1];
+}
+
+// WeakMap.prototype.getOrInsertComputed ( key, callbackfn )
+Result<Value> WeakMapPrototype_getOrInsertComputed(NativeCall& call) {
+  WeakMapObject* m = TRY(thisWeakMap(call.thisValue, "getOrInsertComputed"));
+  if (!CanBeHeldWeakly(call.args[0])) return ThrowTypeError("Invalid value used as weak map key");
+  if (!IsCallable(call.args[1])) return ThrowTypeError("WeakMap.prototype.getOrInsertComputed: callback is not a function");
+  auto it = m->entries.find(call.args[0].asCell());
+  if (it != m->entries.end()) return it->second;
+  Value value = TRY(Call(call.args[1], Value::undefined(), {call.args[0]}));
+  m->entries[call.args[0].asCell()] = value;
+  return value;
+}
+
 Result<Value> WeakMapPrototype_set(NativeCall& call) {
   WeakMapObject* m = TRY(thisWeakMap(call.thisValue, "set"));
   if (!CanBeHeldWeakly(call.args[0])) return ThrowTypeError("Invalid value used as weak map key");
@@ -64,6 +86,8 @@ void installWeakMap(Realm& realm) {
   defineConstructor(realm, Intrinsic::WeakMap, WeakMap_construct, 0, PropertyKey(u"WeakMap"), proto, Intrinsic::WeakMapPrototype);
   defineFunction(realm, proto, PropertyKey(u"delete"), 1, WeakMapPrototype_delete);
   defineFunction(realm, proto, PropertyKey(u"get"), 1, WeakMapPrototype_get);
+  defineFunction(realm, proto, PropertyKey(u"getOrInsert"), 2, WeakMapPrototype_getOrInsert);
+  defineFunction(realm, proto, PropertyKey(u"getOrInsertComputed"), 2, WeakMapPrototype_getOrInsertComputed);
   defineFunction(realm, proto, PropertyKey(u"has"), 1, WeakMapPrototype_has);
   defineFunction(realm, proto, PropertyKey(u"set"), 2, WeakMapPrototype_set);
   defineValue(proto, PropertyKey(symbols().toStringTag), str(u"WeakMap"), Attr::Configurable);
