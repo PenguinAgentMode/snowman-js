@@ -16,20 +16,21 @@ Updated: 2026-10-13, after the c21bcd8 measurement.
   quote-string-for-nul-character}.js) + flaky staging/sm/Date/dst-offset-caching-* timeouts (7-10 s each).
 
 ## In progress (lead's queue, in order)
-1. Gate ws/interp2-r (local + push: 3 commits rebased on main 0c92d79-ish; interp2's Promise.try commit
-   dropped, main already has the same fix) and ws/runtime-r (351e794 rebased + my IsHTMLDDA host hook
-   + typeof commit). Each: make warning-free, full ES-core vs results/c21bcd82e.json, GC stress spot-check
-   (SNOWMAN_GC_STRESS=N exists only with interp2's commit).
-2. kStackBytesBudget under the 700 MB watchdog for staging/sm/extensions/recursion.js. Its part 1 (infinite
-   plain recursion) leaves ~480 MB of main stack resident; part 2 starts one 256 KB coroutine per level.
-   Lowering the coroutine budget to 128 MB may not suffice: measure, consider madvise(DONTNEED) of the dead
-   main-stack pages.
-3. tools/lead/es-core-residue.md on ws/measure: group the 142 failing ES-core files by cause (nodegap:
-   111+3 Atomics, 16+9 annexB, 2 Promise, 1 Object); $262.agent design estimate. Per-agent state found:
-   vm(), heap(), atom table (runtime/string.cpp), coroutine globals (gCurrent, gStackPool, gStackBytes),
-   parser gChunk, gScriptDirectory, waitAsync WaiterLists.
-4. Root causes of the 5 memory-hungry staging tests (peak RSS: recursion.js 932 MB; unicode-{class-,}braced
-   444 MB but >1 GB VM; regress-610026 2.3 GB; replace-math 1.3 GB, fixed by builtins' GetSubstitution).
+1. DONE ws/interp2-r 7b89bae -> main 23c2b86 (gate vs c21bcd82e: 0 regressions, 43,166; GC stress=10 clean).
+   ws/runtime-r: 416792a gated clean on base e535e4b (43,191, 0 regressions) but overlaps main in
+   src/interp/{expressions,host}.cpp, so rebased on main ec34f4f as 44d3159 (host.cpp: kept both lines);
+   its ES-core gate vs results/c21bcd82e.json runs at /tmp/runtime2-core.jsonl. Then merge request.
+2. After runtime-r merges: post-merge `tools/lead/measure.sh suite results/c21bcd82e.json` on main (detach
+   at the exact sha), gate.mjs ES-core vs c21bcd82e and full vs c21bcd82e-full, clusters.mjs vs
+   c21bcd82e-full, publish (ws/measure + results branch), send milestones verbatim.
+3. Then a fresh-start brief from the lead for the next area. Pending items that brief may cover:
+   - kStackBytesBudget vs the 700 MB watchdog (staging/sm/extensions/recursion.js): part 1 (infinite
+     plain recursion) leaves ~480 MB of main stack resident; part 2 starts one 256 KB coroutine per level.
+     A 128 MB coroutine budget alone may not suffice: measure; option madvise(DONTNEED) of dead main stack.
+   - Memory root causes, to confirm by measurement: unicode-{class-,}braced build a 16M-char pattern
+     ("0".repeat(2**24)) through eval/new RegExp, so several 32 MB UTF-16 copies + M_TRIM_THRESHOLD 1 GB keep
+     address space growing; regress-610026 evals ~2M then ~4M "{}" blocks (~380 B/block: AST + scope + env).
+   - tools/lead/es-core-residue.md (ws/measure 4f999b1) is written; section 4 (memory) still to add.
 
 ## Machine / gotchas
 - Worktrees: ~/repo/snowman-js (measuring checkout: keep clean, detach at the exact main sha so the label
