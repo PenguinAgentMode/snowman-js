@@ -2,6 +2,7 @@
 // PartitionDurationFormatPattern over Intl.NumberFormat and Intl.ListFormat.
 #include <cmath>
 
+#include "builtins/intl/hooks.h"
 #include "builtins/intl/intl.h"
 #include "builtins/intl/services.h"
 #include "builtins/temporal/temporal.h"
@@ -76,12 +77,11 @@ Result<UnitOptions> GetDurationUnitOptions(int unit, Object* options, const std:
   return UnitOptions{*style, display};
 }
 
-// 13.1.1 Intl.DurationFormat ( [ locales [ , options ] ] )
-Result<Value> DurationFormat_construct(NativeCall& call) {
-  if (!call.newTarget) return ThrowTypeError("Constructor Intl.DurationFormat requires 'new'");
-  DurationFormatObject* df = TRY(OrdinaryCreateFromConstructor<DurationFormatObject>(call.newTarget, Intrinsic::IntlDurationFormatPrototype));
-  std::vector<std::string> requested = TRY(CanonicalizeLocaleList(call.args[0]));
-  Object* options = TRY(GetOptionsObject(call.args[1]));
+// 13.1.1 Intl.DurationFormat ( [ locales [ , options ] ] ), steps 2 and up.
+Result<DurationFormatObject*> CreateDurationFormat(Object* newTarget, Value locales, Value optionsValue) {
+  DurationFormatObject* df = TRY(OrdinaryCreateFromConstructor<DurationFormatObject>(newTarget, Intrinsic::IntlDurationFormatPrototype));
+  std::vector<std::string> requested = TRY(CanonicalizeLocaleList(locales));
+  Object* options = TRY(GetOptionsObject(optionsValue));
   LocaleOptions opt;
   opt.localeMatcher = TRY(GetLocaleMatcher(options));
   std::optional<std::string> numberingSystem = TRY(GetStringOption(options, u"numberingSystem", {}));
@@ -100,7 +100,13 @@ Result<Value> DurationFormat_construct(NativeCall& call) {
   }
   std::optional<double> fd = TRY(GetNumberOption(options, u"fractionalDigits", 0, 9, std::nullopt));
   if (fd) df->fractionalDigits = int(*fd);
-  return Value(df);
+  return df;
+}
+
+// 13.1.1 Intl.DurationFormat ( [ locales [ , options ] ] )
+Result<Value> DurationFormat_construct(NativeCall& call) {
+  if (!call.newTarget) return ThrowTypeError("Constructor Intl.DurationFormat requires 'new'");
+  return Value(TRY(CreateDurationFormat(call.newTarget, call.args[0], call.args[1])));
 }
 
 Result<Value> DurationFormat_supportedLocalesOf(NativeCall& call) { return supportedLocalesOf(kDurationFormatData, call); }
@@ -331,6 +337,16 @@ Result<Value> DurationFormatPrototype_resolvedOptions(NativeCall& call) {
 }
 
 }  // namespace
+
+// Temporal.Duration.prototype.toLocaleString: Construct(%Intl.DurationFormat%, « locales, options »), then format.
+Result<Value> durationToLocaleString(Value duration, Value locales, Value options) {
+  DurationFormatObject* df = TRY(CreateDurationFormat(builtins::intrinsic(Intrinsic::IntlDurationFormat), locales, options));
+  std::array<double, kUnitCount> record = TRY(ToDurationRecord(duration));
+  std::vector<DurationPart> parts = TRY(partitionDuration(*df, record));
+  std::u16string out;
+  for (const DurationPart& p : parts) out += p.value;
+  return Value(newString(std::move(out)));
+}
 
 void installDurationFormat(Realm& realm, Object* intl) {
   Object* proto = nullptr;
