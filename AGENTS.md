@@ -35,6 +35,10 @@
   diffs; read files in ranges.
 - **Keep a handoff note**: `notes/<agent>.md` on your branch (branch, sha, state, numbers, next steps, gotchas),
   updated with every push. A dead machine or a dead context then costs one re-read, not the work.
+- **Liveness**: a worker with no status line and no push for 45 minutes is presumed dead (two agents were lost
+  to context overflow / hung turns). Its area is reassigned from its last pushed sha and its `notes/<agent>.md`;
+  anything it never pushed is lost. A late push from a presumed-dead agent is not merged without the lead
+  checking it first.
 - **Report every ~30 minutes**, even mid-task: one line to the lead (agent_send to="parent"): the branch sha
   pushed, the pass count on your directories, the next step, blockers. Silence reads as a problem.
 - **Merge per feature**: when one feature (a built-in, a constructor, a class) reaches a stable pass count,
