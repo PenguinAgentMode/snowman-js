@@ -3,7 +3,7 @@
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
 | memcap | (closed) | `ws/memcap` | | merged 5ff85e8: 480 MB main stack, 256 KB coroutine stacks + budgets (RangeError), parser depth guard, `ulimit -v` 1024 MB; 0 regressions. Open: dropped suspended generators keep their stack until exit (cap ~1,000; needs 2 heap.h methods); no CheckStack on nested array/object literals (SIGSEGV past ~400 levels in a generator; no test hits it) |
-| temporal | temporal | `ws/temporal` | `src/builtins/temporal/` core (temporal.h, parser, options) + Duration, Plain* (3,166 files); additive Intrinsics in realm.h; Date.prototype.toTemporalInstant | started: shared core first |
+| temporal | temporal | `ws/temporal` | `src/builtins/temporal/` core (temporal.h, parser, options, calendar) + Duration, Plain*; Intrinsics in realm.h; Date.prototype.toTemporalInstant | merged 00dc9d9 (built-ins/Temporal 3,047 alone; 4,605 / 4,605 with ws/temporal2 in a trial merge). Next: non-ISO calendars for intl402/Temporal |
 | temporal2 | temporal2 | `ws/temporal2` | `src/builtins/temporal/{instant,zoned_date_time,now,time_zone}.cpp`, `time_zone.h`, `tz*`, `tools/temporal/` (1,434 files + tz data for intl402/Temporal) | started: time_zone.h first |
 | intl | intl | `ws/intl` | `src/builtins/intl/`, `tools/intl/`; additive Intrinsics in realm.h | started: plumbing for all constructors first |
 | builtins | builtins | `ws/builtins` | promise/error/iterator/regexp/arraybuffer/typedarray/dataview/atomics/uint8array_base64 built-ins; additive `runtime/arraybuffer.h` | started: allKeyed, Error.stack, Iterator.join, legacy RegExp statics, immutable ArrayBuffer (228 files) |
@@ -16,19 +16,34 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-- Engine commit: 85210ca13 (merged to main as 5ff85e8)
-- ES-core (`results/85210ca13.json`): **43,059 / 43,305 files (99.43%)**; scenarios 82,336 / 82,724; 1,339 s at 4
-  jobs; vs 7e957a05a-estimated: 0 regressions. Milestone: **M8**.
-- Command: `node t262/runner/milestones.mjs results/85210ca13.json`
-- f294bec1b's 42,433 was measured at 16 jobs; most of the gap is the 626 files fixed after it (survey re-run).
-- Full suite: no measured run yet (first `tools/lead/measure.sh suite` on main is next). Provisional, mixed commits:
-  ~44,770 / 53,616 (~83.5%).
-- Known ceiling: 104 module tests import their own file (runner change approved: INTERFACES.md §1).
+First measured full-suite run: **main 8a5df0b93** (`tools/lead/measure.sh suite results/85210ca13.json`, 4 jobs,
+2,940 s; aggregates `results/8a5df0b93-full.json`, `results/8a5df0b93.json`; JSONL on the results branch as
+`results/8a5df0b93/suite.jsonl`).
+
+- milestones.mjs: highest **M8**; **ES-core: 43,059 / 43,305 files (99.43%)**; **full suite: 44,766 / 53,616 files
+  (83.49%)**; scenarios 85,571 / 102,994. Gate vs 85210ca13: 0 regressions.
+- Command: `node t262/runner/milestones.mjs results/8a5df0b93.json --full results/8a5df0b93-full.json`
+- Per cluster (`node tools/lead/clusters.mjs results/8a5df0b93-full.json`):
+
+| Cluster | Passing (8a5df0b93) | Files | % |
+| --- | ---: | ---: | ---: |
+| ES-core | 43,059 | 43,305 | 99.43 |
+| built-ins/Temporal | 0 | 4,605 | 0.00 |
+| intl402/Temporal | 0 | 2,029 | 0.00 |
+| intl402 (other) | 25 | 1,353 | 1.85 |
+| staging | 1,430 | 1,483 | 96.43 |
+| proposals (in ES-core dirs) | 252 | 841 | 29.96 |
+| **full suite** | **44,766** | **53,616** | **83.49** |
+
+- Memory cap: 5 staging/sm files fail only under it (full suite only, not gated): extensions/recursion.js (932 MB
+  peak), RegExp/unicode-{class-,}braced.js (444 MB resident but > 1 GB address space), regress/regress-610026.js
+  (2.3 GB), String/replace-math.js (OOM even at 3 GB). Engine memory use, not a cap problem.
 
 ## Merges awaiting a post-merge measurement
 
-- 5b81747 (ws/builtins a87b211, gated on 6d73e90, no file overlap with memcap's 5ff85e8). Not covered by the
-  first full-suite run if that started before it.
+Not in 8a5df0b93's run; the next `measure.sh suite` on main covers them:
+- 5b81747 ws/builtins a87b211 (allKeyed, Error.stack, Iterator.join), gated on 6d73e90.
+- 00dc9d9 ws/temporal 7526397 (Temporal core + Duration + Plain*), gated on 8a5df0b.
 
 ## Decisions
 
