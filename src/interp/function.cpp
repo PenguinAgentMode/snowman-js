@@ -109,6 +109,7 @@ Result<Value> ECMAScriptFunction::Call(Value thisArgument, Args args) {
   }
   InterpContext calleeContext;
   PrepareForOrdinaryCall(this, Value::undefined(), calleeContext);
+  calleeContext.args = args;
   ContextScope scope(&calleeContext);
   if (isClassConstructor) return ThrowTypeError("Class constructor cannot be invoked without 'new'");
   OrdinaryCallBindThis(this, calleeContext, thisArgument);
@@ -130,6 +131,7 @@ Result<Object*> ECMAScriptFunction::Construct(Args args, Object* newTarget) {
   if (!derived) thisArgument = TRY(OrdinaryCreateFromConstructor<Object>(newTarget, Intrinsic::ObjectPrototype));
   InterpContext calleeContext;
   PrepareForOrdinaryCall(this, Value(newTarget), calleeContext);
+  calleeContext.args = args;
   auto* constructorEnv = static_cast<FunctionEnvironment*>(calleeContext.lexicalEnvironment);
   Result<Value> result = Value::undefined();
   {
