@@ -34,8 +34,10 @@ relative to `src/` (`#include "runtime/value.h"`), no exceptions for JS control 
   - An error thrown by a prelude or an epilogue (parse or runtime) prints `Test262:HostScriptError <file>` on its
     own line before the usual `Name: message`, and exits 1. The runner fails such a scenario whatever the
     test expects, so a negative test can't be satisfied by the harness's own error.
-  - run.mjs uses this for `flags: [module]` tests: the composed harness and the `print("Test262:Ran")` epilogue
-    are temp files outside the test tree (os.tmpdir()), and the test file runs unmodified at its real path.
+  - run.mjs uses this for every non-raw test (script and module, since 5606282): the composed harness is a
+    `--prelude` (one shared temp file per distinct include list, in $TMPDIR) and `print("Test262:Ran")` an
+    `--epilogue`. A module test runs unmodified at its real path; a script test is written next to the test with
+    only its own source (and, in the strict scenario, `"use strict";` in front of the test, not the harness).
 
 ## 2. AST (`src/parser/ast.h`, owned by the parser workstream)
 

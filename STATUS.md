@@ -61,6 +61,11 @@ Not in 5f3218f30's run:
 - 9c15385 int/caller 4fc7727 = main + staging-caller bc68f1d7e (legacy f.caller / f.arguments, ES 17.1 extension on
   non-strict functions; InterpContext fields in interpreter.h, realm intrinsics). Gated by the lead vs 5f3218f30:
   ES-core 0, full 0 regressions, +12 staging; new statics 0.
+- ws/runner-strict 5606282 (stability), a RUNNER change: script tests get the harness as --prelude and Ran as
+  --epilogue, so the strict scenario's "use strict" applies to the test only (INTERFACES.md §1). Old vs new runner
+  on the same binary 19dc92105 over the whole full suite: 53,452 → 53,465 files (+13, all staging/sm/strict), 0
+  newly failing, 0 HostScriptError; parse-only full suite unchanged (102,942 both); speed within noise after the
+  shared-prelude cache. Report: results branch results/5606282/. The +13 are the runner's, not the engine's.
 - 2b910d9 / ws/stability b3a61c6 (docs + results): 4 full runs of 19dc92105 identical (0 flaky files); parse-only
   ES-core 82,724 / 82,724 (`results/19dc92105-parse.json`): **M1a and M1b reached (100.0% / 100.0%)**.
 
