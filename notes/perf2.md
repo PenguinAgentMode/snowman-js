@@ -10,7 +10,10 @@ perf's work in two merge requests, each gated on its own:
 ## State
 - 2026-10-13 ~19:50 UTC: MR 1 rebased (49e206c + notes); only conflict was heap.cpp includes (<atomic> from step
   4, <malloc.h> from batch 1; both kept). expressions.cpp auto-merged: step 4 made identifierName's atom cache
-  thread_local, batch 1 doesn't touch it. Next: build, VERIFY_IC slice, full gate.
+  thread_local, batch 1 doesn't touch it. 13154f3: make 0 warnings; SNOWMAN_VERIFY_IC=1 over language/, annexB/,
+  built-ins/{Function,eval,Atomics} (main's runner): 46,588 / 46,588 scenarios pass, 0 cache mismatches.
+- Rebased onto main 9c2ead8 (results only; src identical to 13154f3). Gate baseline: results/5f3218f30{,-full}.json
+  (ES-core 43,305 / 43,305). Next: full-suite gate, GC_STRESS slices, timings.
 
 ## Thread safety (agents are threads since step 4)
 - Batch 1/2 cache on AST nodes (Identifier::interpCache, FDI plans per function node, literal atoms): safe only
