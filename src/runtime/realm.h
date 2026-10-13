@@ -33,7 +33,8 @@ namespace snowman {
   X(JSON) X(Map) X(MapPrototype) X(MapIteratorPrototype) X(Math) X(Number) X(NumberPrototype) X(Object)         \
   X(ObjectPrototype) X(parseFloat) X(parseInt) X(Promise) X(PromisePrototype) X(Proxy) X(RangeError)            \
   X(RangeErrorPrototype) X(ReferenceError) X(ReferenceErrorPrototype) X(Reflect) X(RegExp) X(RegExpPrototype)   \
-  X(RegExpStringIteratorPrototype) X(Set) X(SetPrototype) X(SetIteratorPrototype) X(SharedArrayBuffer)          \
+  X(RegExpStringIteratorPrototype) X(Set) X(SetPrototype) X(SetIteratorPrototype) X(ShadowRealm)            \
+  X(ShadowRealmPrototype) X(SharedArrayBuffer)          \
   X(SharedArrayBufferPrototype) X(String) X(StringPrototype) X(StringIteratorPrototype) X(Symbol)               \
   X(SymbolPrototype) X(SuppressedError) X(SuppressedErrorPrototype) X(SyntaxError) X(SyntaxErrorPrototype) X(Temporal) X(TemporalDuration) X(TemporalDurationPrototype)                \
   X(TemporalInstant) X(TemporalInstantPrototype) X(TemporalNow) X(TemporalPlainDate) X(TemporalPlainDatePrototype)  \
