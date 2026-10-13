@@ -234,6 +234,9 @@ class Parser {
   void parseFunctionParams(Function* fn);
   void parseFunctionBody(Function* fn, bool isArrow, bool isMethod, bool noIn);
   void checkParams(Function* fn, bool allowDuplicates);
+  // Decorators: `@a.b.#c`, `@a.b(x)`, `@(e)` before a class or class element.
+  std::vector<Decorator*> parseDecorators();
+  std::vector<Decorator*> pendingClassDecorators_;  // the decorators parseClass attaches to the next class
   Class* parseClass(Class* node, bool statement, bool nullableId);
   Node* parseClassElement(Class* cls, bool& hadConstructor);
   FunctionExpression* parseMethod(Pos start, bool isGenerator, bool isAsync, FunctionKind kind, bool allowSuperCall);

@@ -399,6 +399,7 @@ void Dumper::node(const Node* n) {
       child("key", m->key);
       text("kind", kindText(m->kind));
       child("value", m->value);
+      if (!m->decorators.empty()) list("decorators", m->decorators);
       break;
     }
     case NodeType::PropertyDefinition: {
@@ -407,8 +408,19 @@ void Dumper::node(const Node* n) {
       boolean("computed", p->computed);
       child("key", p->key);
       child("value", p->value);
+      if (!p->decorators.empty()) list("decorators", p->decorators);
       break;
     }
+    case NodeType::AccessorProperty: {
+      auto* p = n->as<AccessorProperty>();
+      boolean("static", p->isStatic);
+      boolean("computed", p->computed);
+      child("key", p->key);
+      child("value", p->value);
+      if (!p->decorators.empty()) list("decorators", p->decorators);
+      break;
+    }
+    case NodeType::Decorator: child("expression", n->as<Decorator>()->expression); break;
     case NodeType::StaticBlock: list("body", n->as<StaticBlock>()->body); break;
     case NodeType::ImportDeclaration:
       list("specifiers", n->as<ImportDeclaration>()->specifiers);

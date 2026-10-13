@@ -517,6 +517,13 @@ TemplateLiteral* Parser::parseTemplate(bool tagged) {
 Node* Parser::parseExprAtom(DestructuringErrors* refErrors, bool noIn, bool forNew) {
   Pos start = here();
   bool canBeArrow = potentialArrowAt_ == static_cast<int64_t>(tok_.start);
+  if (is(T::At)) {
+    // A decorated ClassExpression.
+    std::vector<Decorator*> decorators = parseDecorators();
+    if (!isKw(K::Class)) unexpected();
+    pendingClassDecorators_ = std::move(decorators);
+    return parseClass(startNode<ClassExpression>(start), false, true);
+  }
   switch (tok_.type) {
     case T::Name: {
       if (!tok_.escaped) {
