@@ -22,6 +22,11 @@ Owner: hardening (sanitizer sweep: ASan + UBSan over the full suite). Lead: the 
 - If the machine guard pauses/kills more than a handful of times in shard 1, back to --jobs 2.
 - threadStackHigh thread_local duplicates builtins' ws/agent4 17f576c: on conflict take main's version.
 
+- UBSan-only sweep queued: $HOME/logs/run-ubsan.sh (engine $HOME/engine-ubsan from $HOME/wt-ubsan,
+  `-fsanitize=undefined`), starts after asan3-all.done + build-ubsan.done; markers ub-k.done/.fail, reports in
+  $HOME/logs/ubsan2. Reason: GCC's combined ASan+UBSan prints UBSan reports to stderr (tools/lead/sanitizers.md).
+- Notices are held after a notice-started turn (lead): the lead pings at ETAs; check markers when pinged.
+
 ## Next steps
 
 - 4 shards, one at a time: `node t262/runner/run.mjs --engine <asan engine> --suite full --shard k/4 --jobs 2 --vm-mb 0
