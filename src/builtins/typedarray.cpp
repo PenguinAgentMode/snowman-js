@@ -87,7 +87,8 @@ Result<void> InitializeTypedArrayFromTypedArray(TypedArrayObject* o, TypedArrayO
   if (!sameContentType(o->elementType, src->elementType)) return ThrowTypeError("Content types differ");
   ArrayBufferObject* data = TRY(AllocateArrayBuffer(intrinsic(Intrinsic::ArrayBuffer), byteLength));
   if (src->elementType == o->elementType) {
-    std::memcpy(data->data(), src->buffer->data() + size_t(src->byteOffset), size_t(byteLength));
+    // An empty buffer's data() may be null, and memcpy's pointers must not be, even for 0 bytes.
+    if (byteLength > 0) std::memcpy(data->data(), src->buffer->data() + size_t(src->byteOffset), size_t(byteLength));
   } else {
     for (size_t i = 0; i < size_t(elementLength); i++) {
       Value v = GetValueFromBuffer(src->buffer, size_t(src->byteOffset) + i * srcElementSize, src->elementType);
