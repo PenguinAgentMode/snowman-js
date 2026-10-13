@@ -38,15 +38,19 @@
 ES-core reached M8 (97.99%). The goal now is the full suite's pass rate without regressing ES-core. Full = ES-core
 (43,305) + 10,311 more files, per `listScenarios`:
 
-| Cluster | Files | Owner | Notes |
-| --- | --- | --- | --- |
-| Memory safety (gate for everything) | — | memcap | watchdog merged 8e39780; stack budgets + `ulimit -v` next |
-| test/built-ins/Temporal | 4,605 | temporal | ISO calendar, UTC/offset zones; new `src/builtins/temporal/` |
-| test/intl402/Temporal | 2,029 | later | needs IANA tz data + non-ISO calendars: after Temporal + Intl |
-| test/intl402 (other) | ~1,330 | intl | Intl constructors, option processing, minimal locale data |
-| test/staging | ~1,480 | after survey | mostly staging/sm (SpiderMonkey's non262 imports) |
-| Proposal-tagged files in language/, built-ins/, annexB | ~800 | after survey | language/expressions 399, language/import 113, Promise 89, ShadowRealm 64, Error 35, ArrayBuffer 29 |
-| ES-core long tail | ~870 | later | 35 tail-call tests pass only via the 1 GB main stack (proper tail calls needed to shrink it) |
+| Cluster (survey §2, main 7e957a05a) | Failing files | Owner | Notes |
+| --- | ---: | --- | --- |
+| Memory safety (gate for everything) | — | memcap | watchdog merged 8e39780; stack budgets + `ulimit -v` at 85210ca13 |
+| built-ins/Temporal: Duration, Plain* + shared core | 3,166 | temporal | ISO calendar, UTC/offset zones |
+| built-ins/Temporal: Instant, ZonedDateTime, Now + tz data | 1,434 | temporal2 | tz data generated from node |
+| intl402 (non-Temporal) | 1,328 | intl | no ICU (the engine is ours): plumbing ~600, BCP 47 tables ~190, locale data generated from node ~465; node+ICU passes 1,052 / 1,353 |
+| Promise.allKeyed, Error.stack, Iterator.join, legacy RegExp statics, immutable ArrayBuffer | 228 | builtins | S–M each |
+| import-defer + source-phase + import-text (one owner: parser + module.cpp) | 268 | next | 242 accidental negative-syntax passes must survive |
+| ShadowRealm | 64 | after module proposals | shares `interp/module.cpp` |
+| intl402/Temporal | 2,029 | after Temporal + Intl | 1,776 use non-ISO calendars |
+| decorators | 24 | later | L for 24 files |
+| staging remainder | 42 | later | 12 engine bugs, 4 Annex B; 14 runner artefacts, 16 host |
+| ES-core remainder | ~246 | later | 104 self-import (runner, decision pending), 114 `$262.agent` (host threads), 25 IsHTMLDDA (ws/runtime has the runtime part), 3 bugs; old ws/interp2 + ws/runtime to gate |
 
 Ranked by files unlocked per unit of work once the survey (`tools/lead/survey-full.md`) has the causes.
 

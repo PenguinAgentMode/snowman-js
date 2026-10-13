@@ -2,11 +2,12 @@
 
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
-| memcap | memcap | `ws/memcap` | `src/interp/coroutine.{h,cpp}`, stack-size users; `t262/runner/run.mjs` (authorized) | watchdog merged (8e39780); engine stack budgets + `ulimit -v` in progress |
+| memcap | memcap | `ws/memcap` | `src/interp/coroutine.{h,cpp}`, stack-size users; `t262/runner/run.mjs` (authorized) | watchdog merged (8e39780); 85210ca13: main stack 480 MB, 256 KB coroutine stacks, stack budget, parser depth guard, `ulimit -v` 1024 MB; ES-core gate running |
 | temporal | temporal | `ws/temporal` | `src/builtins/temporal/` core (temporal.h, parser, options) + Duration, Plain* (3,166 files); additive Intrinsics in realm.h; Date.prototype.toTemporalInstant | started: shared core first |
 | temporal2 | temporal2 | `ws/temporal2` | `src/builtins/temporal/{instant,zoned_date_time,now,time_zone}.cpp`, `time_zone.h`, `tz*`, `tools/temporal/` (1,434 files + tz data for intl402/Temporal) | started: time_zone.h first |
 | intl | intl | `ws/intl` | `src/builtins/intl/`, `tools/intl/`; additive Intrinsics in realm.h | started: plumbing for all constructors first |
-| survey | survey | `ws/survey` | `tools/lead/survey-full.md` (analysis only) | interim: extra set 1,709 / 10,311 pass (results branch results/7e957a05a/extra.jsonl); report pending |
+| builtins | builtins | `ws/builtins` | promise/error/iterator/regexp/arraybuffer/typedarray/dataview/atomics/uint8array_base64 built-ins; additive `runtime/arraybuffer.h` | started: allKeyed, Error.stack, Iterator.join, legacy RegExp statics, immutable ArrayBuffer (228 files) |
+| survey | (closed) | `ws/survey` | | report merged d44aba3: `tools/lead/survey-full.md` |
 | parser, regexp, interp, modules | (closed) | | | merged before M8 |
 | runtime, interp2 | (closed; previous team) | `ws/runtime` (+1), `ws/interp2` (+4) | | unmerged perf/IsHTMLDDA commits; to gate on ES-core before merging |
 
