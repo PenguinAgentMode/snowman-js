@@ -32,3 +32,23 @@
 - After each merge to `main`, the lead runs the measurement for the current phase: parse-only for M1
   (`results/<sha>-parse.json`), full ES-core from M2 on (`results/<sha>.json`), locally or with shard agents.
 - `node t262/runner/milestones.mjs results/<sha>.json --parse-only results/<sha>-parse.json` is the score.
+
+## Phase 2: the full suite (`--suite full`, 53,616 files)
+
+ES-core reached M8 (97.99%). The goal now is the full suite's pass rate without regressing ES-core. Full = ES-core
+(43,305) + 10,311 more files, per `listScenarios`:
+
+| Cluster | Files | Owner | Notes |
+| --- | --- | --- | --- |
+| Memory safety (gate for everything) | — | memcap | watchdog merged 8e39780; stack budgets + `ulimit -v` next |
+| test/built-ins/Temporal | 4,605 | temporal | ISO calendar, UTC/offset zones; new `src/builtins/temporal/` |
+| test/intl402/Temporal | 2,029 | later | needs IANA tz data + non-ISO calendars: after Temporal + Intl |
+| test/intl402 (other) | ~1,330 | after survey | Intl constructors, option processing, minimal locale data |
+| test/staging | ~1,480 | after survey | mostly staging/sm (SpiderMonkey's non262 imports) |
+| Proposal-tagged files in language/, built-ins/, annexB | ~800 | after survey | language/expressions 399, language/import 113, Promise 89, ShadowRealm 64, Error 35, ArrayBuffer 29 |
+| ES-core long tail | ~870 | later | 35 tail-call tests pass only via the 1 GB main stack (proper tail calls needed to shrink it) |
+
+Ranked by files unlocked per unit of work once the survey (`tools/lead/survey-full.md`) has the causes.
+
+Gates: a workstream runs full ES-core on its rebased branch (~30 min at 4 jobs) and shows no regression against
+the latest `results/<sha>.json` before asking to merge; the lead re-measures the full suite on main after merges.
