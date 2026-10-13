@@ -1,10 +1,12 @@
 // Running scripts and modules (src/engine.h). Owned by the interp workstream.
 //
-// The whole program runs on a 1 GB coroutine stack, so CheckStack() turns runaway recursion into a
-// RangeError long before the stack is exhausted.
+// The whole program runs on a large coroutine stack (Coroutine::kMainStackSize), so CheckStack() turns runaway
+// recursion into a RangeError long before the stack is exhausted.
 #include <malloc.h>
 
 #include <cstdio>
+#include <cstdlib>
+#include <new>
 #include <string>
 
 #include "engine.h"
@@ -111,9 +113,18 @@ int runMain(const CliOptions& options, const std::string& source) {
   mallopt(M_TRIM_THRESHOLD, 1 << 30);
   mallopt(M_TOP_PAD, 64 << 20);
   mallopt(M_MMAP_THRESHOLD, 256 << 20);
+  // Out of memory (an address-space cap, ulimit -v): say so instead of aborting on std::bad_alloc.
+  std::set_new_handler([] {
+    std::fputs("fatal: out of memory\n", stdout);
+    std::fflush(stdout);
+    std::_Exit(71);
+  });
   MainData data{&options, &source};
   interp::Coroutine main(mainEntry, &data, interp::Coroutine::kMainStackSize);
-  main.resume();
+  if (!main.resume()) {
+    std::fputs("fatal: cannot map the main stack\n", stdout);
+    return 70;
+  }
   std::fflush(stdout);
   return data.exitCode;
 }
