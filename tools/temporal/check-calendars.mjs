@@ -2,19 +2,24 @@
 //
 //   node tools/temporal/check-calendars.mjs [--dir src/builtins/temporal] [--engine ./engine] [--samples N]
 //
+// 0. astro.mjs reproduces Meeus's worked examples (new moon 49.a, the Sun 25.b / 32.a).
 // 1. Regenerates the tables into $TMPDIR and requires them byte-identical to the checked-in ones (catches a stale table
 //    or a different node/ICU).
 // 2. Decodes the checked-in tables on their own and compares calendar dates against Intl.DateTimeFormat: every day of
-//    a few windows (1900, 2000, 2100, the earliest years) plus N deterministic random days across each table.
+//    a few windows (1900, 2000, 2100, the earliest years) plus N deterministic random days across each table. For
+//    chinese and dangi, every day of the astronomical years (gen-calendars.mjs ASTRONOMICAL): they must differ from
+//    ICU in exactly the years of ICU_DEVIATIONS.
 // 3. Checks that ICU's islamic-umalqura equals islamic-civil outside the table (our fallback), on sample days.
 // 4. With --engine: runs the engine on the same sample days through Temporal.PlainDate and compares year, monthCode
-//    and day with Intl.
+//    and day with the table (= Intl outside ICU_DEVIATIONS).
 // Prints one summary line per check; exits 1 on any mismatch.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { ASTRONOMICAL } from './gen-calendars.mjs';
+import { earth, newMoon, sunLongitude } from './astro.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -29,6 +34,31 @@ let failures = 0;
 function report(name, bad, total, examples) {
   console.log(`${bad === 0 ? 'ok  ' : 'FAIL'} ${name}: ${total - bad} / ${total}${examples.length ? ' e.g. ' + examples.slice(0, 3).join('; ') : ''}`);
   if (bad) failures++;
+}
+
+// The years in which the astronomical chinese/dangi months differ from ICU's (by the table's or ICU's year of a
+// differing day). Each is a new moon or major solar term within ~15 minutes of a local midnight that ICU's
+// low-precision astronomy puts on the other side; gen-calendars.mjs prints the months. Where test262 has the year it
+// agrees with the astronomy: chinese 1987 (leap month M06L, not M07L), 2026 and 2029 (354 and 355 days), 2027 and 2030
+// (new year 02-06 and 02-03). 1906 (M04 on 04-23) comes from Beijing local time before 1929 (ICU: UTC+8). True edge
+// cases, decided by less than a minute: chinese 2057 (new moon 2057-09-28 23:59:57), dangi 2051 (M10, 23:59:08) and
+// 2096 (M12, 2097-01-13 23:59:55).
+const ICU_DEVIATIONS = {
+  chinese: [1906, 1917, 1922, 1953, 1954, 1955, 1987, 1998, 2012, 2018, 2026, 2027, 2029, 2030, 2057, 2070],
+  dangi: [2017, 2051, 2096],
+};
+
+// 0. Meeus's worked examples.
+{
+  const cases = [
+    ['new moon k = -283 (49.a)', newMoon(-283), 2443192.65118, 0.00001],
+    ['Earth L at JDE 2448908.5 (32.a)', earth(2448908.5).L, -43.63484796, 1e-8],
+    ['Earth R at JDE 2448908.5 (32.a)', earth(2448908.5).R, 0.99760775, 1e-6],
+    ['apparent Sun at JDE 2448908.5 (25.b)', sunLongitude(2448908.5), 199 + 54 / 60 + 21.818 / 3600, 0.0001],
+  ];
+  const bad = cases.filter(([, got, want, tol]) => !(Math.abs(got - want) <= tol))
+    .map(([n, got, want]) => `${n}: ${got} != ${want}`);
+  report('astro.mjs vs Meeus examples', bad.length, cases.length, bad);
 }
 
 // 1. Byte-identical regeneration.
@@ -140,16 +170,31 @@ for (const [calendar, table] of [
   ['islamic-umalqura', umalquraTable()],
 ]) {
   const intl = intlDate(calendar);
+  const astro = ASTRONOMICAL[calendar];
+  const startOf = (year) => table.rows.find((r) => r.year === year).start;
+  const inAstro = astro ? [startOf(astro.first), startOf(astro.last + 1)] : [0, 0];
   const windows = [[table.first, table.first + 800], [epochDayOfIso(1900, 1, 1), epochDayOfIso(1901, 3, 1)],
     [epochDayOfIso(2000, 1, 1), epochDayOfIso(2001, 3, 1)], [table.end - 800, table.end]];
-  const days = sampleDays(table.first, table.end, windows);
+  const all = sampleDays(table.first, table.end, windows);
+  const days = all.filter((d) => d < inAstro[0] || d >= inAstro[1]);
   const bad = [];
   for (const d of days) {
     const a = lookup(table, d), b = intl(d);
     if (!same(a, b)) bad.push(show(d, a, b));
   }
-  report(`${calendar} table vs Intl`, bad.length, days.length, bad);
-  checked.push({ calendar, days: days.filter((_, i) => i % 4 === 0), intl });
+  report(`${calendar} table vs Intl${astro ? ' outside the astronomical years' : ''}`, bad.length, days.length, bad);
+  if (astro) {
+    const differ = new Set();
+    let n = 0;
+    for (let d = inAstro[0]; d < inAstro[1]; d++, n++) {
+      const a = lookup(table, d), b = intl(d);
+      if (!same(a, b)) { differ.add(a.year); differ.add(b.year); }
+    }
+    const got = [...differ].sort((x, y) => x - y).join(','), want = ICU_DEVIATIONS[calendar].join(',');
+    report(`${calendar} astronomical ${astro.first}..${astro.last} differs from Intl in exactly ICU_DEVIATIONS (${n} days)`,
+      got === want ? 0 : 1, 1, got === want ? [] : [`differs in ${got || 'none'}`]);
+  }
+  checked.push({ calendar, days: all.filter((_, i) => i % 4 === 0), table });
 }
 
 // 3. islamic-umalqura falls back to islamic-civil outside its table.
@@ -166,7 +211,7 @@ for (const [calendar, table] of [
 
 // 4. The engine's Temporal conversions.
 if (engine) {
-  for (const { calendar, days, intl } of checked) {
+  for (const { calendar, days, table } of checked) {
     const script = path.join(process.env.TMPDIR || os.tmpdir(), `check-${calendar}.js`);
     fs.writeFileSync(script, `const days = ${JSON.stringify(days)};\nconst out = [];\n` +
       `for (const d of days) { const p = Temporal.PlainDate.from('1970-01-01').add({ days: d }).withCalendar(${JSON.stringify(calendar)});` +
@@ -184,10 +229,10 @@ if (engine) {
     const bad = [];
     days.forEach((d, i) => {
       const [y, monthCode, day] = (lines[i] || '').split(' ');
-      const a = { year: Number(y), monthCode, day: Number(day) }, b = intl(d);
-      if (!same(a, b)) bad.push(show(d, a, b).replace('table', 'engine'));
+      const a = { year: Number(y), monthCode, day: Number(day) }, b = lookup(table, d);
+      if (!same(a, b)) bad.push(show(d, a, b).replace('table', 'engine').replace('intl', 'table'));
     });
-    report(`${calendar} engine vs Intl`, bad.length, days.length, bad);
+    report(`${calendar} engine vs table`, bad.length, days.length, bad);
   }
 }
 
