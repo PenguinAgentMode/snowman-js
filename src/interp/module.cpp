@@ -10,6 +10,7 @@
 #include "builtins/abstract_module_source.h"
 #include "interp/dispose.h"
 #include "interp/suspend.h"
+#include "runtime/arraybuffer.h"
 #include "runtime/builtins.h"
 #include "runtime/errors.h"
 #include "runtime/operations.h"
@@ -81,17 +82,31 @@ std::optional<std::string> readFile(const std::string& path) {
   return text.str();
 }
 
-// The module type a request's `type` import attribute names: JSON modules, text modules (import text);
-// anything else loads as JavaScript.
-enum class ModuleType : uint8_t { JavaScript, Json, Text };
+// The module type a request's `type` import attribute names: JSON modules, text modules (import text), bytes
+// modules (import bytes); anything else loads as JavaScript.
+enum class ModuleType : uint8_t { JavaScript, Json, Text, Bytes };
 
 ModuleType moduleTypeOf(const ast::ModuleRequest& request) {
   for (const auto& attribute : request.attributes) {
     if (attribute.key != u"type") continue;
     if (attribute.value == u"json") return ModuleType::Json;
     if (attribute.value == u"text") return ModuleType::Text;
+    if (attribute.value == u"bytes") return ModuleType::Bytes;
   }
   return ModuleType::JavaScript;
+}
+
+// CreateBytesModule (import bytes): a Uint8Array over an immutable ArrayBuffer holding the file's bytes, as the
+// default export.
+Result<ModuleRecord*> createBytesModule(Realm* realm, const std::string& path, const std::string& bytes) {
+  auto* module = snowman::make<ModuleRecord>(realm, path);
+  ArrayBufferObject* buffer =
+      TRY(AllocateImmutableArrayBuffer(realm->intrinsic(Intrinsic::ArrayBuffer), double(bytes.size()),
+                                       reinterpret_cast<const uint8_t*>(bytes.data()), 0, bytes.size()));
+  Object* uint8Array = TRY(Construct(realm->intrinsic(Intrinsic::Uint8Array), {Value(buffer)}));
+  module->syntheticDefault = Value(uint8Array);
+  module->status = ModuleRecord::Status::Unlinked;
+  return module;
 }
 
 // ParseModule for a file's text, a JSON module (CreateDefaultExportSyntheticModule of ParseJSONModule) or a text
@@ -151,14 +166,18 @@ Result<ModuleRecord*> hostLoadImportedModule(Realm* realm, const std::string& di
   std::optional<std::string> path = resolveSpecifier(directory, specifier);
   if (!path) return ThrowTypeError("Cannot resolve module specifier '" + specifier + "'");
   ModuleType type = moduleTypeOf(request);
-  std::string key = type == ModuleType::Json ? *path + "#json" : type == ModuleType::Text ? *path + "#text" : *path;
+  std::string key = type == ModuleType::Json    ? *path + "#json"
+                    : type == ModuleType::Text  ? *path + "#text"
+                    : type == ModuleType::Bytes ? *path + "#bytes"
+                                                : *path;
   RealmState* state = realmState(realm);
   for (auto& [loadedPath, module] : state->moduleMap) {
     if (loadedPath == key) return module;
   }
   std::optional<std::string> text = readFile(*path);
   if (!text) return ThrowTypeError("Cannot find module '" + *path + "'");
-  ModuleRecord* module = TRY(createModule(realm, *path, utf8ToUtf16(*text), type));
+  ModuleRecord* module = type == ModuleType::Bytes ? TRY(createBytesModule(realm, *path, *text))
+                                                   : TRY(createModule(realm, *path, utf8ToUtf16(*text), type));
   state->moduleMap.emplace_back(key, module);
   return module;
 }
