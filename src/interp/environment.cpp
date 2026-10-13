@@ -3,6 +3,7 @@
 
 #include <typeinfo>
 
+#include "builtins/disposable.h"
 #include "interp/function.h"
 #include "runtime/errors.h"
 #include "runtime/operations.h"
@@ -126,6 +127,7 @@ void DeclarativeEnvironment::trace(Tracer& tracer) {
     tracer.visit(reinterpret_cast<Cell*>(binding.indirectModule));
     tracer.visit(reinterpret_cast<Cell*>(binding.indirectName));
   }
+  tracer.visit(reinterpret_cast<Cell*>(disposeCapability));
 }
 
 // ---- Function ----

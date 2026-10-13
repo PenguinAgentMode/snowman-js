@@ -14,6 +14,10 @@
 #include "runtime/string.h"
 #include "runtime/value.h"
 
+namespace snowman::builtins {
+class DisposeCapability;
+}
+
 namespace snowman::interp {
 
 class ModuleRecord;
@@ -82,6 +86,8 @@ class DeclarativeEnvironment : public Environment {
 
   // The environment of a catch clause (B.3.4: eval code may redeclare its parameter with var).
   bool isCatchEnvironment = false;
+  // [[DisposeCapability]]: created by the first `using` / `await using` binding initialized here.
+  builtins::DisposeCapability* disposeCapability = nullptr;
 
   void trace(Tracer& tracer) override;
 

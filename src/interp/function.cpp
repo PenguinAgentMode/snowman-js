@@ -1,6 +1,7 @@
 // ECMAScript function objects (10.2): [[Call]], [[Construct]], creation, and FunctionDeclarationInstantiation.
 #include "interp/function.h"
 
+#include "interp/dispose.h"
 #include "interp/interpreter.h"
 #include "runtime/builtins.h"
 #include "runtime/errors.h"
@@ -159,8 +160,8 @@ Result<Value> OrdinaryCallEvaluateBody(ECMAScriptFunction* F, Args args) {
     }
     case CodeKind::StaticBlock: {
       TRY(FunctionDeclarationInstantiation(F, Args()));
-      auto completion = TRY(evaluateStatementList(static_cast<const ast::StaticBlock*>(F->code)->body));
-      (void)completion;
+      Environment* lexEnv = context->lexicalEnvironment;
+      TRY(DisposeResources(lexEnv, evaluateStatementList(static_cast<const ast::StaticBlock*>(F->code)->body)));
       return Value::undefined();
     }
     case CodeKind::DefaultConstructor:
@@ -186,7 +187,9 @@ Result<Value> OrdinaryCallEvaluateBody(ECMAScriptFunction* F, Args args) {
 Result<Value> runFunctionBody(ECMAScriptFunction* F, Args) {
   const ast::Function* function = F->function;
   if (function->expression) return evaluate(function->body);
-  Completion completion = TRY(evaluateStatementList(function->body->as<ast::BlockStatement>()->body));
+  Environment* lexEnv = runningContext()->lexicalEnvironment;
+  Completion completion =
+      TRY(DisposeResources(lexEnv, evaluateStatementList(function->body->as<ast::BlockStatement>()->body)));
   if (completion.type == CompletionType::Return) return completion.value;
   return Value::undefined();
 }
