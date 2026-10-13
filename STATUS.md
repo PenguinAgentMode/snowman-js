@@ -54,7 +54,16 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-None: 3edca9940 covers e535e4b, 68e8bb7, 6dab50e, 23c2b86, 0f9d97b, 3edca99.
+Not in 3edca9940's run:
+- cefe44c ws/runner-rss (RUNNER change): machine memory guard (pause 78%, kill the largest engine at 86% of 4 GB),
+  temp files in $HOME/tmp (/tmp is a tmpfs in the machine's memory), cleanup on every exit, deterministic scattered
+  scenario order (heavy siblings such as the ~500 MB tco-* tests no longer share the 4 jobs), per-scenario rss_mb.
+  Slices statements/for + module-code: 5,439 scenarios, 0 regressions vs 3edca9940; the guard was exercised with
+  --machine-mb 1300.
+- f5ad13c ws/runtime-r 44d3159: [[IsHTMLDDA]] + property index perf + $262.IsHTMLDDA. ES-core gate 43,191, 0
+  regressions.
+- e935740 ws/stacktrim 6b67bbf: coroutine budget main + 128 MB, dead main-stack pages released;
+  staging/sm/extensions/recursion.js passes. ES-core gate 0 regressions.
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
