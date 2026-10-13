@@ -1,8 +1,11 @@
 // run.mjs: run one shard of a test262 suite against an engine, one process per scenario, and write
-// a JSONL line per scenario. Tests run in place, so module specifiers resolve as INTERPRETING.md says: a script
-// test is composed (harness + test + RAN) into a temp file next to it; a module test runs unmodified at its
-// own path (a test that imports itself gets the same module record), with the harness as a --prelude Script
-// and the RAN line as an --epilogue, both temp files in $TMPDIR (below; INTERFACES.md section 1).
+// a JSONL line per scenario. Tests run in place, so module specifiers resolve as INTERPRETING.md says. The harness
+// is a --prelude Script and the RAN line an --epilogue (INTERFACES.md section 1), temp files in $TMPDIR written once
+// per runner process and shared: one epilogue, one prelude per distinct harness (includes + async flag).
+// A script test runs as a temp file next to it (`"use strict";` + the test in the strict scenario: the directive
+// applies to the test only, never to the harness); a module test runs unmodified at its own path (a test that
+// imports itself gets the same module record). A raw test runs alone, as the bare source in a temp file next to it.
+// With --parse-only only the entry is parsed: no prelude or epilogue.
 //
 //   node runner/run.mjs --engine "<command>" [--suite es-core|full] [--shard k/N] [--jobs J (4)]
 //                       [--parse-only] [--filter <path prefix>] [--out results/shard.jsonl]
@@ -21,6 +24,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { listScenarios, metadataOf, shardOf } from './scenarios.mjs';
 
@@ -86,11 +90,26 @@ function harnessOf(test262, metadata) {
   return prelude.join('\n') + '\n';
 }
 
-// compose is the source a script scenario runs: the harness, the test's includes, then the test.
-function compose(test262, source, metadata, mode) {
-  const strict = mode === 'strict' ? '"use strict";\n' : '';
-  if (metadata.flags.includes('raw')) return strict + source;
-  return strict + harnessOf(test262, metadata) + source + `\n;print(${JSON.stringify(RAN)});\n`;
+// The source a script scenario runs as its entry: the test, after `"use strict";` in the strict scenario. The
+// harness and the RAN line are its prelude and epilogue (runScenario), so the directive never reaches them.
+function scriptEntry(source, mode) {
+  return (mode === 'strict' ? '"use strict";\n' : '') + source;
+}
+
+// The shared prelude for a test's harness and the shared RAN epilogue, written on first use and removed at exit
+// (liveTemps). $TMPDIR is a slow host mount on our sandboxes, and these writes block the runner's one thread, so they
+// aren't repeated per scenario.
+const sharedTemps = new Map(); // key -> path
+function sharedTemp(kind, key, text) {
+  let file = sharedTemps.get(key);
+  if (!file) {
+    const hash = crypto.createHash('sha1').update(key).digest('hex').slice(0, 12);
+    file = path.join(TMP, `t262-${process.pid}-${kind}-${hash}.js`);
+    fs.writeFileSync(file, text());
+    liveTemps.add(file);
+    sharedTemps.set(key, file);
+  }
+  return file;
 }
 
 // verdict decides a scenario from the engine's exit code and output.
@@ -268,6 +287,12 @@ async function runScenario(args, engine, scenario, slot) {
   if (args.parseOnly) engineArgs.push('--parse-only');
   // CanBlockIsFalse: the test needs a main agent whose [[CanBlock]] is false (INTERPRETING.md).
   if (metadata.flags.includes('CanBlockIsFalse')) engineArgs.push('--can-block=false');
+  if (!args.parseOnly && !metadata.flags.includes('raw')) {
+    const key = [metadata.flags.includes('async') ? 'async' : 'sync', ...metadata.includes].join('\n');
+    const prelude = sharedTemp('prelude', key, () => harnessOf(args.test262, metadata));
+    const epilogue = sharedTemp('epilogue', '', () => `print(${JSON.stringify(RAN)});\n`);
+    engineArgs.push('--prelude', prelude, '--epilogue', epilogue);
+  }
   const temps = [];
   let entry = file;
   if (!isModule) {
@@ -275,21 +300,14 @@ async function runScenario(args, engine, scenario, slot) {
     entry = path.join(path.dirname(file), `.t262-${process.pid}-${slot}.js`);
     temps.push(entry);
     liveTemps.add(entry);
-    fs.writeFileSync(entry, compose(args.test262, source, metadata, scenario.mode));
+    fs.writeFileSync(entry, scriptEntry(source, scenario.mode));
   } else {
-    if (!args.parseOnly && !metadata.flags.includes('raw')) {
-      const base = path.join(TMP, `t262-${process.pid}-${slot}`);
-      temps.push(`${base}-prelude.js`, `${base}-epilogue.js`);
-      for (const temp of temps) liveTemps.add(temp);
-      fs.writeFileSync(temps[0], harnessOf(args.test262, metadata));
-      fs.writeFileSync(temps[1], `print(${JSON.stringify(RAN)});\n`);
-      engineArgs.push('--prelude', temps[0], '--epilogue', temps[1]);
-    }
     engineArgs.push('--module');
   }
   engineArgs.push(entry);
-  // An argument no concurrent scenario has: the temp file, or the module test itself (it runs in one mode).
-  const marker = temps[0] ?? entry;
+  // An argument no concurrent scenario has: the script temp file (per slot), or the module test itself (it runs in
+  // one mode). Never the shared prelude.
+  const marker = entry;
   const result = await execute(engine[0], engineArgs, TIMEOUT_MS, Number(args.memMb) * 1024, Number(args.vmMb) * 1024, marker);
   for (const temp of temps) {
     fs.rmSync(temp, { force: true });

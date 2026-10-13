@@ -20,10 +20,13 @@ It needs node 22 and nothing else. Every command runs from the repo root.
 - `--prelude` / `--epilogue` files are global Scripts run before the entry and after it completed normally;
   an error in one prints `Test262:HostScriptError <file>` first (INTERFACES.md section 1).
 
-The runner appends `print("Test262:Ran")` after each test. A test passes only if that line is printed, so an
-engine that runs nothing can't pass. A script test is composed with the harness into a temp file next to it; a
-module test runs unmodified at its own path, with the harness as a prelude and the `Ran` line as an epilogue
-(temp files in os.tmpdir()), so a test that imports itself gets the same module record. A
+The runner runs `print("Test262:Ran")` after each test. A test passes only if that line is printed, so an
+engine that runs nothing can't pass. Every test but a raw one gets the harness (assert.js, sta.js,
+doneprintHandle.js if async, its includes) as a prelude and the `Ran` line as an epilogue, temp files in
+`$TMPDIR`. A script test runs as a temp file next to it (`.t262-PID-SLOT.js`, so fixtures and `import()`
+resolve): its source, after `"use strict";` in the strict scenario, so the directive applies to the test only,
+never to the harness. A module test runs unmodified at its own path, so a test that imports itself gets the same
+module record. A raw test runs alone (no prelude or epilogue), and `--parse-only` parses the entry only. A
 `Test262:HostScriptError` line fails the scenario whatever the test expects.
 
 ## Running
