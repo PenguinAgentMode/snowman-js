@@ -515,17 +515,16 @@ Result<Value> promiseResolveStatic(NativeCall& call) {
   return PromiseResolve(call.thisValue.asObject(), call.args[0]);
 }
 
-// 27.2.4.8 Promise.try
+// 27.2.4.8 Promise.try: a promise the callback returns is not wrapped again (PromiseResolve).
 Result<Value> promiseTry(NativeCall& call) {
   if (!call.thisValue.isObject()) return ThrowTypeError("Promise.try called on a non-object");
-  PromiseCapability* promiseCapability = TRY(NewPromiseCapability(call.thisValue));
   Result<Value> status = Call(call.args[0], Value::undefined(), call.args.slice(1));
   if (status.isThrow()) {
+    PromiseCapability* promiseCapability = TRY(NewPromiseCapability(call.thisValue));
     TRY(Call(promiseCapability->reject, Value::undefined(), {status.thrown()}));
-  } else {
-    TRY(Call(promiseCapability->resolve, Value::undefined(), {status.value()}));
+    return promiseCapability->promise;
   }
-  return promiseCapability->promise;
+  return PromiseResolve(call.thisValue.asObject(), status.value());
 }
 
 // 27.2.4.9 Promise.withResolvers
