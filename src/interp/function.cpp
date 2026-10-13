@@ -2,6 +2,7 @@
 #include "interp/function.h"
 
 #include <typeinfo>
+#include <unordered_map>
 
 #include "interp/dispose.h"
 #include "interp/interpreter.h"
@@ -465,8 +466,77 @@ Result<void> IteratorBindingInitialization(const std::vector<ast::Node*>& formal
   return bindFormals(formals, args, environment);
 }
 
+// FunctionDeclarationInstantiation's fast path. When a function's parameters, arguments object, vars and
+// top-level lexical declarations all go in its FunctionEnvironment (a simple parameter list without
+// duplicates, no sloppy direct eval), the steps create the same bindings for every call and run no code. The
+// plan is the binding list the general steps built on the first call, with the parameters, the arguments
+// object and the functions left to fill in.
+struct InstantiationPlan {
+  bool strict;
+  ThisMode thisMode;
+  std::vector<DeclarativeEnvironment::Binding> bindings;  // parameters first, in order
+  uint32_t parameterCount;
+  bool argumentsObjectNeeded;
+  uint32_t argumentsSlot;
+  std::vector<std::pair<const ast::FunctionDeclaration*, uint32_t>> functions;  // functionsToInitialize, slot
+};
+
+namespace {
+
+// The plans by function node (nodes are never freed; neither are plans). Per thread, like the AST.
+thread_local std::unordered_map<const ast::Function*, const InstantiationPlan*>* tPlans;
+
+const InstantiationPlan* findPlan(const ECMAScriptFunction* func) {
+  if (!tPlans || func->codeKind != CodeKind::Function) return nullptr;
+  auto it = tPlans->find(func->function);
+  if (it == tPlans->end()) return nullptr;
+  const InstantiationPlan* plan = it->second;
+  return plan->strict == func->strict && plan->thisMode == func->thisMode ? plan : nullptr;
+}
+
+// After the general steps ran for a function the fast path applies to: its plan, from env's bindings.
+void recordPlan(const ECMAScriptFunction* func, DeclarativeEnvironment* env, bool argumentsObjectNeeded) {
+  auto* plan = new InstantiationPlan{func->strict, func->thisMode, env->bindings(),
+                                     uint32_t(func->function->parameterNames.size()), argumentsObjectNeeded,
+                                     0, {}};
+  for (uint32_t i = 0; i < plan->parameterCount; i++) plan->bindings[i].value = Value::empty();
+  if (argumentsObjectNeeded) {
+    plan->argumentsSlot = env->slotOf(env->find(atom(u"arguments")));
+    plan->bindings[plan->argumentsSlot].value = Value::empty();
+  }
+  for (const ast::FunctionDeclaration* f : func->function->functionsToInitialize) {
+    uint32_t slot = env->slotOf(env->find(identifierName(f->id)));
+    plan->functions.emplace_back(f, slot);
+    if (slot >= plan->parameterCount) plan->bindings[slot].value = Value::undefined();  // a var
+  }
+  if (!tPlans) tPlans = new std::unordered_map<const ast::Function*, const InstantiationPlan*>();
+  (*tPlans)[func->function] = plan;
+}
+
+Result<void> instantiateFromPlan(ECMAScriptFunction* func, const InstantiationPlan& plan, Args args) {
+  InterpContext* calleeContext = runningContext();
+  auto* env = static_cast<DeclarativeEnvironment*>(calleeContext->lexicalEnvironment);
+  env->assignBindings(plan.bindings);
+  if (plan.argumentsObjectNeeded) {
+    Object* ao = plan.strict ? CreateUnmappedArgumentsObject(args)
+                             : CreateMappedArgumentsObject(func, func->function->parameterNames, args, env);
+    env->bindingAt(plan.argumentsSlot)->value = Value(ao);
+  }
+  for (uint32_t i = 0; i < plan.parameterCount; i++) env->bindingAt(i)->value = args[i];
+  PrivateEnvironment* privateEnv = calleeContext->privateEnvironment;
+  for (const auto& [f, slot] : plan.functions) {
+    Value fo = TRY(InstantiateFunctionObject(f, env, privateEnv));
+    TRY(env->setBinding(*env->bindingAt(slot), identifierName(f->id), fo, false));
+  }
+  return {};
+}
+
+}  // namespace
+
 // 10.2.11 FunctionDeclarationInstantiation
 Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args args) {
+  if (!func->plan) func->plan = findPlan(func);
+  if (func->plan) return instantiateFromPlan(func, *func->plan, args);
   InterpContext* calleeContext = runningContext();
   const ast::VarScope* code = varScopeOf(func);
   const ast::Function* function = func->codeKind == CodeKind::Function ? func->function : nullptr;
@@ -592,6 +662,9 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
     String* fn = identifierName(f->id);
     Value fo = TRY(InstantiateFunctionObject(f, lexEnv, privateEnv));
     TRY(varEnv->SetMutableBinding(fn, fo, false));
+  }
+  if (function && simpleParameterList && !hasDuplicates && !hasParameterExpressions && (strict || !code->hasDirectEval)) {
+    recordPlan(func, lexDeclEnv, argumentsObjectNeeded);
   }
   return {};
 }

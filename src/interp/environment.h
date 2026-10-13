@@ -76,6 +76,19 @@ class DeclarativeEnvironment : public Environment {
   // Direct access for the interpreter (no observable behaviour in declarative records).
   Binding* find(String* name);
   bool hasBindingDirect(String* name) { return find(name) != nullptr; }
+  // Binding slots: a binding keeps its slot until a binding is deleted (the record is dynamic by then).
+  Binding* bindingAt(uint32_t slot) { return slot < bindings_.size() ? &bindings_[slot] : nullptr; }
+  uint32_t slotOf(const Binding* binding) const { return uint32_t(binding - bindings_.data()); }
+  // SetMutableBinding on an existing binding.
+  Result<void> setBinding(Binding& binding, String* name, Value value, bool strict);
+  // A record that gained a binding after its instantiation (an eval-declared var) or lost one: its bindings
+  // are no longer those of every record its code creates, so the identifier caches don't look through it.
+  bool isDynamic() const { return dynamic_; }
+  // A function record's whole binding list at once (FunctionDeclarationInstantiation's fast path).
+  void assignBindings(const std::vector<Binding>& bindings) {
+    bindings_ = bindings;
+    index_.reset();
+  }
   // A new binding initialized to `value` (CreateMutableBinding + InitializeBinding).
   void createInitializedBinding(String* name, Value value, bool mutable_ = true);
   const std::vector<Binding>& bindings() const { return bindings_; }
@@ -97,7 +110,8 @@ class DeclarativeEnvironment : public Environment {
   Binding& add(String* name);
 
   std::vector<Binding> bindings_;
-  std::unique_ptr<std::unordered_map<String*, uint32_t>> index_;  // built once a record has many bindings
+  std::unique_ptr<std::unordered_map<String*, uint32_t>> index_;  // built by find() once a record has many bindings
+  bool dynamic_ = false;
 };
 
 // 9.1.1.3 Function Environment Records.
