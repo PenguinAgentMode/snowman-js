@@ -60,6 +60,18 @@ char numberFormatPluralCategory(const NumberFormatObject& nf, const Decimal& x, 
 // A NumberFormat created as by new Intl.NumberFormat(locales, options), in the current realm.
 Result<NumberFormatObject*> createNumberFormat(Value locales, Value options);
 
+class ListFormatObject : public Object {
+ public:
+  using Object::Object;
+  std::string locale, type, style;  // [[Locale]], [[Type]], [[Style]]
+};
+struct ListPart {
+  bool element;
+  std::u16string value;
+};
+// 14.5.2 CreatePartsFromList ( listFormat, list )
+std::vector<ListPart> CreatePartsFromList(const ListFormatObject& lf, const std::vector<std::u16string>& list);
+
 // %Intl%: carries [[FallbackSymbol]] for the legacy constructor behaviour of NumberFormat and DateTimeFormat.
 class IntlObject : public Object {
  public:

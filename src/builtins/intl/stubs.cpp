@@ -5,7 +5,7 @@ namespace snowman::intl {
 void installDateTimeFormat(Realm&, Object*) {}
 void installDisplayNames(Realm&, Object*) {}
 void installDurationFormat(Realm&, Object*) {}
-void installListFormat(Realm&, Object*) {}
+
 
 
 void installRelativeTimeFormat(Realm&, Object*) {}
