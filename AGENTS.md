@@ -25,6 +25,11 @@
   A full-suite-only regression reverts too, unless it is explained (it passed by accident, e.g. vacuously
   before a feature existed; or a timeout that passes alone) and STATUS.md waives it with an owner and a fix.
   Every published number names the main commit it was measured on.
+- **No long foreground tool calls.** A foreground command must finish in under ~10 minutes. Gates, suite runs and
+  long builds always run in the background (the bash tool's run_in_background, or `nohup ... > $HOME/logs/x.log
+  2>&1 &` in a background call) with a completion monitor, and then you end your turn. Messages are read between
+  steps; an agent stuck inside a call whose machine died hangs IN_PROGRESS for good (temporal and temporal2 were
+  lost that way). At the start of every new task: `du -sh /tmp` and MemTotal − MemFree from /proc/meminfo.
 - **Background runs get a completion monitor.** Before ending a turn with a long run going (gate, suite run,
   build) in the background, attach a `monitor` that fires when it finishes, e.g. a command source that waits
   for the process to exit and then prints the runner's summary line. An idle agent with an unwatched run never
