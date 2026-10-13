@@ -57,8 +57,16 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-None: 5f3218f30 covers c47ec06 ($262.agent step 4), 2853690 (statics lint), 5f3218f (decorators2 5eada31 +
-staging-regexp 41e448c27, integrated and gated by the lead as 38e96b9).
+Not in 5f3218f30's run:
+- 9c15385 int/caller 4fc7727 = main + staging-caller bc68f1d7e (legacy f.caller / f.arguments, ES 17.1 extension on
+  non-strict functions; InterpContext fields in interpreter.h, realm intrinsics). Gated by the lead vs 5f3218f30:
+  ES-core 0, full 0 regressions, +12 staging; new statics 0.
+- 2b910d9 / ws/stability b3a61c6 (docs + results): 4 full runs of 19dc92105 identical (0 flaky files); parse-only
+  ES-core 82,724 / 82,724 (`results/19dc92105-parse.json`): **M1a and M1b reached (100.0% / 100.0%)**.
+
+Milestones with every input (main 5f3218f30 + parse 19dc92105): M1a, M1b, M2–M8 all REACHED; ES-core 43,305 /
+43,305 (100%); full 53,587 / 53,616 (99.95%). Command: `node t262/runner/milestones.mjs results/5f3218f30.json
+--parse-only results/19dc92105-parse.json --full results/5f3218f30-full.json`.
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
