@@ -19,16 +19,23 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   IsTypedArrayFixedLength.
 - runtime/realm.h: Intrinsic::ShadowRealm, ShadowRealmPrototype.
 
-## Current (15:25 UTC): Temporal calendars (I own the whole area)
+## Current (16:00 UTC): calendars wrap-up, then $262.agent step 3
 
-- Merged: step 2 thread_local (main 7f86ee9); calendars framework + gregory + group 4 (10979b4, main a1a2a5f, +589 full).
-- Group 2 ws/calendars-g2 cb6d5f1 (buddhist, roc, japanese; calendar_isolike.h): slice +358, 0 regressions; full gate
-  running (~/logs/g2gate.sh, vs 29a14dfdd; the lead re-gates the JSONL vs a1a2a5f). Push JSONL to results/cb6d5f1/full.jsonl.
-- Group 3 ws/calendars-g3 0bf1332 (WIP, unbuilt): calendar_arithmetic.h (YearStartCalendar), coptic/ethiopic/ethioaa,
-  indian, persian (ICU 78: 33-year rule + nonLeapYears list from persncal.cpp), islamic-civil/tbla, hebrew. Verified in
-  ~/work/g3/verify.mjs vs Intl (14,808 days each, ISO 1000-2500) and vs extreme-dates.js rows. Next: build, slices,
-  gate vs the newest STATUS.md baseline (results/a1a2a5f{,-full}.json), reword the wip commit before the MR.
-- Scripts: ~/logs/{calslice,calgate,g2slice,g2gate}.sh (copy + sed for g3). Worktree ~/repo/cal (branches g2, g3).
+- Merged: calendars framework + gregory + group 4 (10979b4, main a1a2a5f), group 2 (cb6d5f1, main 579c3fa).
+- Group 3 ws/calendars-g3 f21aed9 (on 93b4e17, group 2 under it): slice +826, 0 regressions; full gate vs a1a2a5fc3
+  running (~/logs/g3gate.sh -> ~/logs/gate-g3-{core,full}.txt). Push results/f21aed9/full.jsonl with the MR.
+- Next small merge: ws/calendars-ref e27ba47 (WIP, unbuilt): the proposal's chinese/dangi ISO reference-year table in
+  calendar.cpp (NonISOMonthDayToISOReferenceDate) for the 4 PlainMonthDay rare-leap-month files. Reword before the MR.
+- KNOWN DATA GAP (lead's decision: leave): 9 intl402/Temporal chinese files (*/daysInYear/basic-chinese.js x4,
+  */monthCode/chinese-calendar-dates.js x5) fail because node's ICU 78.3, the source of calendar_chinese_data.inc,
+  deviates from the official (HKO) calendar: ICU puts CNY 2027 on 02-07 (official 02-06) and 2030 on 02-02 (official
+  02-03), so years 2026-2030 have the wrong lengths; and the 1987 leap month after month 7 (official: M06L). If it is ever
+  fixed: an astronomical new-moon / solar-term computation in UTC+8 (Meeus) in gen-calendars.mjs, cross-checked
+  against ICU everywhere else; no third-party data.
+- Skipped for now: 6 DTF dateStyle "Ramadan" tests (intl side); ZonedDateTime/links.js CST6CDT (tz side).
+- Then: $262.agent step 3 from notes/agent-design.md (shared SAB blocks, real atomics, waiter lists, agent threads with
+  16 MB stacks, process-wide heap budget, joins on exit/timeout); test with the 4-agent stress file at --jobs 4 under the
+  real runner. Each step its own gated merge.
 
 ## Current batch: $262.agent
 
