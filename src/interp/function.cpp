@@ -482,7 +482,8 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
   auto* varDeclEnv = static_cast<DeclarativeEnvironment*>(varEnv);
   for (ast::FunctionDeclaration* f : code->annexBFunctions) {
     String* F = identifierName(f->id);
-    if (!containsName(instantiatedVarNames, F) && F != atom(u"arguments")) {
+    if (F == atom(u"arguments")) continue;  // never hoisted over the arguments binding
+    if (!containsName(instantiatedVarNames, F)) {
       TRY(varDeclEnv->CreateMutableBinding(F, false));
       TRY(varDeclEnv->InitializeBinding(F, Value::undefined()));
       instantiatedVarNames.push_back(F);
