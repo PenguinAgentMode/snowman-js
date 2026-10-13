@@ -359,7 +359,7 @@ bool parseAnnotatedTime(std::u16string_view s, RawParse& r) {
     std::u16string_view timeText = s.substr(0, timeEnd);
     int32_t a, b;
     Parser md(timeText);
-    if (md.dateSpecMonthDay(a, b) && md.atEnd()) return false;
+    if (md.dateSpecMonthDay(a, b) && md.atEnd() && b <= ISODaysInMonth(1972, a)) return false;
     Parser ym(timeText);
     if (ym.dateSpecYearMonth(a, b) && ym.atEnd()) return false;
   }

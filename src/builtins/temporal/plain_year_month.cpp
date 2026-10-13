@@ -110,19 +110,12 @@ Result<Value> AddDurationToYearMonth(ArithmeticOperation operation, PlainYearMon
   if (f.weeks != 0 || f.days != 0 || f.hours != 0 || f.minutes != 0 || f.seconds != 0 || f.milliseconds != 0 ||
       f.microseconds != 0 || f.nanoseconds != 0)
     return ThrowRangeError("only years and months can be added to a PlainYearMonth");
-  int sign = DurationSign(f);
   const CalendarId& calendar = yearMonth->calendar;
   CalendarFields fields = ISODateToFields(calendar, yearMonth->isoDate, FieldsType::YearMonth);
   fields.day = 1;
   ISODate intermediateDate = TRY(CalendarDateFromFields(calendar, fields, Overflow::Constrain));
-  ISODate date = intermediateDate;
-  if (sign < 0) {
-    DateDuration oneMonthDuration{0, 1, 0, 0};
-    ISODate nextMonth = TRY(CalendarDateAdd(calendar, intermediateDate, oneMonthDuration, Overflow::Constrain));
-    date = AddDaysToISODate(nextMonth, -1);
-  }
   DateDuration durationToAdd = ToDateDurationRecordWithoutTime(f);
-  ISODate addedDate = TRY(CalendarDateAdd(calendar, date, durationToAdd, overflow));
+  ISODate addedDate = TRY(CalendarDateAdd(calendar, intermediateDate, durationToAdd, overflow));
   CalendarFields addedDateFields = ISODateToFields(calendar, addedDate, FieldsType::YearMonth);
   ISODate isoDate = TRY(CalendarYearMonthFromFields(calendar, addedDateFields, overflow));
   return Value(TRY(CreateTemporalYearMonth(isoDate, calendar)));

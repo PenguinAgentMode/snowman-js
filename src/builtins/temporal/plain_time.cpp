@@ -67,7 +67,6 @@ Result<PlainTimeObject*> ToTemporalTime(Value item, Value options) {
   } else {
     if (!item.isString()) return ThrowTypeError("a PlainTime must be a Temporal object, a property bag or a string");
     ParsedISODateTime parsed = TRY(ParseISODateTime(item.asString()->view(), kTime));
-    if (parsed.calendar) TRY(CanonicalizeCalendar(*parsed.calendar));
     TRY(GetTemporalOverflowOptionFrom(options));
     result = parsed.time ? *parsed.time : MidnightTimeRecord();
   }
