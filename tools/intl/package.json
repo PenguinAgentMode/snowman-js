@@ -1,0 +1,10 @@
+{
+  "name": "snowman-intl-tools",
+  "private": true,
+  "description": "CLDR 48.0 supplemental data for the Intl generators (aliases, likely subtags, plural rules, BCP 47 keys). Locale display data comes from node's own Intl (ICU, CLDR 48.0).",
+  "type": "module",
+  "devDependencies": {
+    "cldr-core": "48.0.0",
+    "cldr-bcp47": "48.0.0"
+  }
+}
