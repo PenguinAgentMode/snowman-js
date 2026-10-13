@@ -69,6 +69,7 @@ const CalendarSystem* GetCalendarSystem(std::u16string_view calendar);
 const CalendarSystem* ChineseCalendarSystem();
 const CalendarSystem* DangiCalendarSystem();
 const CalendarSystem* IslamicUmalquraCalendarSystem();
+const CalendarSystem* JapaneseCalendarSystem();  // calendar_japanese.cpp
 
 // ParseMonthCode / CreateMonthCode.
 std::optional<MonthCodeParts> ParseMonthCode(std::u16string_view monthCode);
