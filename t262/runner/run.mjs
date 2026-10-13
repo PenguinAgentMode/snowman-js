@@ -160,10 +160,14 @@ function execute(command, args, timeoutMs, memLimitKb, vmLimitKb, marker) {
       child.kill('SIGKILL');
     }, timeoutMs);
     let entry = null;
+    let peakKb = 0;
     const watchdog = setInterval(() => {
       if (child.exitCode !== null || child.signalCode !== null) return;
       entry ??= procEntryOf(child, marker);
-      if (entry && rssKb(entry) > memLimitKb) {
+      if (!entry) return;
+      const kb = rssKb(entry);
+      if (kb > peakKb) peakKb = kb;
+      if (kb > memLimitKb) {
         memoryExceeded = true;
         child.kill('SIGKILL');
       }
@@ -177,7 +181,10 @@ function execute(command, args, timeoutMs, memLimitKb, vmLimitKb, marker) {
     child.on('exit', stop);
     child.on('close', (code) => {
       stop();
-      resolve({ code: code ?? 1, output, timedOut, memoryExceeded, ms: Math.round(performance.now() - started) });
+      // rssMb: the largest resident set the watchdog saw (null if it never found the process: a short run, or a
+      // lookup miss, which leaves the process capped by ulimit -v only).
+      const rssMb = entry ? Math.round(peakKb / 1024) : null;
+      resolve({ code: code ?? 1, output, timedOut, memoryExceeded, rssMb, ms: Math.round(performance.now() - started) });
     });
     child.on('error', (error) => {
       stop();
@@ -224,7 +231,7 @@ async function runScenario(args, engine, scenario, slot) {
       : result.output.includes(HOST_SCRIPT_ERROR)
         ? { error_name: 'HostScriptError', message: hostScriptError(result.output) }
         : lastError(result.output);
-  return { file: scenario.file, mode: scenario.mode, status, ms: result.ms, ...failure };
+  return { file: scenario.file, mode: scenario.mode, status, ms: result.ms, rss_mb: result.rssMb ?? null, ...failure };
 }
 
 async function main() {
