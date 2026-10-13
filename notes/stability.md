@@ -19,4 +19,16 @@ Branch `ws/stability` from main 19dc921 (label 19dc92105). Measurement only, no 
 - Parse-only ES-core on $HOME/engine-19dc92105 (copy of ./engine, same sha256): 82,724 / 82,724 scenarios,
   results/19dc92105-parse.json. `milestones.mjs results/19dc92105.json --parse-only results/19dc92105-parse.json`:
   REACHED M1a (100.0% / 100.0%), REACHED M1b (100.0% / 100.0%).
-- Next (ws/runner-strict): gate chain $HOME/logs/gate-chain.sh, same binary: new-runner full, old/new parse-only full.
+
+## Runner change (ws/runner-strict, merged as 5606282 → main f44a3f9)
+- Script tests get the harness as --prelude and the Ran line as --epilogue, with "use strict" on the test only.
+  Preludes (one per includes + async flag) and the epilogue are written once per runner process; the marker is the
+  per-slot entry.
+- Same binary 19dc92105, full suite: 53,452 → 53,465 files (+13 staging/sm/strict), 0 newly failing,
+  HostScriptError 0. Parse-only full: 0 status differences (42 SyntaxErrors only changed line:column).
+- A/B timing: per-scenario temp writes on the 9p $TMPDIR cost ~20%; the shared-prelude cache brought it within noise.
+- Report: results branch results/5606282/ (MERGE_REQUEST.md, runner-gate.md, JSONLs).
+- Gotchas: listing a fresh test262 checkout over 9p takes ~1 min before the first scenario (not in "seconds");
+  squash with `git reset --soft <base>` only against the exact base the worktree was cut from.
+
+## State: PARKED (lead, after the merge). Nothing running.
