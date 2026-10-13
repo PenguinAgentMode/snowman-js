@@ -65,6 +65,12 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Decisions
 
+- 2026-10-13 16:33: the stack stopped the dead agents' machines (memcap, survey, temporal, intl, temporal2); every
+  commit from them was already on origin. New workers (fresh contexts): chinese (astronomical Chinese/Dangi
+  tables, 9 files), decorators2 (decorators, 22 + 2 staging), staging (staging triage, 34), intlfmt (non-Gregorian
+  DTF output, Ramadan, tz link). builtins keeps $262.agent (109 ES-core). Plan each area to finish or hand off
+  within ~5 h (a 6-hour run cap exists).
+
 - 2026-10-13 14:19: memcap presumed dead (liveness rule). builtins, the last live worker, owns the whole calendar area
   (first merge: temporal2's framework 67c5b59 + builtins' chinese/dangi/islamic-umalqura). The lead gates orphaned
   pushed branches itself (memcap's CanBlockIsFalse: 9 CanBlock-flagged files, 18 scenarios, 14 → 18, 0 newly

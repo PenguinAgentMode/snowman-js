@@ -25,24 +25,22 @@ How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort
 
 ## Workers
 
-| Agent | State | Area | Branch / last push |
+| Agent | State | Area | Branch |
 | --- | --- | --- | --- |
-| builtins | LIVE (the only one) | Temporal calendars (framework, all groups); $262.agent step 3 parked | ws/calendars-b 10979b4, ws/calendars-g2; notes/builtins.md + notes/agent-design.md on ws/builtins5 |
-| memcap | dead 14:19 (hung in a call) | — | ws/canblock ff86a5f (merged via 7205b4d), ws/measure (notes/memcap.md, es-core-residue.md) |
-| temporal2 | dead 13:47 (hung) | — | ws/calendars 67c5b59 (taken over), ws/decorators fb2d287 (decorators parser WIP, parked), notes/temporal2.md |
-| survey | lost 12:15 (GS restart) | — | ws/survey-intl 5aba3f349 (merged) |
-| temporal | dead ~09:00 (hung) | — | ws/temporal 7526397 (merged) |
-| intl | dead (context > 1M tokens) | — | ws/intl b48382d (merged); ws/intl-dev was taken over |
-| calendars, calendars2, calendars3 | never started ("no hosts") | — | — |
+| builtins | LIVE since ~07:10 | $262.agent step 3 (ws/agent3 d995052, gating vs 317949e37), then step 4 | ws/agent3; notes/builtins.md + notes/agent-design.md on ws/builtins5 |
+| chinese | LIVE 16:45 | astronomical Chinese/Dangi tables (9 intl402/Temporal files) | ws/chinese; notes/chinese.md |
+| decorators2 | started 16:46 | decorators (22 + 2 staging), from ws/decorators fb2d287 | ws/decorators2; notes/decorators2.md |
+| staging | started 16:45 | staging triage (34); fixes + tools/lead/staging-residue.md | ws/staging; notes/staging.md |
+| intlfmt | LIVE 16:45 | non-Gregorian DTF output (~17 intl402), Ramadan (6), tz link (1) | ws/intlfmt; notes/intlfmt.md |
+| memcap, temporal2, survey, temporal, intl | machines stopped 16:33 | — | all their commits are on origin (see STATUS) |
+| calendars, calendars2, calendars3, decorators | never started ("no hosts") | — | — |
 
 Dead agents still list as IN_PROGRESS/IDLE and probably still hold machines; agent_close doesn't free them.
 
 ## Spawn retries
 
-Every spawn since 12:20 fails with "ProvisionSandbox ... no hosts match the requirements" (12:20, 14:33, 14:47,
-15:45 "decorators"). Next: 16:50 (one-shot cron reminder).
-Supervisor: retry once an hour (next 15:50; a one-shot cron reminder is set), or at once if told machines were
-freed. A failed spawn: agent_close it and tell the supervisor.
+Capacity is back since 16:33 (dead machines stopped). Working agents: lead + builtins + 4 = 6 (the limit).
+Don't spawn more unless one closes.
 
 ## Open work (beyond the calendars)
 
