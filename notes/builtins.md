@@ -25,7 +25,8 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   both kept) + notes + importValue through ImportModuleForRealm (ShadowRealm full slice 64/64). Full ES-core gate of
   d55e14b running (vs results/c21bcd82e.json). Step 1 alone (6ce8f3e) was gated clean: 43,169, +3.
 - ws/builtins6 dd70aa8: nonextensible-applies-to-private, gated clean (43,166, 0 regressions; full slice +3), sent alone.
-- Step 2 (thread_local) on ws/builtins7 (from main 7a345df), all pushed, warning-free, not yet gated:
+- d55e14b gated clean (43,169) and sent. Step 2 (thread_local) on ws/builtins7, rebased on main 258ff44 (tip 7ab3d0e),
+  gate running (/tmp/core10.jsonl, engine /tmp/engine-tls; main engine for the speed run: /tmp/engine-main258):
   88850c4 runtime (vm, heap, atom table, emptyString, index strings, length key), 37fc0f0 builtins (lastIndex key,
   Math.random state; seeded per thread by the Math installer), aa57585 interp (gCurrent, gStackPool thread_local;
   gStackBytes std::atomic with an atomic reserve-then-check; gModuleAsyncEvaluationCount), 63fb221 parser (gChunk,
