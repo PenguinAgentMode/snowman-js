@@ -20,10 +20,13 @@ class RegExpObject : public Object {
   std::shared_ptr<const regexp::Program> matcher;  // [[RegExpMatcher]]; null until RegExpInitialize
   String* originalSource = nullptr;                // [[OriginalSource]]
   String* originalFlags = nullptr;                 // [[OriginalFlags]]
+  Realm* realm = nullptr;                          // [[Realm]] (legacy RegExp features)
+  bool legacyFeaturesEnabled = false;              // [[LegacyFeaturesEnabled]]
   void trace(Tracer& tracer) override {
     Object::trace(tracer);
     tracer.visit(reinterpret_cast<Cell*>(originalSource));
     tracer.visit(reinterpret_cast<Cell*>(originalFlags));
+    tracer.visit(realm);
   }
 };
 
@@ -32,9 +35,11 @@ const PropertyKey& lastIndexKey() {
   return key;
 }
 
-// 22.2.3.2 RegExpAlloc ( newTarget )
+// 22.2.3.2 RegExpAlloc ( newTarget ), with the legacy RegExp features' [[Realm]] and [[LegacyFeaturesEnabled]]
 Result<RegExpObject*> RegExpAlloc(Object* newTarget) {
   RegExpObject* obj = TRY(OrdinaryCreateFromConstructor<RegExpObject>(newTarget, Intrinsic::RegExpPrototype));
+  obj->realm = currentRealm();
+  obj->legacyFeaturesEnabled = newTarget == obj->realm->intrinsic(Intrinsic::RegExp);
   TRY(DefinePropertyOrThrow(obj, lastIndexKey(), PropertyDescriptor::data(Value::undefined(), Attr::Writable)));
   return obj;
 }
@@ -173,10 +178,12 @@ Result<Value> RegExpPrototype_toString(NativeCall& call) {
   return Value(concatStrings({u"/", pattern->view(), u"/", flags->view()}));
 }
 
-// B.2.4.1 RegExp.prototype.compile ( pattern, flags )
+// B.2.4.1 RegExp.prototype.compile ( pattern, flags ), with the legacy RegExp features' receiver checks
 Result<Value> RegExpPrototype_compile(NativeCall& call) {
   RegExpObject* o = asRegExp(call.thisValue);
   if (!o) return ThrowTypeError("RegExp.prototype.compile called on incompatible receiver");
+  if (o->realm != currentRealm()) return ThrowTypeError("RegExp.prototype.compile called on a RegExp of another realm");
+  if (!o->legacyFeaturesEnabled) return ThrowTypeError("RegExp.prototype.compile called on a RegExp subclass instance");
   Value pattern = call.args[0], flags = call.args[1];
   Value p = pattern, f = flags;
   if (RegExpObject* rx = asRegExp(pattern)) {
@@ -263,6 +270,116 @@ Object* MakeMatchIndicesIndexPairArray(const std::vector<regexp::Span>& indices,
   return a;
 }
 
+// ---- Legacy RegExp static properties (proposal-regexp-legacy-features) ----
+// %RegExp%'s [[RegExpInput]], [[RegExpLastMatch]], ... live in the constructor's slots. The match-derived ones are
+// kept as the last match's subject and spans and become strings when read.
+enum LegacySlot : size_t {
+  kLegacyInput,       // [[RegExpInput]]: a String, or empty once invalidated
+  kLegacySubject,     // the last match's S, or empty once invalidated
+  kLegacyMatchStart,  // [[RegExpLastMatch]] = S[start, end); leftContext/rightContext around it
+  kLegacyMatchEnd,
+  kLegacyLastParen,   // [[RegExpLastParen]]: start, end (-1 = the empty String)
+  kLegacyParen1 = kLegacyLastParen + 2,  // [[RegExpParen1..9]]: start, end pairs
+  kLegacySlotCount = kLegacyParen1 + 18,
+};
+
+BuiltinFunction* legacyRegExpConstructor() { return static_cast<BuiltinFunction*>(intrinsic(Intrinsic::RegExp)); }
+
+void setLegacySpan(std::vector<Value>& slots, size_t at, const regexp::Span* span) {
+  slots[at] = num(span && span->start >= 0 ? span->start : -1);
+  slots[at + 1] = num(span && span->start >= 0 ? span->end : -1);
+}
+
+// UpdateLegacyRegExpStaticProperties ( C, S, startIndex, endIndex, capturedValues )
+void UpdateLegacyRegExpStaticProperties(String* s, const std::vector<regexp::Span>& spans, uint32_t n) {
+  std::vector<Value>& slots = legacyRegExpConstructor()->slots;
+  slots[kLegacyInput] = Value(s);
+  slots[kLegacySubject] = Value(s);
+  slots[kLegacyMatchStart] = num(spans[0].start);
+  slots[kLegacyMatchEnd] = num(spans[0].end);
+  setLegacySpan(slots, kLegacyLastParen, n > 0 ? &spans[n] : nullptr);
+  for (uint32_t i = 1; i <= 9; i++) setLegacySpan(slots, kLegacyParen1 + 2 * (i - 1), i <= n ? &spans[i] : nullptr);
+}
+
+// InvalidateLegacyRegExpStaticProperties ( C )
+void InvalidateLegacyRegExpStaticProperties() {
+  std::vector<Value>& slots = legacyRegExpConstructor()->slots;
+  slots[kLegacyInput] = Value::empty();
+  slots[kLegacySubject] = Value::empty();
+}
+
+Value legacySubstring(String* s, Value start, Value end) {
+  if (start.asNumber() < 0) return Value(emptyString());
+  return Value(newString(s->view().substr(size_t(start.asNumber()), size_t(end.asNumber() - start.asNumber()))));
+}
+
+enum class LegacyProperty { Input, LastMatch, LastParen, LeftContext, RightContext, Paren1 };
+
+// GetLegacyRegExpStaticProperty ( C, thisValue, internalSlotName ); Paren1 + i - 1 is [[RegExpPareni]].
+template <LegacyProperty Property, int Paren = 0>
+Result<Value> GetLegacyRegExpStaticProperty(NativeCall& call) {
+  BuiltinFunction* c = legacyRegExpConstructor();
+  if (!call.thisValue.isObject() || call.thisValue.asObject() != c)
+    return ThrowTypeError("RegExp legacy static property read on a receiver other than %RegExp%");
+  const std::vector<Value>& slots = c->slots;
+  if (Property == LegacyProperty::Input) {
+    if (slots[kLegacyInput].isEmpty()) return ThrowTypeError("RegExp legacy static properties are not available");
+    return slots[kLegacyInput];
+  }
+  if (slots[kLegacySubject].isEmpty()) return ThrowTypeError("RegExp legacy static properties are not available");
+  String* s = slots[kLegacySubject].asString();
+  switch (Property) {
+    case LegacyProperty::LastMatch:
+      return legacySubstring(s, slots[kLegacyMatchStart], slots[kLegacyMatchEnd]);
+    case LegacyProperty::LastParen:
+      return legacySubstring(s, slots[kLegacyLastParen], slots[kLegacyLastParen + 1]);
+    case LegacyProperty::LeftContext:
+      return legacySubstring(s, num(0), slots[kLegacyMatchStart]);
+    case LegacyProperty::RightContext:
+      return legacySubstring(s, slots[kLegacyMatchEnd], num(double(s->length())));
+    default: {
+      size_t at = kLegacyParen1 + 2 * size_t(Paren - 1);
+      return legacySubstring(s, slots[at], slots[at + 1]);
+    }
+  }
+}
+
+// SetLegacyRegExpStaticProperty ( C, thisValue, internalSlotName, val ) for [[RegExpInput]]
+Result<Value> SetLegacyRegExpInput(NativeCall& call) {
+  BuiltinFunction* c = legacyRegExpConstructor();
+  if (!call.thisValue.isObject() || call.thisValue.asObject() != c)
+    return ThrowTypeError("RegExp legacy static property set on a receiver other than %RegExp%");
+  String* strVal = TRY(ToString(call.args[0]));
+  c->slots[kLegacyInput] = Value(strVal);
+  return Value::undefined();
+}
+
+void installLegacyRegExpStaticProperties(Realm& realm, BuiltinFunction* ctor) {
+  ctor->slots.assign(kLegacySlotCount, num(-1));
+  ctor->slots[kLegacyInput] = Value(emptyString());
+  ctor->slots[kLegacySubject] = Value(emptyString());
+  ctor->slots[kLegacyMatchStart] = num(0);
+  ctor->slots[kLegacyMatchEnd] = num(0);
+  auto both = [&](const char16_t* name, const char16_t* alias, NativeFn getter, NativeFn setter) {
+    defineAccessor(realm, ctor, PropertyKey(name), getter, setter);
+    defineAccessor(realm, ctor, PropertyKey(alias), getter, setter);
+  };
+  both(u"input", u"$_", GetLegacyRegExpStaticProperty<LegacyProperty::Input>, SetLegacyRegExpInput);
+  both(u"lastMatch", u"$&", GetLegacyRegExpStaticProperty<LegacyProperty::LastMatch>, nullptr);
+  both(u"lastParen", u"$+", GetLegacyRegExpStaticProperty<LegacyProperty::LastParen>, nullptr);
+  both(u"leftContext", u"$`", GetLegacyRegExpStaticProperty<LegacyProperty::LeftContext>, nullptr);
+  both(u"rightContext", u"$'", GetLegacyRegExpStaticProperty<LegacyProperty::RightContext>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$1"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 1>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$2"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 2>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$3"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 3>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$4"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 4>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$5"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 5>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$6"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 6>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$7"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 7>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$8"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 8>, nullptr);
+  defineAccessor(realm, ctor, PropertyKey(u"$9"), GetLegacyRegExpStaticProperty<LegacyProperty::Paren1, 9>, nullptr);
+}
+
 // 22.2.7.2 RegExpBuiltinExec ( R, S )
 Result<Value> RegExpBuiltinExec(RegExpObject* r, String* s) {
   double length = double(s->length());
@@ -292,6 +409,10 @@ Result<Value> RegExpBuiltinExec(RegExpObject* r, String* s) {
   bool hasGroups = regexp::hasGroupNames(program);
   Value groups = hasGroups ? Value(OrdinaryObjectCreate(nullptr)) : Value::undefined();
   (void)CreateDataProperty(a, PropertyKey(u"groups"), groups);
+  if (r->realm == currentRealm()) {
+    if (r->legacyFeaturesEnabled) UpdateLegacyRegExpStaticProperties(s, spans, n);
+    else InvalidateLegacyRegExpStaticProperties();
+  }
   std::vector<String*> groupNames;
   std::vector<std::u16string> matchedGroupNames;
   for (uint32_t i = 1; i <= n; i++) {
@@ -593,6 +714,7 @@ void installRegExp(Realm& realm) {
       defineConstructor(realm, Intrinsic::RegExp, RegExp_construct, 2, PropertyKey(u"RegExp"), proto, Intrinsic::RegExpPrototype);
   defineFunction(realm, ctor, PropertyKey(u"escape"), 1, RegExp_escape);
   defineAccessor(realm, ctor, PropertyKey(symbols().species), RegExp_species, nullptr);
+  installLegacyRegExpStaticProperties(realm, ctor);
 
   defineFunction(realm, proto, PropertyKey(u"compile"), 2, RegExpPrototype_compile);
   defineAccessor(realm, proto, PropertyKey(u"dotAll"), RegExpHasFlag<u's'>, nullptr);
