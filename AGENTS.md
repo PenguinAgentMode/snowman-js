@@ -40,6 +40,10 @@
   2026-10-13 between 17:21 and 19:07 UTC were a stack limit, GS session depth error 390262, since fixed, not the
   monitor pattern. The pattern stays because it's still the most robust.) Put the expected finish time in your
   status line, and check the log yourself if you're idle past it.
+- **A second wake-up for every background run**: a monitor notice can still go missing (one did at 19:59, after
+  the fix). When you start a run, also create a one-shot `cron_create` reminder (prompt mode, recurring=false)
+  for ETA + 10 min saying "check $HOME/logs/NAME.done/.fail". Delete it if the monitor fires first; a redundant
+  wake-up is harmless. A missed notice then costs 10 minutes, not 45.
 - **Keep every turn small: the stack stores each turn as one message of at most 300 KB.** A bigger turn is
   dropped: the agent's thread then holds only its prompt and never reads messages again (perf, decorators2 and
   staging were stranded this way; their gates finished but were never read). End your turn after a few steps;
