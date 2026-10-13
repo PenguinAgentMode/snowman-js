@@ -75,6 +75,14 @@ const CalendarSystem* GetCalendarSystem(std::u16string_view calendar) {
   if (calendar == u"buddhist") return &kBuddhist;
   if (calendar == u"roc") return &kRoc;
   if (calendar == u"japanese") return JapaneseCalendarSystem();
+  if (calendar == u"coptic") return CopticCalendarSystem();
+  if (calendar == u"ethiopic") return EthiopicCalendarSystem();
+  if (calendar == u"ethioaa") return EthioaaCalendarSystem();
+  if (calendar == u"indian") return IndianCalendarSystem();
+  if (calendar == u"persian") return PersianCalendarSystem();
+  if (calendar == u"islamic-civil") return IslamicCivilCalendarSystem();
+  if (calendar == u"islamic-tbla") return IslamicTblaCalendarSystem();
+  if (calendar == u"hebrew") return HebrewCalendarSystem();
   if (calendar == u"chinese") return ChineseCalendarSystem();
   if (calendar == u"dangi") return DangiCalendarSystem();
   if (calendar == u"islamic-umalqura") return IslamicUmalquraCalendarSystem();

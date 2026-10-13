@@ -70,6 +70,16 @@ const CalendarSystem* ChineseCalendarSystem();
 const CalendarSystem* DangiCalendarSystem();
 const CalendarSystem* IslamicUmalquraCalendarSystem();
 const CalendarSystem* JapaneseCalendarSystem();  // calendar_japanese.cpp
+// The arithmetic calendars (calendar_coptic.cpp, calendar_indian.cpp, calendar_persian.cpp, calendar_islamic.cpp,
+// calendar_hebrew.cpp).
+const CalendarSystem* CopticCalendarSystem();
+const CalendarSystem* EthiopicCalendarSystem();
+const CalendarSystem* EthioaaCalendarSystem();
+const CalendarSystem* IndianCalendarSystem();
+const CalendarSystem* PersianCalendarSystem();
+const CalendarSystem* IslamicCivilCalendarSystem();
+const CalendarSystem* IslamicTblaCalendarSystem();
+const CalendarSystem* HebrewCalendarSystem();
 
 // ParseMonthCode / CreateMonthCode.
 std::optional<MonthCodeParts> ParseMonthCode(std::u16string_view monthCode);
