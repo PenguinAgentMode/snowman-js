@@ -540,8 +540,12 @@ Result<Value> ZonedDateTimePrototype_round(NativeCall& call) {
     ISODate dateEnd = AddDaysToISODate(dateStart, 1);
     EpochNanoseconds startNs = TRY(GetStartOfDay(timeZone, dateStart));
     EpochNanoseconds endNs = TRY(GetStartOfDay(timeZone, dateEnd));
+    // When a transition after midnight falls back to before midnight, pieces of two calendar days interleave and
+    // thisNs can lie past the start of the next day: clamp it into the day, as the reference implementation does
+    // (proposal-temporal issue #3312).
+    EpochNanoseconds dayNs = thisNs < endNs ? thisNs : endNs - 1;
     Int128 dayLengthNs = endNs - startNs;
-    TimeDuration dayProgressNs = TimeDurationFromEpochNanosecondsDifference(thisNs, startNs);
+    TimeDuration dayProgressNs = TimeDurationFromEpochNanosecondsDifference(dayNs, startNs);
     TimeDuration roundedDayNs = TRY(RoundTimeDurationToIncrement(dayProgressNs, dayLengthNs, roundingMode));
     epochNanoseconds = AddTimeDurationToEpochNanoseconds(roundedDayNs, startNs);
   } else {
