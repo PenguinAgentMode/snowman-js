@@ -227,7 +227,7 @@ Result<Reference> makeSuperPropertyReference(Value actualThis, Value propertyNam
   ref.propertyName = propertyName;
   ref.key = key;
   ref.thisValue = actualThis;
-  ref.strict = true;
+  ref.strict = strictCode();
   return ref;
 }
 
@@ -638,8 +638,18 @@ Result<Value> evaluateUnary(const UnaryExpression* node) {
   }
 }
 
+// An assignment or update target's Reference. Annex B (sloppy code may target a call): the call is evaluated,
+// then a ReferenceError is thrown before anything else happens.
+Result<Reference> evaluateTargetReference(const Node* target) {
+  if (target->type == NodeType::CallExpression) {
+    TRY(evaluate(target));
+    return ThrowReferenceError("Invalid assignment target");
+  }
+  return evaluateReference(target);
+}
+
 Result<Value> evaluateUpdate(const UpdateExpression* node) {
-  Reference lhs = TRY(evaluateReference(node->argument));
+  Reference lhs = TRY(evaluateTargetReference(node->argument));
   Value oldValue = TRY(ToNumeric(TRY(GetValue(lhs))));
   Value newValue;
   bool increment = node->op == UpdateOperator::Increment;
@@ -692,7 +702,7 @@ Result<Value> evaluateAssignment(const AssignmentExpression* node) {
       TRY(DestructuringAssignmentEvaluation(left, rval));
       return rval;
     }
-    Reference lref = TRY(evaluateReference(left));
+    Reference lref = TRY(evaluateTargetReference(left));
     Value rval;
     if (isIdentifierRef(left) && IsAnonymousFunctionDefinition(node->right)) {
       rval = TRY(NamedEvaluation(node->right, Value(lref.name)));
@@ -702,7 +712,7 @@ Result<Value> evaluateAssignment(const AssignmentExpression* node) {
     TRY(PutValue(lref, rval));
     return rval;
   }
-  Reference lref = TRY(evaluateReference(left));
+  Reference lref = TRY(evaluateTargetReference(left));
   Value lval = TRY(GetValue(lref));
   if (node->op == AssignmentOperator::And || node->op == AssignmentOperator::Or ||
       node->op == AssignmentOperator::Coalesce) {

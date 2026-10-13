@@ -51,10 +51,10 @@ Result<Value> bigintOperation(BinaryOperator op, BigInt* x, BigInt* y) {
     case BinaryOperator::ShiftLeft:
     case BinaryOperator::ShiftRight: {
       bool grows = (op == BinaryOperator::ShiftLeft) != y->isNegative();
-      if (grows && !x->isZero() && (y->magnitude().size() > 1 || y->magnitude()[0] > kMaxBigIntBits)) {
-        return ThrowRangeError("Maximum BigInt size exceeded");
-      }
-      if (!grows && (y->magnitude().size() > 1 || y->magnitude()[0] > kMaxBigIntBits)) {
+      const auto& shift = y->magnitude();  // empty for 0n
+      bool huge = shift.size() > 1 || (!shift.empty() && shift[0] > kMaxBigIntBits);
+      if (grows && !x->isZero() && huge) return ThrowRangeError("Maximum BigInt size exceeded");
+      if (!grows && huge) {
         return Value(BigInt::fromInt64(x->isNegative() ? -1 : 0));
       }
       return Value(op == BinaryOperator::ShiftLeft ? BigInt::leftShift(x, y) : BigInt::signedRightShift(x, y));
