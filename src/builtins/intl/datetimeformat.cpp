@@ -7,6 +7,7 @@
 #include "builtins/intl/hooks.h"
 #include "builtins/intl/intl.h"
 #include "builtins/intl/services.h"
+#include "builtins/temporal/temporal.h"
 #include "runtime/symbol.h"
 
 namespace snowman::intl {
@@ -57,6 +58,16 @@ std::vector<std::u16string_view> items(std::u16string_view s) {
 // ---- Gregorian arithmetic ----
 
 int64_t floorDiv(int64_t a, int64_t b) { return a / b - ((a % b != 0) && ((a < 0) != (b < 0))); }
+
+// Days since 1970-01-01 of a proleptic Gregorian date (Hinnant's days_from_civil).
+int64_t daysFromCivil(int64_t y, int m, int d) {
+  y -= m <= 2;
+  int64_t era = floorDiv(y, 400);
+  int64_t yoe = y - era * 400;
+  int64_t doy = (153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1;
+  int64_t doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+  return era * 146097 + doe - 719468;
+}
 
 struct LocalTime {
   int64_t year;
@@ -465,9 +476,10 @@ std::u16string getBestPattern(const Generator& g, const Skeleton& req) {
 // ---- time zones ----
 
 struct TimeZone {
-  std::string id;      // [[TimeZone]]: the identifier as given, or the offset string
-  int offsetMinutes;   // for offset zones and UTC; 0 for named zones (no offset data yet)
+  std::string id;      // [[TimeZone]]: the identifier as given (case-regularized), or the offset string
+  int offsetMinutes;   // offset zones
   bool isOffset;
+  temporal::TimeZone named;  // named zones: offsets from Temporal's IANA data
 };
 
 // IsTimeZoneOffsetString: ±HH, ±HHMM, ±HH:MM (ECMA-402 accepts minute precision).
@@ -508,6 +520,9 @@ class DateTimeFormatObject : public Object {
   std::optional<std::string> dateStyle, timeStyle;
   std::u16string pattern;  // [[DateTimeFormat]].[[pattern]]
   Skeleton requested;      // the requested skeleton (for range patterns)
+  // The explicit component options (for the Temporal formats) and the hour cycle they use.
+  std::vector<std::pair<std::u16string_view, std::string>> components;
+  std::string formatHourCycle;
   Object* boundFormat = nullptr;
   void trace(Tracer& tracer) override {
     Object::trace(tracer);
@@ -605,6 +620,25 @@ std::u16string digitsOf(const std::string& nu, int64_t value, int minDigits) {
   return out;
 }
 
+// The UTC offset (ms) of the format's time zone at an instant.
+int64_t offsetMsAt(const DateTimeFormatObject& dtf, double epochMs) {
+  if (dtf.timeZone.isOffset) return int64_t(dtf.timeZone.offsetMinutes) * 60000;
+  temporal::EpochNanoseconds ns = temporal::EpochNanoseconds(int64_t(epochMs)) * 1000000;
+  if (!temporal::IsValidEpochNanoseconds(ns)) return 0;
+  return int64_t(temporal::GetOffsetNanosecondsFor(dtf.timeZone.named, ns) / 1000000);
+}
+
+// Whether daylight saving time is in effect: the offset exceeds the year's smaller one (January vs July).
+bool isDaylight(const DateTimeFormatObject& dtf, double epochMs) {
+  if (dtf.timeZone.isOffset) return false;
+  LocalTime t = toLocalTime(epochMs);
+  auto at = [&](int month) {
+    double ms = double((t.year - 1970) * 365.2425 * 86400000.0) + month * 30.4 * 86400000.0;
+    return offsetMsAt(dtf, ms);
+  };
+  return offsetMsAt(dtf, epochMs) > std::min(at(0), at(6));
+}
+
 // The localized GMT format: short "GMT+5:30" / "GMT-8", long "GMT+05:30" (zero offsets as "GMT+0", as V8 prints).
 std::u16string gmtString(const DateTimeFormatObject& dtf, int offsetMinutes, bool longForm) {
   std::vector<std::u16string_view> f = items(dateField(dtf.dataLocale, FZoneFormats));
@@ -630,11 +664,11 @@ std::u16string gmtString(const DateTimeFormatObject& dtf, int offsetMinutes, boo
   return formatPattern(f[1], out, u"");
 }
 
-std::u16string zoneName(const DateTimeFormatObject& dtf, char16_t c, int count) {
+std::u16string zoneName(const DateTimeFormatObject& dtf, char16_t c, int count, double epochMs, int offsetMinutes) {
   const TimeZone& tz = dtf.timeZone;
   bool longForm = count >= 4;
-  if (c == u'O' || tz.isOffset) return gmtString(dtf, tz.offsetMinutes, longForm);
-  if (dtf.timeZonePrimary == "UTC" && tz.offsetMinutes == 0) {
+  if (c == u'O' || tz.isOffset) return gmtString(dtf, offsetMinutes, longForm);
+  if (tz.named.isUTC()) {
     if (c == u'z') {
       std::vector<std::u16string_view> n = items(dateField(dtf.dataLocale, FUtcNames));
       n.resize(2);
@@ -643,22 +677,24 @@ std::u16string zoneName(const DateTimeFormatObject& dtf, char16_t c, int count) 
     }
     return gmtString(dtf, 0, longForm);
   }
-  // A named zone: the English metazone name, else the GMT format.
+  // A named zone: the English metazone name (generic, or standard/daylight), else the GMT format.
   std::string language = dtf.dataLocale.substr(0, dtf.dataLocale.find('-'));
   if (language == "en" && (c == u'z' || c == u'v')) {
-    const AliasEntry* end = std::end(kZoneMetazones);
-    const AliasEntry* it = std::lower_bound(std::begin(kZoneMetazones), end, tz.id,
-                                            [](const AliasEntry& e, const std::string& k) { return std::string_view(e.from) < k; });
-    if (it != end && tz.id == it->from) {
+    for (const std::string& id : {tz.id, dtf.timeZonePrimary}) {
+      const AliasEntry* end = std::end(kZoneMetazones);
+      const AliasEntry* it = std::lower_bound(std::begin(kZoneMetazones), end, id,
+                                              [](const AliasEntry& e, const std::string& k) { return std::string_view(e.from) < k; });
+      if (it == end || id != it->from) continue;
       if (const char16_t* names = findEntry(kMetazoneNames, it->to)) {
         std::vector<std::u16string_view> n = items(names);
         n.resize(6);
-        int index = (longForm ? 0 : 3) + (c == u'v' ? 0 : 1);
+        int index = (longForm ? 0 : 3) + (c == u'v' ? 0 : isDaylight(dtf, epochMs) ? 2 : 1);
         if (!n[size_t(index)].empty()) return std::u16string(n[size_t(index)]);
       }
+      break;
     }
   }
-  return gmtString(dtf, 0, longForm);
+  return gmtString(dtf, offsetMinutes, longForm);
 }
 
 // The flexible day period of a time (CLDR dayPeriodRules; midnight is not used, as in ICU).
@@ -693,8 +729,11 @@ std::u16string flexibleDayPeriod(const DateTimeFormatObject& dtf, const LocalTim
   return std::u16string(t.hour < 12 ? names[0] : names[1]);
 }
 
-void formatPatternInto(std::vector<DatePart>& out, const DateTimeFormatObject& dtf, std::u16string_view pattern, double epochMs, int source) {
-  double local = epochMs + dtf.timeZone.offsetMinutes * 60000.0;
+// Formats `pattern` at an instant; plain Temporal values (utc) are formatted at offset zero with no zone.
+void formatPatternInto(std::vector<DatePart>& out, const DateTimeFormatObject& dtf, std::u16string_view pattern, double epochMs, int source,
+                       bool utc = false) {
+  int64_t offset = utc ? 0 : offsetMsAt(dtf, epochMs);
+  double local = epochMs + double(offset);
   LocalTime t = toLocalTime(local);
   std::vector<Token> tokens = parsePattern(pattern);
   bool hasMinute = false, hasSecond = false;
@@ -782,7 +821,7 @@ void formatPatternInto(std::vector<DatePart>& out, const DateTimeFormatObject& d
         break;
       }
       case u'z': case u'Z': case u'O': case u'v': case u'V': case u'X': case u'x':
-        out.push_back({u"timeZoneName", zoneName(dtf, tok.ch, n), source});
+        out.push_back({u"timeZoneName", zoneName(dtf, tok.ch, n, epochMs, int(offset / 60000)), source});
         break;
       default:
         break;
@@ -885,21 +924,17 @@ Result<DateTimeFormatObject*> CreateDateTimeFormat(Object* newTarget, Value loca
     timeZone = *ascii;
   }
   if (std::optional<int> offset = parseOffset(timeZone)) {
-    dtf->timeZone = {formatOffsetIdentifier(*offset), *offset, true};
-  } else if (std::optional<std::string> identifier = data::timeZoneIdentifier(timeZone)) {
-    // [[TimeZone]] keeps the identifier as given (case-regularized); Etc/GMT±N are fixed offsets (sign inverted).
-    int offset = 0;
-    if (identifier->rfind("Etc/GMT", 0) == 0 && identifier->size() > 7) {
-      std::string n = identifier->substr(7);
-      offset = (n[0] == '-' ? 1 : -1) * std::stoi(n.substr(1)) * 60;
-    }
-    dtf->timeZone = {*identifier, offset, false};
-    dtf->timeZonePrimary = *data::primaryTimeZone(timeZone);
+    dtf->timeZone = {formatOffsetIdentifier(*offset), *offset, true, temporal::TimeZone::Offset(*offset)};
+  } else if (std::optional<temporal::TimeZone> named = temporal::GetAvailableNamedTimeZoneIdentifier(builtins::toU16(timeZone))) {
+    // [[TimeZone]] keeps the identifier as given (case-regularized), not its primary identifier.
+    dtf->timeZone = {utf16ToUtf8(temporal::TimeZoneIdentifier(*named)), 0, false, *named};
+    dtf->timeZonePrimary = utf16ToUtf8(temporal::PrimaryTimeZoneIdentifier(*named));
   } else {
     return ThrowRangeError("Intl.DateTimeFormat: invalid time zone " + timeZone);
   }
 
   bool hasExplicitFormatComponents = false;
+  dtf->formatHourCycle = hc;
   std::vector<std::pair<std::u16string_view, std::string>> formatOptions;
   for (const ComponentOption& c : kComponents) {
     std::optional<std::string> value;
@@ -914,6 +949,7 @@ Result<DateTimeFormatObject*> CreateDateTimeFormat(Object* newTarget, Value loca
       hasExplicitFormatComponents = true;
     }
   }
+  dtf->components = formatOptions;
   TRY(GetStringOption(options, u"formatMatcher", {"basic", "best fit"}, "best fit"));
   dtf->dateStyle = TRY(GetStringOption(options, u"dateStyle", {"full", "long", "medium", "short"}));
   dtf->timeStyle = TRY(GetStringOption(options, u"timeStyle", {"full", "long", "medium", "short"}));
@@ -993,22 +1029,179 @@ double timeClip(double t) {
   return std::trunc(t) + 0.0;
 }
 
-// The date argument of format/formatToParts: undefined is now.
-Result<double> dateValue(Value date) {
-  if (date.isUndefined()) {
-    Object* dateCtor = builtins::intrinsic(Intrinsic::Date);
-    Value now = TRY(Invoke(Value(dateCtor), PropertyKey(u"now")));
-    return now.asNumber();
+// ---- Temporal values (ToDateTimeFormattable, HandleDateTimeValue) ----
+
+enum class ValueKind : uint8_t { Number, PlainDate, PlainYearMonth, PlainMonthDay, PlainTime, PlainDateTime, Instant, ZonedDateTime };
+
+struct Formattable {
+  ValueKind kind = ValueKind::Number;
+  double epochMs = 0;          // the instant (plain values: their ISO date-time read as UTC)
+  std::u16string calendar;     // plain dates
+};
+
+double isoEpochMs(const temporal::ISODate& d, const temporal::TimeRecord& t) {
+  return double(daysFromCivil(d.year, d.month, d.day)) * 86400000.0 + t.hour * 3600000.0 + t.minute * 60000.0 + t.second * 1000.0 +
+         t.millisecond;
+}
+
+// ToDateTimeFormattable ( value )
+Result<Formattable> toFormattable(Value v) {
+  Formattable f;
+  temporal::TimeRecord noon;
+  noon.hour = 12;
+  if (auto* d = temporal::asTemporal<temporal::PlainDateObject>(v)) return Formattable{ValueKind::PlainDate, isoEpochMs(d->isoDate, noon), d->calendar};
+  if (auto* d = temporal::asTemporal<temporal::PlainYearMonthObject>(v))
+    return Formattable{ValueKind::PlainYearMonth, isoEpochMs(d->isoDate, noon), d->calendar};
+  if (auto* d = temporal::asTemporal<temporal::PlainMonthDayObject>(v))
+    return Formattable{ValueKind::PlainMonthDay, isoEpochMs(d->isoDate, noon), d->calendar};
+  if (auto* d = temporal::asTemporal<temporal::PlainTimeObject>(v)) return Formattable{ValueKind::PlainTime, isoEpochMs({1970, 1, 1}, d->time), {}};
+  if (auto* d = temporal::asTemporal<temporal::PlainDateTimeObject>(v))
+    return Formattable{ValueKind::PlainDateTime, isoEpochMs(d->isoDateTime.isoDate, d->isoDateTime.time), d->calendar};
+  if (auto* d = temporal::asTemporal<temporal::InstantObject>(v)) {
+    temporal::EpochNanoseconds ns = d->epochNanoseconds;
+    temporal::EpochNanoseconds ms = ns / 1000000 - (ns % 1000000 < 0 ? 1 : 0);
+    return Formattable{ValueKind::Instant, double(int64_t(ms)), {}};
   }
-  return ToNumber(date);
+  if (temporal::asTemporal<temporal::ZonedDateTimeObject>(v)) return Formattable{ValueKind::ZonedDateTime, 0, {}};
+  f.epochMs = TRY(ToNumber(v));
+  return f;
+}
+
+// Drops the time zone fields (and the space before them) from a pattern.
+std::u16string withoutZone(std::u16string_view pattern) {
+  std::vector<Token> tokens = parsePattern(pattern), out;
+  for (const Token& t : tokens) {
+    if (t.field && fieldOf(t.ch) == Zone) {
+      if (!out.empty() && !out.back().field) {
+        std::u16string& text = out.back().text;
+        while (!text.empty() && (text.back() == u' ' || text.back() == u'\u00a0' || text.back() == u'\u202f')) text.pop_back();
+        if (text.empty()) out.pop_back();
+      }
+      continue;
+    }
+    out.push_back(t);
+  }
+  return patternString(out);
+}
+
+// The pattern of a format restricted to some fields, regenerated (PlainYearMonth / PlainMonthDay date styles).
+std::u16string restrictedPattern(const Generator& g, std::u16string_view pattern, unsigned fields) {
+  Skeleton k;
+  for (const Token& t : parsePattern(pattern))
+    if (t.field && fieldOf(t.ch) >= 0 && (fields & (1u << fieldOf(t.ch)))) k.set(t.ch, t.count);
+  return getBestPattern(g, k);
+}
+
+// The [[TemporalPlain*Format]] of a kind (GetDateTimeFormat with inherit ~relevant~), "" for null.
+std::u16string temporalPattern(const DateTimeFormatObject& dtf, ValueKind kind) {
+  const Generator& g = generatorFor(dtf.dataLocale);
+  if (dtf.dateStyle || dtf.timeStyle) {
+    std::u16string date, time;
+    if (dtf.dateStyle) date = std::u16string(items(dateField(dtf.dataLocale, FDateFormats))[size_t(styleIndex(*dtf.dateStyle))]);
+    if (dtf.timeStyle) time = withoutZone(applyHourCycle(g, items(dateField(dtf.dataLocale, FTimeFormats))[size_t(styleIndex(*dtf.timeStyle))], dtf.formatHourCycle));
+    switch (kind) {
+      case ValueKind::PlainDate: return date;
+      case ValueKind::PlainYearMonth: return date.empty() ? date : restrictedPattern(g, date, (1u << Era) | (1u << Year) | (1u << Month));
+      case ValueKind::PlainMonthDay: return date.empty() ? date : restrictedPattern(g, date, (1u << Month) | (1u << Day));
+      case ValueKind::PlainTime: return time;
+      default:
+        if (!date.empty() && !time.empty()) return formatPattern(g.atTime[styleIndex(*dtf.dateStyle)], time, date);
+        return date.empty() ? time : date;
+    }
+  }
+  std::vector<std::u16string_view> relevant, required, defaults;
+  switch (kind) {
+    case ValueKind::PlainDate:
+      relevant = {u"weekday", u"era", u"year", u"month", u"day"};
+      required = {u"weekday", u"year", u"month", u"day"};
+      defaults = {u"year", u"month", u"day"};
+      break;
+    case ValueKind::PlainYearMonth:
+      relevant = {u"era", u"year", u"month"};
+      required = {u"year", u"month"};
+      defaults = required;
+      break;
+    case ValueKind::PlainMonthDay:
+      relevant = {u"month", u"day"};
+      required = relevant;
+      defaults = relevant;
+      break;
+    case ValueKind::PlainTime:
+      relevant = {u"dayPeriod", u"hour", u"minute", u"second", u"fractionalSecondDigits"};
+      required = relevant;
+      defaults = {u"hour", u"minute", u"second"};
+      break;
+    default:
+      relevant = {u"weekday", u"era", u"year", u"month", u"day", u"dayPeriod", u"hour", u"minute", u"second", u"fractionalSecondDigits"};
+      required = {u"weekday", u"year", u"month", u"day", u"dayPeriod", u"hour", u"minute", u"second", u"fractionalSecondDigits"};
+      defaults = {u"year", u"month", u"day", u"hour", u"minute", u"second"};
+      break;
+  }
+  auto contains = [](const std::vector<std::u16string_view>& list, std::u16string_view name) {
+    return std::find(list.begin(), list.end(), name) != list.end();
+  };
+  std::vector<std::pair<std::u16string_view, std::string>> options;
+  bool anyPresent = false, needDefaults = true;
+  for (const auto& [name, value] : dtf.components) {
+    if (name != u"timeZoneName") anyPresent = true;
+    if (contains(relevant, name)) options.emplace_back(name, value);
+    if (contains(required, name)) needDefaults = false;
+  }
+  if (needDefaults) {
+    if (anyPresent) return {};
+    for (std::u16string_view d : defaults) options.emplace_back(d, "numeric");
+  }
+  Skeleton k;
+  for (const auto& [name, value] : options) skeletonAdd(k, name, value, hourCharFor(dtf.formatHourCycle));
+  k.normalizeDayPeriod();
+  return applyHourCycle(g, getBestPattern(g, k), dtf.formatHourCycle);
+}
+
+// HandleDateTimeValue: the pattern a value is formatted with, and whether it is a plain (UTC) value.
+Result<std::pair<std::u16string, bool>> patternForValue(const DateTimeFormatObject& dtf, const Formattable& v) {
+  switch (v.kind) {
+    case ValueKind::Number: {
+      if (!std::isfinite(v.epochMs) || std::fabs(v.epochMs) > 8.64e15) return ThrowRangeError("Invalid time value");
+      return std::make_pair(dtf.pattern, false);
+    }
+    case ValueKind::ZonedDateTime:
+      return ThrowTypeError("Intl.DateTimeFormat: Temporal.ZonedDateTime is not supported; use its toLocaleString");
+    case ValueKind::Instant:
+      return std::make_pair(dtf.pattern, false);
+    default: {
+      std::string calendar = utf16ToUtf8(v.calendar);
+      bool yearMonthOrMonthDay = v.kind == ValueKind::PlainYearMonth || v.kind == ValueKind::PlainMonthDay;
+      if (v.kind != ValueKind::PlainTime && calendar != dtf.calendar && (yearMonthOrMonthDay || calendar != "iso8601"))
+        return ThrowRangeError("Intl.DateTimeFormat: the calendar " + calendar + " is not the format's " + dtf.calendar);
+      std::u16string pattern = temporalPattern(dtf, v.kind);
+      if (pattern.empty()) return ThrowTypeError("Intl.DateTimeFormat: the options have no field this Temporal value has");
+      return std::make_pair(pattern, true);
+    }
+  }
+}
+
+Result<std::vector<DatePart>> formatParts(const DateTimeFormatObject& dtf, const Formattable& x) {
+  auto [pattern, utc] = TRY(patternForValue(dtf, x));
+  std::vector<DatePart> parts;
+  formatPatternInto(parts, dtf, pattern, x.kind == ValueKind::Number ? timeClip(x.epochMs) : x.epochMs, 0, utc);
+  return parts;
 }
 
 Result<std::vector<DatePart>> formatParts(const DateTimeFormatObject& dtf, double x) {
-  double t = timeClip(x);
-  if (std::isnan(t)) return ThrowRangeError("Invalid time value");
-  std::vector<DatePart> parts;
-  formatPatternInto(parts, dtf, dtf.pattern, t, 0);
-  return parts;
+  Formattable f;
+  f.epochMs = x;
+  return formatParts(dtf, f);
+}
+
+// The date argument of format/formatToParts: undefined is now, else ToDateTimeFormattable.
+Result<Formattable> formattableArgument(Value date) {
+  if (date.isUndefined()) {
+    Formattable f;
+    Value now = TRY(Invoke(Value(builtins::intrinsic(Intrinsic::Date)), PropertyKey(u"now")));
+    f.epochMs = now.asNumber();
+    return f;
+  }
+  return toFormattable(date);
 }
 
 std::u16string joinParts(const std::vector<DatePart>& parts) {
@@ -1019,7 +1212,7 @@ std::u16string joinParts(const std::vector<DatePart>& parts) {
 
 Result<Value> boundFormat(NativeCall& call) {
   DateTimeFormatObject* dtf = call.callee->slots[0].asObject()->as<DateTimeFormatObject>();
-  double x = TRY(dateValue(call.args[0]));
+  Formattable x = TRY(formattableArgument(call.args[0]));
   std::vector<DatePart> parts = TRY(formatParts(*dtf, x));
   return Value(newString(joinParts(parts)));
 }
@@ -1049,17 +1242,21 @@ Object* partsArray(const std::vector<DatePart>& parts, bool withSource) {
 
 Result<Value> DateTimeFormatPrototype_formatToParts(NativeCall& call) {
   DateTimeFormatObject* dtf = TRY(thisIntlObject<DateTimeFormatObject>(call.thisValue, "Intl.DateTimeFormat.prototype.formatToParts"));
-  double x = TRY(dateValue(call.args[0]));
+  Formattable x = TRY(formattableArgument(call.args[0]));
   std::vector<DatePart> parts = TRY(formatParts(*dtf, x));
   return Value(partsArray(parts, false));
 }
 
 // 11.5.9 PartitionDateTimeRangePattern ( dateTimeFormat, x, y )
-Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, double x0, double y0) {
-  double x = timeClip(x0), y = timeClip(y0);
-  if (std::isnan(x) || std::isnan(y)) return ThrowRangeError("Invalid time value");
-  LocalTime a = toLocalTime(x + dtf.timeZone.offsetMinutes * 60000.0), b = toLocalTime(y + dtf.timeZone.offsetMinutes * 60000.0);
-  std::vector<Token> tokens = parsePattern(dtf.pattern);
+Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, const Formattable& fx, const Formattable& fy) {
+  if ((fx.kind != ValueKind::Number || fy.kind != ValueKind::Number) && fx.kind != fy.kind)
+    return ThrowTypeError("Intl.DateTimeFormat: formatRange needs two values of the same kind");
+  auto [pattern, utc] = TRY(patternForValue(dtf, fx));
+  TRY(patternForValue(dtf, fy));
+  double x = fx.kind == ValueKind::Number ? timeClip(fx.epochMs) : fx.epochMs;
+  double y = fy.kind == ValueKind::Number ? timeClip(fy.epochMs) : fy.epochMs;
+  LocalTime a = toLocalTime(x + double(utc ? 0 : offsetMsAt(dtf, x))), b = toLocalTime(y + double(utc ? 0 : offsetMsAt(dtf, y)));
+  std::vector<Token> tokens = parsePattern(pattern);
   unsigned present = 0;
   for (const Token& t : tokens)
     if (t.field && fieldOf(t.ch) >= 0) present |= 1u << fieldOf(t.ch);
@@ -1081,7 +1278,7 @@ Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, double
   if (!diff && !sameDay && !(present & kDateMask)) diff = u'd';
   std::vector<DatePart> out;
   if (!diff) {
-    formatPatternInto(out, dtf, dtf.pattern, x, 0);
+    formatPatternInto(out, dtf, pattern, x, 0, utc);
     return out;
   }
   // An interval pattern for the requested skeleton and greatest difference.
@@ -1090,7 +1287,7 @@ Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, double
   std::u16string fallback = list.empty() ? u"{0} \u2013 {1}" : std::u16string(list[0]);
   if (diff != u's' && diff != u'S') {
     // The skeleton of the format's pattern, in CLDR canonical form.
-    Skeleton k = skeletonOf(dtf.pattern);
+    Skeleton k = skeletonOf(pattern);
     const Generator& g = generatorFor(dtf.dataLocale);
     Best best = getBestRaw(g, k, k.mask() & ~(1u << Zone) & ~(1u << DayPeriod));
     if (best.match && best.distance.missing == 0 && best.distance.extra == 0) {
@@ -1133,9 +1330,9 @@ Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, double
     std::vector<Token> first(it.begin(), it.begin() + long(firstEnd)), second(it.begin() + long(split), it.end());
     std::u16string separator;
     for (size_t i = firstEnd; i < split; i++) separator += it[i].text;
-    formatPatternInto(out, dtf, patternString(first), x, 1);
+    formatPatternInto(out, dtf, patternString(first), x, 1, utc);
     if (!separator.empty()) out.push_back({u"literal", separator, 0});
-    formatPatternInto(out, dtf, patternString(second), y, 2);
+    formatPatternInto(out, dtf, patternString(second), y, 2, utc);
     // Parts shared by both halves: before the first differing field and after the last are marked shared.
     return out;
   }
@@ -1143,18 +1340,18 @@ Result<std::vector<DatePart>> rangeParts(const DateTimeFormatObject& dtf, double
   size_t p0 = fallback.find(u"{0}"), p1 = fallback.find(u"{1}");
   std::u16string before = fallback.substr(0, std::min(p0, p1)), middle = fallback.substr(std::min(p0, p1) + 3, std::max(p0, p1) - std::min(p0, p1) - 3);
   if (!before.empty()) out.push_back({u"literal", before, 0});
-  formatPatternInto(out, dtf, dtf.pattern, p0 < p1 ? x : y, p0 < p1 ? 1 : 2);
+  formatPatternInto(out, dtf, pattern, p0 < p1 ? x : y, p0 < p1 ? 1 : 2, utc);
   out.push_back({u"literal", middle, 0});
-  formatPatternInto(out, dtf, dtf.pattern, p0 < p1 ? y : x, p0 < p1 ? 2 : 1);
+  formatPatternInto(out, dtf, pattern, p0 < p1 ? y : x, p0 < p1 ? 2 : 1, utc);
   std::u16string after = fallback.substr(std::max(p0, p1) + 3);
   if (!after.empty()) out.push_back({u"literal", after, 0});
   return out;
 }
 
-Result<std::pair<double, double>> rangeArgs(NativeCall& call) {
+Result<std::pair<Formattable, Formattable>> rangeArgs(NativeCall& call) {
   if (call.args[0].isUndefined() || call.args[1].isUndefined()) return ThrowTypeError("Intl.DateTimeFormat: formatRange needs two dates");
-  double x = TRY(ToNumber(call.args[0]));
-  double y = TRY(ToNumber(call.args[1]));
+  Formattable x = TRY(toFormattable(call.args[0]));
+  Formattable y = TRY(toFormattable(call.args[1]));
   return std::make_pair(x, y);
 }
 

@@ -102,10 +102,18 @@ const walk = (o, prefix) => {
   }
 };
 walk(require('cldr-core/supplemental/metaZones.json').supplemental.metaZones.metazoneInfo.timezone, '');
+// Every name of a bcp47 zone (Asia/Kolkata as well as CLDR's Asia/Calcutta) gets the zone's metazone.
+const metaOf = new Map(zoneMeta);
+for (const [id, info] of Object.entries(require('cldr-bcp47/bcp47/timezone.json').keyword.u.tz)) {
+  if (id.startsWith('_') || !info._alias) continue;
+  const names = [...info._alias.split(' '), ...(info._iana ? [info._iana] : [])];
+  const meta = names.map((n) => metaOf.get(n)).find(Boolean);
+  if (meta) for (const n of names) if (!metaOf.has(n)) zoneMeta.push([n, meta]), metaOf.set(n, meta);
+}
 zoneMeta.sort((a, b) => cmp(a[0], b[0]));
 
 const out = [
-  header('gen-date-data.mjs', ['cldr-core', 'cldr-dates-full']),
+  header('gen-date-data.mjs', ['cldr-core', 'cldr-bcp47', 'cldr-dates-full']),
   '',
   '// "locale/field" -> field (see the generator for the fields).',
   'static constexpr DataEntry kDateFields[] = {',

@@ -1,6 +1,7 @@
 // The Intl object (ECMA-402 8): Intl.getCanonicalLocales, Intl.supportedValuesOf and the constructors.
 #include "builtins/intl/intl.h"
 #include "builtins/intl/services.h"
+#include "builtins/temporal/time_zone.h"
 #include "runtime/symbol.h"
 
 namespace snowman::intl {
@@ -24,7 +25,12 @@ Result<Value> Intl_supportedValuesOf(NativeCall& call) {
   else if (k == u"collation") list = data::collationTypes();
   else if (k == u"currency") list = data::currencies();
   else if (k == u"numberingSystem") list = data::numberingSystems();
-  else if (k == u"timeZone") list = data::primaryTimeZones();
+  else if (k == u"timeZone") {
+    // The primary identifiers of Temporal's time zone data, which DateTimeFormat and Temporal accept.
+    ValueVector zones;
+    for (const std::u16string& z : temporal::AvailablePrimaryTimeZoneIdentifiers()) zones.push_back(Value(newString(z)));
+    return Value(CreateArrayFromList(zones));
+  }
   else if (k == u"unit") list = data::units();
   else return ThrowRangeError("Invalid key : " + key->toUtf8());
   ValueVector values;
