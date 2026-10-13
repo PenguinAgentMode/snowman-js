@@ -16,25 +16,25 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-Post-merge run: **main 317949e37** (`tools/lead/measure.sh suite results/a1a2a5fc3.json`, 4 jobs, 1,323 s, run by
-the lead; `results/317949e37{,-full}.json`; JSONL `results/317949e37/suite.jsonl` on the results branch).
+Post-merge run: **main 19dc92105** (`tools/lead/measure.sh suite results/317949e37.json`, 4 jobs, run by the lead;
+`results/19dc92105{,-full}.json`; JSONL `results/19dc92105/suite.jsonl` on the results branch).
 
-- milestones.mjs: highest **M8**; **ES-core: 43,196 / 43,305 files (99.75%)**; **full suite: 53,414 / 53,616 files
-  (99.62%)**; scenarios 102,622 / 102,994.
-- vs a1a2a5fc3: ES-core +0, 0 regressions; full +1,184 (calendar groups 2 + 3), 0 regressions.
-- Command: `node t262/runner/milestones.mjs results/317949e37.json --full results/317949e37-full.json`
+- milestones.mjs: highest **M8**; **ES-core: 43,196 / 43,305 files (99.75%)**; **full suite: 53,452 / 53,616 files
+  (99.69%)**.
+- vs 317949e37: ES-core +0, 0 regressions; full +38, 0 regressions.
+- Command: `node t262/runner/milestones.mjs results/19dc92105.json --full results/19dc92105-full.json`
 
-| Cluster | Passing (317949e37) | Files | % | vs a1a2a5fc3 |
+| Cluster | Passing (19dc92105) | Files | % | vs 317949e37 |
 | --- | ---: | ---: | ---: | ---: |
 | ES-core | 43,196 | 43,305 | 99.75 | +0 |
 | built-ins/Temporal | 4,605 | 4,605 | 100.00 | +0 |
-| intl402/Temporal | 2,009 | 2,029 | 99.01 | +1,184 |
-| intl402 (other) | 1,336 | 1,353 | 98.74 | +0 |
-| staging | 1,449 | 1,483 | 97.71 | +0 |
+| intl402/Temporal | 2,028 | 2,029 | 99.95 | +19 |
+| intl402 (other) | 1,353 | 1,353 | 100.00 | +17 |
+| staging | 1,451 | 1,483 | 97.84 | +2 |
 | proposals (in ES-core dirs) | 819 | 841 | 97.38 | +0 |
-| **full suite** | **53,414** | **53,616** | **99.62** | **+1,184** |
+| **full suite** | **53,452** | **53,616** | **99.69** | **+38** |
 
-Earlier: a1a2a5fc3 full 52,230 (97.41%); 29a14dfdd 51,639 (96.31%); 3edca9940 51,607 (96.25%); c21bcd82e 50,887 (94.91%); 8a5df0b93 44,766 (83.49%).
+Earlier: 317949e37 full 53,414 (99.62%); a1a2a5fc3 52,230 (97.41%); 29a14dfdd 51,639 (96.31%); 3edca9940 51,607 (96.25%); c21bcd82e 50,887 (94.91%); 8a5df0b93 44,766 (83.49%).
 Previous: main 8a5df0b93, full 44,766 / 53,616 (83.49%), ES-core 43,059 (99.43%).
 
 ES-core residue at c21bcd82e (142 files; memcap, `tools/lead/es-core-residue.md` on ws/measure 4f999b1; node
@@ -53,17 +53,8 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-Not in 317949e37's run:
-- ws/calendars-ref addd9a2 (chinese/dangi PlainMonthDay reference years, calendar.cpp only). Gate vs 317949e37:
-  ES-core 0, full 0 regressions; full 53,414 → 53,418.
-- 6203fc5 ws/agent3 d995052 ($262.agent step 3: SharedBlock + std::atomic_ref Atomics; arraybuffer.h additive).
-  Gate vs 317949e37: ES-core 0, full 0 regressions (neutral with one agent).
-- b84715f ws/staging-date 8d8a20932 (Date.parse legacy grammar; date.cpp). Gate vs 317949e37: 0 / 0; +2 staging.
-- 1a9f084 ws/intlfmt ac942bf2d (Intl.DateTimeFormat in every CLDR calendar through CalendarISOToDate; per-calendar
-  CLDR data generated reproducibly). Gate vs 317949e37: 0 / 0; intl402 +23 (17 DTF + 6 Ramadan). Behaviour change:
-  locales whose default calendar isn't Gregorian (th, fa, …) now format in it, as ICU does.
-- 1c12abb ws/chinese e55fdaf28 (Chinese/Dangi 1900–2100 from astronomy in tools/temporal/gen-calendars.mjs +
-  astro.mjs, ICU outside; regenerated .inc). Gate vs 317949e37: 0 / 0; +9 intl402/Temporal (the ICU data gap).
+None: 19dc92105 covers calendars-ref (addd9a2), agent step 3 (6203fc5), staging-date (b84715f), chinese (1c12abb),
+intlfmt (1a9f084).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
@@ -108,8 +99,8 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Gate baseline
 
-- ES-core: `results/317949e37.json` (43,196 passing files); full suite: `results/317949e37-full.json` (53,414).
-  Check: `node tools/lead/gate.mjs results/317949e37.json <jsonl>` and `... results/317949e37-full.json <jsonl>`
+- ES-core: `results/19dc92105.json` (43,196 passing files); full suite: `results/19dc92105-full.json` (53,452).
+  Check: `node tools/lead/gate.mjs results/19dc92105.json <jsonl>` and `... results/19dc92105-full.json <jsonl>`
   (AGENTS.md). Gates already running against c21bcd82e stay valid (a subset of this baseline).
 
 ## Survey interim (main 7e957a05a)

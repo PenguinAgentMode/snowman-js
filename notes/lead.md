@@ -5,10 +5,10 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-13 ~16:30 UTC, main 317949e 
 
 ## Numbers and baselines
 
-- Latest measured main: **317949e37**, full **53,414 / 53,616 (99.62%)**, ES-core **43,196 / 43,305 (99.75%)**, M8.
-  `node t262/runner/milestones.mjs results/317949e37.json --full results/317949e37-full.json`
-- Gate baselines: `results/317949e37.json` (ES-core) and `results/317949e37-full.json` (full); JSONL on the
-  results branch at `results/317949e37/suite.jsonl`. Nothing merged since.
+- Latest measured main: **19dc92105**, full **53,452 / 53,616 (99.69%)**, ES-core **43,196 / 43,305 (99.75%)**, M8.
+  `node t262/runner/milestones.mjs results/19dc92105.json --full results/19dc92105-full.json`
+- Gate baselines: `results/19dc92105{,-full}.json`; JSONL on the results branch at `results/19dc92105/suite.jsonl`.
+- Monitor lesson: my measurement monitor (tail -F | grep -m1) missed M5DONE; check the log when a run should be done.
 - Measure: `TMPDIR=$HOME/tmp tools/lead/measure.sh suite results/<previous>.json` in the background with a monitor
   (~22 min at 4 jobs). Then `gate.mjs <prev>-full.json results/<sha>/suite.jsonl` and `clusters.mjs <sha>-full.json
   <prev>-full.json`. Commit `results/<sha>{,-full}.json` to main, push the JSONL to the results branch (worktree
@@ -28,11 +28,11 @@ How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort
 | Agent | State | Area | Branch |
 | --- | --- | --- | --- |
 | builtins | LIVE since ~07:10 | $262.agent step 3 (ws/agent3 d995052, gating vs 317949e37), then step 4 | ws/agent3; notes/builtins.md + notes/agent-design.md on ws/builtins5 |
-| chinese | done, closed (merged 1c12abb) | — | ws/chinese e55fdaf28 |
+| chinese | REOPENED 18:15 as "stability": 3 repeats of 19dc92105 + flaky list + parse-only (M1) | ws/stability |
 | perf | started 17:35 | interpreter speed (binding caches, env slots, GC roots); flaky DST timeouts | ws/perf; notes/perf.md |
 | decorators2 | started 16:46 | decorators (22 + 2 staging), from ws/decorators fb2d287 | ws/decorators2; notes/decorators2.md |
 | staging | LIVE 16:45 | staging: Date merged; regexp + caller gating; then the approved runner change ws/runner-strict (13 sm/strict) | ws/staging*; notes/staging.md |
-| intlfmt | done, closed (merged 1a9f084) | — | ws/intlfmt ac942bf2d |
+| intlfmt | REOPENED 18:15 as "hardening": ASan+UBSan full suite in shards, gated fixes | ws/hardening; notes/hardening.md |
 | memcap, temporal2, survey, temporal, intl | machines stopped 16:33 | — | all their commits are on origin (see STATUS) |
 | calendars, calendars2, calendars3, decorators | never started ("no hosts") | — | — |
 
@@ -40,8 +40,11 @@ Dead agents still list as IN_PROGRESS/IDLE and probably still hold machines; age
 
 ## Spawn retries
 
-Capacity is back since 16:33 (dead machines stopped). Working agents: lead + builtins + 4 = 6 (the limit).
-Don't spawn more unless one closes.
+Capacity came back at 16:33 when the stack stopped the dead agents' machines. agent_close does NOT free a machine:
+after closing chinese and intlfmt, new spawns (stability, hardening, 18:08) failed with "no hosts". So when a
+worker finishes, keep it open and reuse it (agent_send reopens it with a fresh brief) instead of closing it.
+Wanted if a slot frees: "hardening" (ASan+UBSan full suite in shards; brief in this file's history, 18:08).
+The lead does stability (3 full-suite repeats + flaky list) and the parse-only run itself, in the background.
 
 ## Open work (beyond the calendars)
 
