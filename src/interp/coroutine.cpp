@@ -131,6 +131,16 @@ bool Coroutine::mapStack() {
   return true;
 }
 
+// Gives back the pages of a large stack below its live part (from liveLow up). Deep recursion leaves them
+// resident after it unwinds (under gVisor as well), until told.
+void Coroutine::releaseDeadStack(const void* liveLow) {
+  constexpr size_t kSlack = size_t(256) << 10;  // the live part grows again into what is just below it
+  if (stackSize_ < (size_t(64) << 20)) return;
+  uintptr_t begin = reinterpret_cast<uintptr_t>(stackLow_);
+  uintptr_t end = (reinterpret_cast<uintptr_t>(liveLow) - kSlack) & ~uintptr_t(pageSize() - 1);
+  if (end > begin) madvise(stackLow_, end - begin, MADV_DONTNEED);
+}
+
 void Coroutine::releaseStack() {
   if (!mapping_) return;
   if (registeredLow_) heap().removeStack(registeredLow_);
@@ -163,6 +173,17 @@ bool Coroutine::resume() {
   size_t own = started_ ? size_t(stackHigh_ - static_cast<const char*>(selfSp_)) : 0;
   if (resumer && below + own + kMinRoom > kNestedBudget) return false;
   if (!started_) {
+    // A new mapping commits memory: first give back the main stack's dead pages (at the bottom of the chain
+    // of running coroutines), so a deep recursion that already unwound and live coroutines don't add up.
+    if (resumer && (stackSize_ != kDefaultStackSize || gStackPool.empty())) {
+      Coroutine* bottom = resumer;
+      const void* liveLow = resumerSp;
+      while (bottom->resumerCoroutine_) {
+        bottom = bottom->resumerCoroutine_;
+        liveLow = bottom->registeredLow_;
+      }
+      bottom->releaseDeadStack(liveLow);
+    }
     if (!mapStack()) return false;
     // The frame snowman_coroutine_switch pops: r15 r14 r13 r12 rbx(this) rbp, then the return address.
     // snowman_coroutine_start's call then runs with a 16-byte aligned stack.
