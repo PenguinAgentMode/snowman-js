@@ -583,6 +583,7 @@ Node* Parser::parseFor(Pos start) {
       Pos ds = here();
       bool awaitUsing = isKw(K::Await);
       if (awaitUsing) next();
+      if (awaitUsing && ctx_->kind == FnCtx::Kind::Module) ctx_->usesTopLevelAwait = true;
       next();
       VariableDeclaration* init =
           parseVar(ds, awaitUsing ? VariableKind::AwaitUsing : VariableKind::Using, true, true);
