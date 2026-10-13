@@ -54,9 +54,17 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-Not in c21bcd82e's run:
+Not in c21bcd82e's run; memcap measures main after ws/runtime-r's gate:
 - e535e4b ws/builtins (fast-forward): immutable ArrayBuffer, ShadowRealm, Promise.try no-wrap, TA
   [[PreventExtensions]], Proxy revoke fix, GetSubstitution limit. ES-core gate 43,059 → 43,166, 0 regressions.
+- 68e8bb7 ws/survey-intl 32879c42e: Intl.DateTimeFormat; intl402 non-Temporal 1,069 → 1,318 / 1,353. Gates vs
+  c21bcd82e: ES-core 0, full 0 regressions. The 3 Intl-gated staging waivers pass again (waiver dropped).
+- 6dab50e ws/modules2 71b2722: import defer / source-phase / text / bytes modules, AbstractModuleSource,
+  ImportModuleForRealm, CoverInitializedName, B.3.2 labelled/duplicate block functions. Module-proposal files
+  244 → 515 / 516; all 242 negative-syntax tests still pass, now on their real early errors (no flips). Gates:
+  ES-core 0; full 1 (dst-offset-caching-6, flaky, passes alone).
+- 23c2b86 ws/interp2-r 7b89bae: the previous team's interpreter commits + SNOWMAN_GC_STRESS. ES-core 0
+  regressions; GC stress clean; no measurable end-to-end speedup at 4 jobs.
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
@@ -110,10 +118,6 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 Each line is a known regression, with its reason.
 
-- Full suite, from intl 9a1a42b (bisected by memcap): staging/sm/Proxy/revoked-get-function-realm-typeerror.js,
-  staging/sm/String/internalUsage.js, staging/sm/extensions/quote-string-for-nul-character.js. They are gated on
-  `if (this.Intl)` / `typeof Intl`: they passed only while Intl was undefined, and now reach the still missing
-  Intl.DateTimeFormat. Fixed forward by intl's DateTimeFormat batch (ws/intl-dev ccdf619), not by a revert.
 - Full suite, flaky: staging/sm/Date/dst-offset-caching-{2..8}-of-8.js time out at 7–10 s under 4-job load and
   pass alone. Not a regression (builtins bisected: 8.5–9.0 s CPU at every merge since 8a5df0b, ±10% noise).
   The time goes to the interpreter: identifier resolution (ResolveBinding + DeclarativeEnvironment::find ~14%),
