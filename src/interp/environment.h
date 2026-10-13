@@ -195,8 +195,7 @@ class FunctionEnvironment final : public DeclarativeEnvironment {
 // 9.1.1.2 Object Environment Records.
 class ObjectEnvironment final : public Environment {
  public:
-  ObjectEnvironment(Object* bindingObject, bool isWithEnvironment, Environment* outer)
-      : Environment(Kind::Object, outer), bindingObject(bindingObject), isWithEnvironment(isWithEnvironment) {}
+  ObjectEnvironment(Object* bindingObject, bool isWithEnvironment, Environment* outer);
 
   Result<bool> HasBinding(String* name) override;
   Result<void> CreateMutableBinding(String* name, bool deletable) override;
@@ -216,6 +215,9 @@ class ObjectEnvironment final : public Environment {
 
   Object* bindingObject;
   bool isWithEnvironment;
+
+ private:
+  bool direct_;  // ownDataSlot applies: an ordinary binding object, not a with environment
 };
 
 // 9.1.1.4 Global Environment Records.
