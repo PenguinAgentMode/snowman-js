@@ -1,0 +1,17 @@
+# Mutable statics allowed in src/ (checked by tools/lead/statics.mjs, run by gate.mjs). AGENTS.md: a new mutable
+# static must be thread_local, atomic, mutex-guarded or immutable after init; add it here with its reason.
+# Format: <path> <name>  # reason
+src/builtins/array.cpp arrayIteratorLength  # read-only after init: hook set by the main realm's installer (written only on change)
+src/builtins/intl/segmenter.cpp letters  # immutable: magic static, a unicode property lookup
+src/builtins/string.cpp property  # immutable: magic statics, unicode property lookups (Cased, Case_Ignorable)
+src/builtins/string.cpp regExpCreate  # read-only after init: hook set by the main realm's installer (written only on change)
+src/interp/agent.cpp gAgents  # mutex: gAgentsMutex
+src/interp/agent.cpp gAgentsMutex  # mutex
+src/interp/agent.cpp gReportMutex  # mutex
+src/interp/agent.cpp gReports  # mutex: gReportMutex
+src/interp/agent.cpp gWaitLists  # mutex: gWaitMutex
+src/interp/agent.cpp gWaitMutex  # mutex
+src/interp/analysis.cpp gcStressInterval  # read-only after init: set by the CLI before any agent thread
+src/interp/module.cpp gScriptDirectory  # read-only after init: set by the CLI before any agent thread
+src/runtime/operations.cpp check  # read-only after init: setRegExpCheck from the main realm's installer (written only on change)
+src/runtime/realm.cpp list  # read-only after init: builtin registrations at static initialization
