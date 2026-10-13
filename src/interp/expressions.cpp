@@ -43,9 +43,10 @@ String* identifierName(const Identifier* id) {
   return static_cast<String*>(id->interpCache);
 }
 
-// AST strings are never freed and atoms live forever, so the atom can be cached by the string's address.
+// AST strings are never freed and atoms live forever, so the atom can be cached by the string's address. Per thread:
+// atoms are cells of the thread's ($262.agent's) own heap.
 String* atomFor(const std::u16string& name) {
-  static std::unordered_map<const std::u16string*, String*> cache;
+  thread_local std::unordered_map<const std::u16string*, String*> cache;
   auto [it, inserted] = cache.try_emplace(&name, nullptr);
   if (inserted) it->second = atom(name);
   return it->second;

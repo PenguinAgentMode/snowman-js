@@ -57,7 +57,11 @@ RegExpCheck& regExpCheck() {
 }
 }  // namespace
 
-void setRegExpCheck(RegExpCheck check) { regExpCheck() = check; }
+// Every realm's RegExp installer passes the same function: store only a change, so once the main realm exists (before
+// any $262.agent thread) the hook is read-only.
+void setRegExpCheck(RegExpCheck check) {
+  if (regExpCheck() != check) regExpCheck() = check;
+}
 
 bool IsRegExpLike(Value argument) {
   if (!argument.isObject()) return false;

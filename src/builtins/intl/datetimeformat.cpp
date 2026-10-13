@@ -61,7 +61,7 @@ bool gregorianData(std::string_view calendar) { return calendarChain(calendar).e
 std::u16string_view calendarField(const std::string& locale, const std::string& calendar, int field) {
   std::vector<std::string_view> calendars = calendarChain(calendar);
   if (calendars.empty()) return dateField(locale, field);
-  static std::unordered_map<std::string, std::u16string_view> cache;
+  thread_local std::unordered_map<std::string, std::u16string_view> cache;  // per thread ($262.agent)
   std::string id = locale + ' ' + calendar + ' ' + std::to_string(field);
   if (auto it = cache.find(id); it != cache.end()) return it->second;
   std::vector<std::string> chain = data::lookupChain(locale);
@@ -349,7 +349,7 @@ struct Generator {
 };
 
 const Generator& generatorFor(const std::string& locale, const std::string& calendar) {
-  static std::vector<std::unique_ptr<Generator>> cache;
+  thread_local std::vector<std::unique_ptr<Generator>> cache;
   for (const auto& g : cache)
     if (g->locale == locale && g->calendar == calendar) return *g;
   auto g = std::make_unique<Generator>();

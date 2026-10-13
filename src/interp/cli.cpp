@@ -5,6 +5,7 @@
 #include <malloc.h>
 
 #include <cstdio>
+#include <iostream>
 #include <cstdlib>
 #include <fstream>
 #include <new>
@@ -13,6 +14,7 @@
 #include <string>
 
 #include "engine.h"
+#include "interp/agent.h"
 #include "interp/coroutine.h"
 #include "interp/interpreter.h"
 #include "interp/module.h"
@@ -160,6 +162,8 @@ int runMain(const CliOptions& options, const std::string& source) {
   mallopt(M_TRIM_THRESHOLD, 1 << 30);
   mallopt(M_TOP_PAD, 64 << 20);
   mallopt(M_MMAP_THRESHOLD, 256 << 20);
+  // One malloc arena: every thread ($262.agent) would otherwise reserve its own 64 MB of address space.
+  mallopt(M_ARENA_MAX, 1);
   // Out of memory (an address-space cap, ulimit -v): say so instead of aborting on std::bad_alloc.
   std::set_new_handler([] {
     std::fputs("fatal: out of memory\n", stdout);
@@ -173,6 +177,15 @@ int runMain(const CliOptions& options, const std::string& source) {
     return 70;
   }
   std::fflush(stdout);
+  // Agent threads may still be running or blocked (an Atomics.wait nothing will notify): once one was started, the
+  // process ends here on every path (runProgram returns for normal completion, uncaught errors, epilogues, host and
+  // parse errors), with no static destructors or atexit handlers racing the agents.
+  if (interp::AgentsStarted()) {
+    std::cout.flush();
+    std::cerr.flush();
+    std::fflush(nullptr);
+    std::_Exit(data.exitCode);
+  }
   return data.exitCode;
 }
 

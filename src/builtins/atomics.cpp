@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "builtins/util.h"
+#include "interp/agent.h"
 #include "runtime/arraybuffer.h"
 #include "runtime/bigint.h"
 #include "runtime/typedarray.h"
@@ -177,15 +178,11 @@ Result<Value> Atomics_wait(NativeCall& call) {
   double q = TRY(ToNumber(call.args[3]));
   double t = std::isnan(q) || q == INFINITY ? INFINITY : q == -INFINITY ? 0 : std::max(q, 0.0);
   if (!vm().canBlock) return ThrowTypeError("Atomics.wait: this agent cannot suspend");  // AgentCanSuspend()
-  Value w = GetValueFromBuffer(ta->buffer, byteIndex, ta->elementType);
-  if (!SameValue(v, w) && !(v.isBigInt() && w.isBigInt() && BigInt::equals(v.asBigInt(), w.asBigInt())))
-    return str(u"not-equal");
-  // No other agent can notify: wait out the timeout.
-  if (std::isfinite(t) && t > 0) {
-    struct timespec ts{time_t(t / 1000), long(std::fmod(t, 1000) * 1e6)};
-    nanosleep(&ts, nullptr);
-  }
-  return str(u"timed-out");
+  // Under the process-wide waiter-list lock the element is read again, so a notify can't slip in between.
+  uint64_t expected = bitsOf(ta->elementType, v);
+  uint64_t mask = ElementSize(ta->elementType) == 8 ? ~uint64_t(0) : 0xFFFFFFFFull;
+  auto stillEqual = [&] { return (atomicOp(ta, byteIndex, Op::Load, 0) & mask) == (expected & mask); };
+  return str(interp::WaitSync(ta->buffer->sharedBlock().get(), byteIndex, stillEqual, t));
 }
 
 // Atomics.pause ( [ N ] )

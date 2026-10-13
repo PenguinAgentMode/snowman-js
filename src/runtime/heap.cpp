@@ -3,6 +3,8 @@
 // INTERFACES.md section 13.
 #include "runtime/heap.h"
 
+#include <atomic>
+
 #include <pthread.h>
 
 #include <algorithm>
@@ -34,9 +36,15 @@ RootProvider::~RootProvider() {
   if (next_) next_->prev_ = prev_;
 }
 
+// Every thread's ($262.agent) heap together: past this many live cells a heap collects four times as often, so the
+// agents' heaps can't each grow to twice their live size at once (the RSS watchdog sees the whole process).
+std::atomic<size_t> gProcessCells{0};
+constexpr size_t kProcessCellSoftLimit = size_t(3) << 20;
+
 void Heap::track(Cell* cell) {
   cells_.push_back(cell);
   allocatedSinceCollect_++;
+  gProcessCells.fetch_add(1, std::memory_order_relaxed);
 }
 
 void Heap::addStack(const void* low, const void* high) { stacks_.emplace_back(low, high); }
@@ -69,7 +77,9 @@ void Heap::scanRange(Tracer& tracer, const void* low, const void* high) {
 }
 
 void Heap::maybeCollect() {
-  if (enabled_ && allocatedSinceCollect_ >= budget_) collect();
+  if (!enabled_) return;
+  size_t budget = gProcessCells.load(std::memory_order_relaxed) > kProcessCellSoftLimit ? budget_ / 4 : budget_;
+  if (allocatedSinceCollect_ >= budget) collect();
 }
 
 void Heap::collect() {
@@ -126,6 +136,7 @@ void Heap::collect() {
       delete cell;
     }
   }
+  gProcessCells.fetch_sub(cells_.size() - kept, std::memory_order_relaxed);
   cells_.resize(kept);
   sortedCells_.clear();
   sortedCells_.shrink_to_fit();

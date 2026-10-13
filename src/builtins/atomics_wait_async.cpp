@@ -1,7 +1,7 @@
-// Atomics.waitAsync ( typedArray, index, value, timeout ) (25.4.14) and the Atomics.notify that wakes its
-// waiters (25.4.15), for a single agent: every waiter is an async one of this agent, so NotifyWaiter resolves
-// its promise directly, and a timeout is HostEnqueueTimeoutJob run from the job queue. Replaces the
-// Atomics.notify atomics.cpp installs, which can find no waiters.
+// Atomics.waitAsync ( typedArray, index, value, timeout ) (25.4.14) and Atomics.notify (25.4.15), over the
+// process-wide waiter lists of interp/agent.cpp: a notify wakes sync waiters of any agent, resolves this thread's
+// async waiters directly and posts other agents' to their mailboxes; timeouts and those wakeups are a job on each
+// thread's own queue. Replaces the Atomics.notify atomics.cpp installs.
 #include <time.h>
 
 #include <algorithm>
@@ -10,6 +10,7 @@
 #include <map>
 
 #include "builtins/util.h"
+#include "interp/agent.h"
 #include "interp/promise.h"
 #include "runtime/arraybuffer.h"
 #include "runtime/bigint.h"
@@ -18,101 +19,84 @@
 namespace snowman::builtins {
 namespace {
 
-double monotonicMs() {
-  struct timespec ts;
-  clock_gettime(CLOCK_MONOTONIC, &ts);
-  return double(ts.tv_sec) * 1000 + double(ts.tv_nsec) / 1e6;
-}
-
-// A Waiter Record (25.4.3.x) of this agent: always async (single agent: nothing can block).
+// An async waiter of this thread (agent): its promise capability lives in this thread's heap; the process-wide
+// waiter lists (interp/agent.cpp) hold only its id, so a notify from another agent comes back as a mailbox wakeup.
 struct Waiter {
   interp::PromiseCapability* capability;
   double timeoutTime;  // monotonic ms; +inf: none
-  const char16_t* result = u"ok";
+  const SharedBlock* block;
+  size_t byteIndex;
 };
 
-// The WaiterLists, by (Shared Data Block, byte index): a SharedArrayBuffer is its block's only owner here.
-// Rooted: the buffers and the waiters' promise capabilities.
-class WaiterLists : public RootProvider {
+// This thread's async waiters by id. Rooted: their promise capabilities.
+class WaiterTable : public RootProvider {
  public:
-  using Key = std::pair<ArrayBufferObject*, size_t>;
-  std::map<Key, std::list<Waiter*>> lists;
-  bool timerQueued = false;
-
+  std::map<uint64_t, Waiter> waiters;
+  bool pumpQueued = false;
   void traceRoots(Tracer& tracer) override {
-    for (auto& [key, list] : lists) {
-      tracer.visit(reinterpret_cast<Cell*>(key.first));
-      for (Waiter* w : list) tracer.visit(reinterpret_cast<Cell*>(w->capability));
-    }
+    for (auto& [id, w] : waiters) tracer.visit(reinterpret_cast<Cell*>(w.capability));
   }
-
-  // The earliest finite timeout among the waiters, or +inf.
   double nextTimeout() const {
     double t = INFINITY;
-    for (auto& [key, list] : lists) {
-      for (Waiter* w : list) t = std::min(t, w->timeoutTime);
-    }
+    for (auto& [id, w] : waiters) t = std::min(t, w.timeoutTime);
     return t;
   }
 };
 
-WaiterLists& waiterLists() {
-  static WaiterLists* lists = new WaiterLists();
-  return *lists;
+WaiterTable& waiterTable() {
+  thread_local WaiterTable* table = new WaiterTable();
+  return *table;
 }
 
-// NotifyWaiter for a waiter of this agent: Call(promiseCapability.[[Resolve]], undefined, « result »).
-Result<void> notifyWaiter(Waiter* w) {
-  Result<void> r = interp::resolveCapability(w->capability, str(w->result));
-  delete w;
-  return r;
+// NotifyWaiter: Call(promiseCapability.[[Resolve]], undefined, « result »).
+Result<void> settle(uint64_t id, const char16_t* result) {
+  WaiterTable& table = waiterTable();
+  auto it = table.waiters.find(id);
+  if (it == table.waiters.end()) return {};
+  interp::PromiseCapability* capability = it->second.capability;
+  table.waiters.erase(it);
+  return interp::resolveCapability(capability, str(result));
 }
 
-// The timeout jobs of all waiters (HostEnqueueTimeoutJob), as one job: it runs every timeout that is due, in
-// timeout order, then puts itself back on the queue while any finite timeout remains, sleeping first when
-// nothing else is queued.
-class TimeoutJob final : public Job {
+// The timeouts and cross-agent wakeups of this thread's async waiters (HostEnqueueTimeoutJob), as one job that puts
+// itself back on the queue while a waiter can still be settled, blocking on the mailbox when nothing else is queued.
+class PumpJob final : public Job {
  public:
-  explicit TimeoutJob(Realm* realm) : Job(realm) {}
+  explicit PumpJob(Realm* realm) : Job(realm) {}
   Result<void> run() override {
-    WaiterLists& wl = waiterLists();
-    wl.timerQueued = false;
+    WaiterTable& table = waiterTable();
+    table.pumpQueued = false;
+    for (uint64_t id : interp::TakeAsyncWakeups()) TRY(settle(id, u"ok"));
     while (true) {
-      double now = monotonicMs();
-      Waiter* due = nullptr;
-      std::list<Waiter*>* dueList = nullptr;
-      for (auto& [key, list] : wl.lists) {
-        for (Waiter* w : list) {
-          if (w->timeoutTime <= now && (!due || w->timeoutTime < due->timeoutTime)) {
-            due = w;
-            dueList = &list;
-          }
+      double now = interp::MonotonicMs();
+      uint64_t due = 0;
+      double dueTime = INFINITY;
+      for (auto& [id, w] : table.waiters) {
+        if (w.timeoutTime <= now && w.timeoutTime < dueTime) {
+          due = id;
+          dueTime = w.timeoutTime;
         }
       }
       if (!due) break;
-      due->result = u"timed-out";
-      dueList->remove(due);
-      TRY(notifyWaiter(due));
-    }
-    for (auto it = wl.lists.begin(); it != wl.lists.end();) it = it->second.empty() ? wl.lists.erase(it) : std::next(it);
-    double next = wl.nextTimeout();
-    if (std::isfinite(next)) {
-      if (!vm().hasJobs()) {
-        double wait = next - monotonicMs();
-        if (wait > 0) {
-          struct timespec ts{time_t(wait / 1000), long(std::fmod(wait, 1000) * 1e6)};
-          nanosleep(&ts, nullptr);
-        }
+      Waiter w = table.waiters[due];
+      if (interp::RemoveAsyncWaiter(w.block, w.byteIndex, due)) {
+        TRY(settle(due, u"timed-out"));
+      } else {
+        table.waiters[due].timeoutTime = INFINITY;  // a notify took it first: its wakeup is on the way
       }
-      scheduleTimeouts(realm);
+    }
+    double next = table.nextTimeout();
+    if (!table.waiters.empty() && (std::isfinite(next) || interp::AgentThreadsRunning())) {
+      if (!vm().hasJobs()) interp::WaitForMailbox(std::min(next, interp::MonotonicMs() + 100));
+      schedule(realm);
     }
     return {};
   }
-  static void scheduleTimeouts(Realm* realm) {
-    WaiterLists& wl = waiterLists();
-    if (wl.timerQueued) return;
-    wl.timerQueued = true;
-    vm().enqueueJob(make<TimeoutJob>(realm));
+  static void schedule(Realm* realm) {
+    WaiterTable& table = waiterTable();
+    if (table.pumpQueued) return;
+    table.pumpQueued = true;
+    vm().enqueueJob(make<PumpJob>(realm));
   }
 };
 
@@ -157,9 +141,16 @@ Result<Value> Atomics_waitAsync(NativeCall& call) {
   if (!equal) return waitResult(false, str(u"not-equal"));
   // Asynchronous immediate timeouts fail fast, without a promise job.
   if (t == 0) return waitResult(false, str(u"timed-out"));
-  Waiter* waiter = new Waiter{capability, monotonicMs() + t};
-  waiterLists().lists[{buffer, byteIndex}].push_back(waiter);
-  if (std::isfinite(t)) TimeoutJob::scheduleTimeouts(currentRealm());
+  // Registered under the process-wide waiter-list lock, which reads the element again.
+  const SharedBlock* block = buffer->sharedBlock().get();
+  auto stillEqual = [&] {
+    Value now = GetValueFromBuffer(buffer, byteIndex, ta->elementType);
+    return v.isBigInt() ? BigInt::equals(v.asBigInt(), now.asBigInt()) : v.asNumber() == now.asNumber();
+  };
+  uint64_t id = interp::AddAsyncWaiter(block, byteIndex, stillEqual);
+  if (!id) return waitResult(false, str(u"not-equal"));
+  waiterTable().waiters[id] = Waiter{capability, interp::MonotonicMs() + t, block, byteIndex};
+  PumpJob::schedule(currentRealm());
   return waitResult(true, capability->promise);
 }
 
@@ -171,18 +162,11 @@ Result<Value> Atomics_notify(NativeCall& call) {
   if (!call.args[2].isUndefined()) c = std::max(TRY(ToIntegerOrInfinity(call.args[2])), 0.0);
   ArrayBufferObject* buffer = ta->buffer;
   if (!buffer->isShared()) return num(0);
-  WaiterLists& wl = waiterLists();
-  auto it = wl.lists.find({buffer, byteIndex});
-  if (it == wl.lists.end()) return num(0);
-  // RemoveWaiters(WL, c): the first c, in FIFO order; then NotifyWaiter each.
-  std::vector<Waiter*> removed;
-  while (!it->second.empty() && double(removed.size()) < c) {
-    removed.push_back(it->second.front());
-    it->second.pop_front();
-  }
-  if (it->second.empty()) wl.lists.erase(it);
-  for (Waiter* w : removed) TRY(notifyWaiter(w));
-  return num(double(removed.size()));
+  // RemoveWaiters(WL, c) in FIFO order, then NotifyWaiter each: other agents' waiters wake in their own threads.
+  std::vector<uint64_t> own;
+  size_t woken = interp::NotifyWaiters(buffer->sharedBlock().get(), byteIndex, c, own);
+  for (uint64_t id : own) TRY(settle(id, u"ok"));
+  return num(double(woken));
 }
 
 void installAtomicsWaitAsync(Realm& realm) {
