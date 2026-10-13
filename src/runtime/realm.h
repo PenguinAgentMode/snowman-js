@@ -13,6 +13,7 @@ namespace snowman {
 #define SNOWMAN_INTRINSICS(X)                                                                                   \
   X(AggregateError) X(AggregateErrorPrototype) X(Array) X(ArrayPrototype) X(ArrayPrototypeValues)               \
   X(ArrayBuffer) X(ArrayBufferPrototype) X(ArrayIteratorPrototype) X(AsyncFromSyncIteratorPrototype)            \
+  X(AsyncDisposableStack) X(AsyncDisposableStackPrototype) X(DisposableStack) X(DisposableStackPrototype)       \
   X(AsyncFunction) X(AsyncFunctionPrototype) X(AsyncGeneratorFunction) X(AsyncGeneratorFunctionPrototype)       \
   X(AsyncGeneratorPrototype) X(AsyncIteratorPrototype) X(Atomics) X(BigInt) X(BigIntPrototype)                  \
   X(BigInt64Array) X(BigInt64ArrayPrototype) X(BigUint64Array) X(BigUint64ArrayPrototype) X(Boolean)            \
@@ -28,7 +29,7 @@ namespace snowman {
   X(RangeErrorPrototype) X(ReferenceError) X(ReferenceErrorPrototype) X(Reflect) X(RegExp) X(RegExpPrototype)   \
   X(RegExpStringIteratorPrototype) X(Set) X(SetPrototype) X(SetIteratorPrototype) X(SharedArrayBuffer)          \
   X(SharedArrayBufferPrototype) X(String) X(StringPrototype) X(StringIteratorPrototype) X(Symbol)               \
-  X(SymbolPrototype) X(SyntaxError) X(SyntaxErrorPrototype) X(ThrowTypeError) X(TypedArray)                     \
+  X(SymbolPrototype) X(SuppressedError) X(SuppressedErrorPrototype) X(SyntaxError) X(SyntaxErrorPrototype) X(ThrowTypeError) X(TypedArray)                     \
   X(TypedArrayPrototype) X(TypeError) X(TypeErrorPrototype) X(Uint8Array) X(Uint8ArrayPrototype)                \
   X(Uint8ClampedArray) X(Uint8ClampedArrayPrototype) X(Uint16Array) X(Uint16ArrayPrototype) X(Uint32Array)      \
   X(Uint32ArrayPrototype) X(unescape) X(URIError) X(URIErrorPrototype) X(WeakMap) X(WeakMapPrototype)          \

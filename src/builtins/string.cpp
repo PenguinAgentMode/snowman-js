@@ -349,7 +349,7 @@ Result<Value> regExpDispatch(NativeCall& call, Symbol* symbol) {
   Value o = call.thisValue;
   TRY(RequireObjectCoercible(o));
   Value regexp = call.args[0];
-  if (!regexp.isNullish()) {
+  if (regexp.isObject()) {
     Value method = TRY(GetMethod(regexp, PropertyKey(symbol)));
     if (!method.isUndefined()) return Call(method, regexp, {o});
   }
@@ -379,7 +379,7 @@ Result<Value> StringPrototype_matchAll(NativeCall& call) {
   Value o = call.thisValue;
   TRY(RequireObjectCoercible(o));
   Value regexp = call.args[0];
-  if (!regexp.isNullish()) {
+  if (regexp.isObject()) {
     TRY(requireGlobalFlag(regexp));
     Value matcher = TRY(GetMethod(regexp, PropertyKey(symbols().matchAll)));
     if (!matcher.isUndefined()) return Call(matcher, regexp, {o});
@@ -444,7 +444,7 @@ Result<Value> StringPrototype_replace(NativeCall& call) {
   Value o = call.thisValue;
   TRY(RequireObjectCoercible(o));
   Value searchValue = call.args[0], replaceValue = call.args[1];
-  if (!searchValue.isNullish()) {
+  if (searchValue.isObject()) {
     Value replacer = TRY(GetMethod(searchValue, PropertyKey(symbols().replace)));
     if (!replacer.isUndefined()) return Call(replacer, searchValue, {o, replaceValue});
   }
@@ -473,7 +473,7 @@ Result<Value> StringPrototype_replaceAll(NativeCall& call) {
   Value o = call.thisValue;
   TRY(RequireObjectCoercible(o));
   Value searchValue = call.args[0], replaceValue = call.args[1];
-  if (!searchValue.isNullish()) {
+  if (searchValue.isObject()) {
     TRY(requireGlobalFlag(searchValue));
     Value replacer = TRY(GetMethod(searchValue, PropertyKey(symbols().replace)));
     if (!replacer.isUndefined()) return Call(replacer, searchValue, {o, replaceValue});
@@ -525,7 +525,7 @@ Result<Value> StringPrototype_split(NativeCall& call) {
   Value o = call.thisValue;
   TRY(RequireObjectCoercible(o));
   Value separator = call.args[0], limit = call.args[1];
-  if (!separator.isNullish()) {
+  if (separator.isObject()) {
     Value splitter = TRY(GetMethod(separator, PropertyKey(symbols().split)));
     if (!splitter.isUndefined()) return Call(splitter, separator, {o, limit});
   }
