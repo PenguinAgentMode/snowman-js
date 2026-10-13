@@ -83,6 +83,13 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
 - Intl-dependent staging failures since the intl merge (sm/Proxy/revoked-get-function-realm-typeerror, sm/String/internalUsage,
   sm/extensions/quote-string-for-nul-character): intl's.
 
+## Monitor pitfall (seen 16:54)
+
+- A poll monitor that prints twice (`while ! grep -q STAGE1 log; do sleep 20; done; grep ...; while ! grep -q DONE log;
+  do sleep 30; done; tail ...`) delivered only the first print: the gate's DONE line was never notified and I went idle.
+  `tail -n0 -F log | grep --line-buffered` monitors also exited early (code 2) here. What works: one monitor per event,
+  a single loop that prints exactly once at the end (`while ! grep -q DONE log; do sleep 30; done; tail -2 log`).
+
 ## How I work
 
 - Worktrees: ~/repo/snowman-js (main checkout, owns t262/test262), ~/repo/wt2, ~/repo/wt3, ~/repo/wt4 (bisect builds). The
