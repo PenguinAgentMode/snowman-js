@@ -83,9 +83,9 @@ size_t pageSize() {
   return size;
 }
 
-// The high end of the thread's own stack.
+// The high end of the running thread's own stack (each agent thread has its own).
 const void* threadStackHigh() {
-  static const void* high = [] {
+  thread_local const void* high = [] {
     pthread_attr_t attr;
     void* low = nullptr;
     size_t size = 0;

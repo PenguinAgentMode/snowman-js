@@ -4,6 +4,7 @@
 #include <cstdio>
 #include <thread>
 
+#include "interp/agent.h"
 #include "interp/interpreter.h"
 #include "runtime/arraybuffer.h"
 #include "runtime/builtins.h"
@@ -66,14 +67,48 @@ Result<Value> hostAgentSleep(NativeCall& call) {
   return Value::undefined();
 }
 
-// $262.agent.monotonicNow(): milliseconds on a clock that never goes back.
-Result<Value> hostAgentMonotonicNow(NativeCall&) {
-  static const auto start = std::chrono::steady_clock::now();
-  return Value::number(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+// $262.agent.monotonicNow(): milliseconds on a clock that never goes back (one origin for every agent).
+Result<Value> hostAgentMonotonicNow(NativeCall&) { return Value::number(MonotonicMs()); }
+
+// $262.agent.getReport(): the next report from an agent, or null.
+Result<Value> hostAgentGetReport(NativeCall&) {
+  std::optional<std::u16string> report = PopReport();
+  if (!report) return Value::null();
+  return Value(newString(std::move(*report)));
 }
 
-// $262.agent.getReport(): the next report from another agent, or null; there are none.
-Result<Value> hostAgentGetReport(NativeCall&) { return Value::null(); }
+// $262.agent.start(source): a new agent (thread) running source as a Script.
+Result<Value> hostAgentStart(NativeCall& call) {
+  String* source = TRY(ToString(call.args[0]));
+  if (!StartAgent(std::u16string(source->view()))) return ThrowRangeError("$262.agent.start: cannot start an agent");
+  return Value::undefined();
+}
+
+// $262.agent.broadcast(sab [, id]): every agent's receiveBroadcast callback gets the buffer; returns once all took it.
+Result<Value> hostAgentBroadcast(NativeCall& call) {
+  auto* buffer = call.args[0].isObject() ? call.args[0].asObject()->as<ArrayBufferObject>() : nullptr;
+  if (!buffer || !buffer->isShared()) return ThrowTypeError("$262.agent.broadcast requires a SharedArrayBuffer");
+  double id = call.args[1].isUndefined() ? 0 : TRY(ToNumber(call.args[1]));
+  std::optional<size_t> maxByteLength;
+  if (buffer->isResizable()) maxByteLength = buffer->maxByteLength();
+  BroadcastToAgents(BroadcastMessage{buffer->sharedBlock(), maxByteLength, id});
+  return Value::undefined();
+}
+
+// In an agent: $262.agent.receiveBroadcast(callback), report(value), leaving().
+Result<Value> hostAgentReceiveBroadcast(NativeCall& call) {
+  SetBroadcastCallback(call.args[0]);
+  return Value::undefined();
+}
+Result<Value> hostAgentReport(NativeCall& call) {
+  String* text = TRY(ToString(call.args[0]));
+  PushReport(std::u16string(text->view()));
+  return Value::undefined();
+}
+Result<Value> hostAgentLeaving(NativeCall&) {
+  SetLeaving();
+  return Value::undefined();
+}
 
 }  // namespace
 
@@ -96,7 +131,15 @@ void installHostBindings(Realm* realm) {
   Object* agent = OrdinaryObjectCreate(realm->intrinsic(Intrinsic::ObjectPrototype));
   defineFunction(r, agent, PropertyKey(u"sleep"), 1, hostAgentSleep);
   defineFunction(r, agent, PropertyKey(u"monotonicNow"), 0, hostAgentMonotonicNow);
-  defineFunction(r, agent, PropertyKey(u"getReport"), 0, hostAgentGetReport);
+  if (InAgentThread()) {
+    defineFunction(r, agent, PropertyKey(u"receiveBroadcast"), 1, hostAgentReceiveBroadcast);
+    defineFunction(r, agent, PropertyKey(u"report"), 1, hostAgentReport);
+    defineFunction(r, agent, PropertyKey(u"leaving"), 0, hostAgentLeaving);
+  } else {
+    defineFunction(r, agent, PropertyKey(u"start"), 1, hostAgentStart);
+    defineFunction(r, agent, PropertyKey(u"broadcast"), 2, hostAgentBroadcast);
+    defineFunction(r, agent, PropertyKey(u"getReport"), 0, hostAgentGetReport);
+  }
   defineValue(host, PropertyKey(u"agent"), Value(agent));
   realmState(realm)->host262 = host;
   defineGlobal(r, PropertyKey(u"$262"), Value(host));

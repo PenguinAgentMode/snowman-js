@@ -655,7 +655,7 @@ Result<Value> TypedArrayPrototype_with(NativeCall& call) {
 }
 
 void installTypedArrays(Realm& realm) {
-  arrayIteratorLength = typedArrayAwareLength;
+  if (arrayIteratorLength != typedArrayAwareLength) arrayIteratorLength = typedArrayAwareLength;  // read-only after the main realm
   Object* proto = OrdinaryObjectCreate(realm.intrinsic(Intrinsic::ObjectPrototype));
   BuiltinFunction* abstract = defineConstructor(realm, Intrinsic::TypedArray, AbstractTypedArray_construct, 0,
                                                 PropertyKey(u"TypedArray"), proto, Intrinsic::TypedArrayPrototype, false);

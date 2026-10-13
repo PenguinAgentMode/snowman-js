@@ -708,7 +708,7 @@ bool isRegExpObject(Object* o) { return o->is<RegExpObject>(); }
 
 void installRegExp(Realm& realm) {
   setRegExpCheck(isRegExpObject);
-  regExpCreate = RegExpCreate;
+  if (regExpCreate != RegExpCreate) regExpCreate = RegExpCreate;  // read-only once the main realm exists
   Object* proto = OrdinaryObjectCreate(realm.intrinsic(Intrinsic::ObjectPrototype));
   BuiltinFunction* ctor =
       defineConstructor(realm, Intrinsic::RegExp, RegExp_construct, 2, PropertyKey(u"RegExp"), proto, Intrinsic::RegExpPrototype);
