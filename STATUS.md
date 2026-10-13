@@ -16,46 +16,42 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-First measured full-suite run: **main 8a5df0b93** (`tools/lead/measure.sh suite results/85210ca13.json`, 4 jobs,
-2,940 s; aggregates `results/8a5df0b93-full.json`, `results/8a5df0b93.json`; JSONL on the results branch as
-`results/8a5df0b93/suite.jsonl`).
+Post-merge run: **main c21bcd82e** (`tools/lead/measure.sh suite results/8a5df0b93.json`, 4 jobs, 2,295 s;
+`results/c21bcd82e.json`, `results/c21bcd82e-full.json`; JSONL `results/c21bcd82e/suite.jsonl` on the results branch).
 
-- milestones.mjs: highest **M8**; **ES-core: 43,059 / 43,305 files (99.43%)**; **full suite: 44,766 / 53,616 files
-  (83.49%)**; scenarios 85,571 / 102,994. Gate vs 85210ca13: 0 regressions.
-- Command: `node t262/runner/milestones.mjs results/8a5df0b93.json --full results/8a5df0b93-full.json`
-- Per cluster (`node tools/lead/clusters.mjs results/8a5df0b93-full.json`):
+- milestones.mjs: highest **M8**; **ES-core: 43,163 / 43,305 files (99.67%)**; **full suite: 50,887 / 53,616 files
+  (94.91%)**; scenarios 97,709 / 102,994.
+- ES-core vs 8a5df0b93: +104 newly passing (the runner change), 0 regressions.
+- Full suite vs 8a5df0b93: +6,121 files. The gate lists 6 staging files, all waived below: 3 that passed only
+  before Intl existed, and 3 flaky DST timeouts.
+- Command: `node t262/runner/milestones.mjs results/c21bcd82e.json --full results/c21bcd82e-full.json`
 
-| Cluster | Passing (8a5df0b93) | Files | % |
-| --- | ---: | ---: | ---: |
-| ES-core | 43,059 | 43,305 | 99.43 |
-| built-ins/Temporal | 0 | 4,605 | 0.00 |
-| intl402/Temporal | 0 | 2,029 | 0.00 |
-| intl402 (other) | 25 | 1,353 | 1.85 |
-| staging | 1,430 | 1,483 | 96.43 |
-| proposals (in ES-core dirs) | 252 | 841 | 29.96 |
-| **full suite** | **44,766** | **53,616** | **83.49** |
+| Cluster | Passing (c21bcd82e) | Files | % | vs 8a5df0b93 |
+| --- | ---: | ---: | ---: | ---: |
+| ES-core | 43,163 | 43,305 | 99.67 | +104 |
+| built-ins/Temporal | 4,605 | 4,605 | 100.00 | +4,605 |
+| intl402/Temporal | 197 | 2,029 | 9.71 | +197 |
+| intl402 (other) | 1,069 | 1,353 | 79.01 | +1,044 |
+| staging | 1,429 | 1,483 | 96.36 | -1 |
+| proposals (in ES-core dirs) | 424 | 841 | 50.42 | +172 |
+| **full suite** | **50,887** | **53,616** | **94.91** | **+6,121** |
 
-- Memory cap: 5 staging/sm files fail only under it (full suite only, not gated): extensions/recursion.js (932 MB
-  peak), RegExp/unicode-{class-,}braced.js (444 MB resident but > 1 GB address space), regress/regress-610026.js
-  (2.3 GB), String/replace-math.js (OOM even at 3 GB). Engine memory use, not a cap problem.
+Previous: main 8a5df0b93, full 44,766 / 53,616 (83.49%), ES-core 43,059 (99.43%).
+
+- Memory cap: 5 staging/sm files fail only under it (extensions/recursion.js, RegExp/unicode-{class-,}braced.js,
+  regress/regress-610026.js; String/replace-math.js is fixed in e535e4b). memcap is finding the root causes.
 
 ## Merges awaiting a post-merge measurement
 
-Not in 8a5df0b93's run; memcap's `measure.sh suite` on main c21bcd8 covers them all:
-- 5b81747 ws/builtins a87b211 (allKeyed, Error.stack, Iterator.join), gated on 6d73e90.
-- 00dc9d9 ws/temporal 7526397 (Temporal core + Duration + Plain*), gated on 8a5df0b.
-- 8e85e96 ws/builtins d0423a1 (legacy RegExp statics + Function.prototype.toString fix). Merged before d0423a1's
-  own gate (a rule slip); confirmed by builtins' 996500e gate (a superset): 0 regressions.
-- 9f1e7e5 ws/temporal2 99a40ae (Instant, ZonedDateTime, Now, tz data; built-ins/Temporal 4,605/4,605), gated on
-  src-identical b2c4f03.
-- 9a1a42b ws/intl b48382d (ECMA-402 without ICU: intl402 non-Temporal 1,069 / 1,353; node 1,051), gated.
-- c21bcd8 ws/runner 43f03e9, a RUNNER change: module tests run in place (`--prelude`/`--epilogue`). Module-flagged
-  files of the full suite, old vs new runner on the same binary: 613 → 719 (+106, 0 newly failing); parse-only
-  733 → 733. The +106 is the runner's, not the engine's: the 104 self-importing tests
-  (src/interp/module_test_exclusions.txt, now obsolete), 1 staging self-import, and 1 accidental pass
-  (import-defer-of-missing-module-fails.js, on temporal2's expected list). Full suite vs 8a5df0b93: +106, -4
-  flaky timeouts (staging/sm/Date/dst-offset-caching-{5..8}-of-8.js, pass alone). Report:
-  results branch `results/43f03e9/MERGE_REQUEST.md`.
+Not in c21bcd82e's run:
+- e535e4b ws/builtins (fast-forward): immutable ArrayBuffer, ShadowRealm, Promise.try no-wrap, TA
+  [[PreventExtensions]], Proxy revoke fix, GetSubstitution limit. ES-core gate 43,059 → 43,166, 0 regressions.
+
+Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
+`--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
+(+106, 0 newly failing); parse-only 733 → 733. The +106 is the runner's: the 104 self-importing tests, 1 staging
+self-import, and 1 then-accidental pass (import-defer-of-missing-module-fails.js; it passes for the right reason
+on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md`.
 
 ## Decisions
 
@@ -102,6 +98,13 @@ Not in 8a5df0b93's run; memcap's `measure.sh suite` on main c21bcd8 covers them 
 ## Waivers
 
 Each line is a known regression, with its reason.
+
+- Full suite, from intl 9a1a42b (bisected by memcap): staging/sm/Proxy/revoked-get-function-realm-typeerror.js,
+  staging/sm/String/internalUsage.js, staging/sm/extensions/quote-string-for-nul-character.js. They are gated on
+  `if (this.Intl)` / `typeof Intl`: they passed only while Intl was undefined, and now reach the still missing
+  Intl.DateTimeFormat. Fixed forward by intl's DateTimeFormat batch (ws/intl-dev ccdf619), not by a revert.
+- Full suite, flaky: staging/sm/Date/dst-offset-caching-{2..8}-of-8.js time out at 7–10 s under 4-job load and
+  pass alone. A Date slowdown since 8a5df0b93 is suspected; builtins is bisecting it.
 
 - TypedArray/prototype/copyWithin/coerced-values-{start,end}-detached(-prototype).js (3): passed by accident before
   cf35ee1, now near the 10 s timeout; interp2's speed work (waived until it lands).
