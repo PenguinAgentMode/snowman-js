@@ -4,6 +4,8 @@
 #include "runtime/heap.h"
 
 #include <atomic>
+#include <cstdlib>
+#include <malloc.h>
 
 #include <pthread.h>
 
@@ -41,10 +43,39 @@ RootProvider::~RootProvider() {
 std::atomic<size_t> gProcessCells{0};
 constexpr size_t kProcessCellSoftLimit = size_t(3) << 20;
 
+// The soft heap limit: live malloc memory (every thread's, one arena) above it after a collection makes the next
+// CheckStack throw a catchable RangeError("out of memory"), well before the runner's RSS watchdog would kill the
+// process. SNOWMAN_HEAP_MB sets it (default 600; 0: none). A true malloc failure stays fatal (cli.cpp).
+size_t heapLimitBytes() {
+  static const size_t limit = [] {
+    const char* env = std::getenv("SNOWMAN_HEAP_MB");
+    long mb = env ? std::atol(env) : 600;
+    return mb > 0 ? size_t(mb) << 20 : SIZE_MAX;
+  }();
+  return limit;
+}
+std::atomic<bool> gHeapLimitExceeded{false};
+thread_local size_t tAllocationsSinceCheck = 0;
+
+size_t mallocInUse() {
+  struct mallinfo2 info = mallinfo2();
+  return info.uordblks + info.hblkhd;
+}
+
 void Heap::track(Cell* cell) {
   cells_.push_back(cell);
   allocatedSinceCollect_++;
   gProcessCells.fetch_add(1, std::memory_order_relaxed);
+  // Between collections (which can be far apart with a large live heap), look at malloc every 64K cells; over the
+  // limit, collect now: a live heap still over it then is a RangeError at the next stack check.
+  if (++tAllocationsSinceCheck >= (size_t(1) << 16)) {
+    tAllocationsSinceCheck = 0;
+    if (enabled_ && heapLimitBytes() != SIZE_MAX && mallocInUse() > heapLimitBytes()) collect();
+  }
+}
+
+bool TakeHeapLimitExceeded() {
+  return gHeapLimitExceeded.load(std::memory_order_relaxed) && gHeapLimitExceeded.exchange(false);
 }
 
 void Heap::addStack(const void* low, const void* high) { stacks_.emplace_back(low, high); }
@@ -142,6 +173,7 @@ void Heap::collect() {
   sortedCells_.shrink_to_fit();
   allocatedSinceCollect_ = 0;
   budget_ = std::max<size_t>(1 << 20, kept);
+  if (heapLimitBytes() != SIZE_MAX && mallocInUse() > heapLimitBytes()) gHeapLimitExceeded = true;
 }
 
 }  // namespace snowman
