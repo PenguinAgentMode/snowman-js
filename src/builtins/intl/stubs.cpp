@@ -8,6 +8,6 @@ void installDurationFormat(Realm&, Object*) {}
 
 
 
-void installRelativeTimeFormat(Realm&, Object*) {}
+
 void installSegmenter(Realm&, Object*) {}
 }  // namespace snowman::intl
