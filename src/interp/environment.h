@@ -79,6 +79,7 @@ class DeclarativeEnvironment : public Environment {
   // A new binding initialized to `value` (CreateMutableBinding + InitializeBinding).
   void createInitializedBinding(String* name, Value value, bool mutable_ = true);
   const std::vector<Binding>& bindings() const { return bindings_; }
+  void reserve(size_t count) { bindings_.reserve(count); }
   // Every binding back to uninitialized (a reused loop iteration environment).
   void resetBindings() {
     for (Binding& binding : bindings_) binding.value = Value::empty();

@@ -427,6 +427,7 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
     calleeContext->lexicalEnvironment = env;
   }
   auto* declEnv = static_cast<DeclarativeEnvironment*>(env);
+  declEnv->reserve(parameterNames.size() + 1 + (hasParameterExpressions ? 0 : code->varNames.size()));
 
   for (String* paramName : parameterNames) {
     if (!declEnv->hasBindingDirect(paramName)) {
@@ -498,8 +499,10 @@ Result<void> FunctionDeclarationInstantiation(ECMAScriptFunction* func, Args arg
     f->interpCache = reinterpret_cast<void*>(1);  // evaluate it with the B.3.2.1 steps
   }
 
+  // Sloppy functions get a separate environment for top-level lexical declarations so a direct eval can
+  // tell them from var declarations; without a direct eval the merged environment is indistinguishable.
   Environment* lexEnv;
-  if (!strict) {
+  if (!strict && code->hasDirectEval) {
     lexEnv = snowman::make<DeclarativeEnvironment>(varEnv);
   } else {
     lexEnv = varEnv;
