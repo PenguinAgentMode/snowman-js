@@ -11,12 +11,21 @@ namespace snowman {
 
 namespace {
 
-// The trap lookup shared by every internal method: throws on a revoked proxy, returns undefined or the
-// callable trap.
-Result<Value> getTrap(ProxyObject* proxy, const char16_t* name) {
+struct Trap {
+  Value trap;  // undefined or the callable trap
+  Object* target;
+  Object* handler;
+};
+
+// The trap lookup shared by every internal method: throws on a revoked proxy; the target and handler are read
+// before GetMethod, which may revoke the proxy (a handler that is itself a proxy).
+Result<Trap> getTrap(ProxyObject* proxy, const char16_t* name) {
   TRY(CheckStack());
   if (!proxy->proxyHandler) return ThrowTypeError("Cannot perform operation on a revoked proxy");
-  return GetMethod(proxy->proxyHandler, PropertyKey(name));
+  Object* target = proxy->proxyTarget;
+  Object* handler = proxy->proxyHandler;
+  Value trap = TRY(GetMethod(handler, PropertyKey(name)));
+  return Trap{trap, target, handler};
 }
 
 }  // namespace
@@ -36,10 +45,9 @@ void ProxyObject::trace(Tracer& tracer) {
 
 // 10.5.1 [[GetPrototypeOf]]
 Result<Object*> ProxyObject::GetPrototypeOf() {
-  Value trap = TRY(getTrap(this, u"getPrototypeOf"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"getPrototypeOf"));
   if (trap.isUndefined()) return target->GetPrototypeOf();
-  Value handlerProto = TRY(snowman::Call(trap, proxyHandler, {Value(target)}));
+  Value handlerProto = TRY(snowman::Call(trap, handler, {Value(target)}));
   if (!handlerProto.isObject() && !handlerProto.isNull())
     return ThrowTypeError("'getPrototypeOf' on proxy: trap returned neither object nor null");
   Object* proto = handlerProto.isNull() ? nullptr : handlerProto.asObject();
@@ -53,11 +61,10 @@ Result<Object*> ProxyObject::GetPrototypeOf() {
 
 // 10.5.2 [[SetPrototypeOf]]
 Result<bool> ProxyObject::SetPrototypeOf(Object* v) {
-  Value trap = TRY(getTrap(this, u"setPrototypeOf"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"setPrototypeOf"));
   if (trap.isUndefined()) return target->SetPrototypeOf(v);
   Value vv = v ? Value(v) : Value::null();
-  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, proxyHandler, {Value(target), vv})));
+  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, handler, {Value(target), vv})));
   if (!booleanTrapResult) return false;
   bool extensibleTarget = TRY(snowman::IsExtensible(target));
   if (extensibleTarget) return true;
@@ -69,10 +76,9 @@ Result<bool> ProxyObject::SetPrototypeOf(Object* v) {
 
 // 10.5.3 [[IsExtensible]]
 Result<bool> ProxyObject::IsExtensible() {
-  Value trap = TRY(getTrap(this, u"isExtensible"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"isExtensible"));
   if (trap.isUndefined()) return snowman::IsExtensible(target);
-  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, proxyHandler, {Value(target)})));
+  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, handler, {Value(target)})));
   bool targetResult = TRY(snowman::IsExtensible(target));
   if (booleanTrapResult != targetResult)
     return ThrowTypeError("'isExtensible' on proxy: trap result does not reflect extensibility of proxy target");
@@ -81,10 +87,9 @@ Result<bool> ProxyObject::IsExtensible() {
 
 // 10.5.4 [[PreventExtensions]]
 Result<bool> ProxyObject::PreventExtensions() {
-  Value trap = TRY(getTrap(this, u"preventExtensions"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"preventExtensions"));
   if (trap.isUndefined()) return target->PreventExtensions();
-  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, proxyHandler, {Value(target)})));
+  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, handler, {Value(target)})));
   if (booleanTrapResult) {
     bool extensibleTarget = TRY(snowman::IsExtensible(target));
     if (extensibleTarget)
@@ -95,10 +100,9 @@ Result<bool> ProxyObject::PreventExtensions() {
 
 // 10.5.5 [[GetOwnProperty]]
 Result<std::optional<PropertyDescriptor>> ProxyObject::GetOwnProperty(const PropertyKey& key) {
-  Value trap = TRY(getTrap(this, u"getOwnPropertyDescriptor"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"getOwnPropertyDescriptor"));
   if (trap.isUndefined()) return target->GetOwnProperty(key);
-  Value trapResultObj = TRY(snowman::Call(trap, proxyHandler, {Value(target), key.toValue()}));
+  Value trapResultObj = TRY(snowman::Call(trap, handler, {Value(target), key.toValue()}));
   if (!trapResultObj.isObject() && !trapResultObj.isUndefined())
     return ThrowTypeError("'getOwnPropertyDescriptor' on proxy: trap returned neither object nor undefined");
   auto targetDesc = TRY(target->GetOwnProperty(key));
@@ -127,11 +131,10 @@ Result<std::optional<PropertyDescriptor>> ProxyObject::GetOwnProperty(const Prop
 
 // 10.5.6 [[DefineOwnProperty]]
 Result<bool> ProxyObject::DefineOwnProperty(const PropertyKey& key, const PropertyDescriptor& desc) {
-  Value trap = TRY(getTrap(this, u"defineProperty"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"defineProperty"));
   if (trap.isUndefined()) return target->DefineOwnProperty(key, desc);
   Value descObj = FromPropertyDescriptor(desc);
-  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, proxyHandler, {Value(target), key.toValue(), descObj})));
+  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, handler, {Value(target), key.toValue(), descObj})));
   if (!booleanTrapResult) return false;
   auto targetDesc = TRY(target->GetOwnProperty(key));
   bool extensibleTarget = TRY(snowman::IsExtensible(target));
@@ -156,10 +159,9 @@ Result<bool> ProxyObject::DefineOwnProperty(const PropertyKey& key, const Proper
 
 // 10.5.7 [[HasProperty]]
 Result<bool> ProxyObject::HasProperty(const PropertyKey& key) {
-  Value trap = TRY(getTrap(this, u"has"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"has"));
   if (trap.isUndefined()) return target->HasProperty(key);
-  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, proxyHandler, {Value(target), key.toValue()})));
+  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, handler, {Value(target), key.toValue()})));
   if (!booleanTrapResult) {
     auto targetDesc = TRY(target->GetOwnProperty(key));
     if (targetDesc) {
@@ -175,10 +177,9 @@ Result<bool> ProxyObject::HasProperty(const PropertyKey& key) {
 
 // 10.5.8 [[Get]]
 Result<Value> ProxyObject::Get(const PropertyKey& key, Value receiver) {
-  Value trap = TRY(getTrap(this, u"get"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"get"));
   if (trap.isUndefined()) return target->Get(key, receiver);
-  Value trapResult = TRY(snowman::Call(trap, proxyHandler, {Value(target), key.toValue(), receiver}));
+  Value trapResult = TRY(snowman::Call(trap, handler, {Value(target), key.toValue(), receiver}));
   auto targetDesc = TRY(target->GetOwnProperty(key));
   if (targetDesc && !*targetDesc->configurable) {
     if (targetDesc->isDataDescriptor() && !*targetDesc->writable) {
@@ -195,10 +196,9 @@ Result<Value> ProxyObject::Get(const PropertyKey& key, Value receiver) {
 
 // 10.5.9 [[Set]]
 Result<bool> ProxyObject::Set(const PropertyKey& key, Value value, Value receiver) {
-  Value trap = TRY(getTrap(this, u"set"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"set"));
   if (trap.isUndefined()) return target->Set(key, value, receiver);
-  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, proxyHandler, {Value(target), key.toValue(), value, receiver})));
+  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, handler, {Value(target), key.toValue(), value, receiver})));
   if (!booleanTrapResult) return false;
   auto targetDesc = TRY(target->GetOwnProperty(key));
   if (targetDesc && !*targetDesc->configurable) {
@@ -216,10 +216,9 @@ Result<bool> ProxyObject::Set(const PropertyKey& key, Value value, Value receive
 
 // 10.5.10 [[Delete]]
 Result<bool> ProxyObject::Delete(const PropertyKey& key) {
-  Value trap = TRY(getTrap(this, u"deleteProperty"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"deleteProperty"));
   if (trap.isUndefined()) return target->Delete(key);
-  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, proxyHandler, {Value(target), key.toValue()})));
+  bool booleanTrapResult = ToBoolean(TRY(snowman::Call(trap, handler, {Value(target), key.toValue()})));
   if (!booleanTrapResult) return false;
   auto targetDesc = TRY(target->GetOwnProperty(key));
   if (!targetDesc) return true;
@@ -233,10 +232,9 @@ Result<bool> ProxyObject::Delete(const PropertyKey& key) {
 
 // 10.5.11 [[OwnPropertyKeys]]
 Result<std::vector<PropertyKey>> ProxyObject::OwnPropertyKeys() {
-  Value trap = TRY(getTrap(this, u"ownKeys"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"ownKeys"));
   if (trap.isUndefined()) return target->OwnPropertyKeys();
-  Value trapResultArray = TRY(snowman::Call(trap, proxyHandler, {Value(target)}));
+  Value trapResultArray = TRY(snowman::Call(trap, handler, {Value(target)}));
   ValueVector trapResultValues = TRY(CreateListFromArrayLike(trapResultArray, true));
   std::vector<PropertyKey> trapResult;
   for (Value v : trapResultValues) {
@@ -277,20 +275,18 @@ Result<std::vector<PropertyKey>> ProxyObject::OwnPropertyKeys() {
 
 // 10.5.12 [[Call]]
 Result<Value> ProxyObject::Call(Value thisArgument, Args args) {
-  Value trap = TRY(getTrap(this, u"apply"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"apply"));
   if (trap.isUndefined()) return snowman::Call(target, thisArgument, args);
   Object* argArray = CreateArrayFromList(args);
-  return snowman::Call(trap, proxyHandler, {Value(target), thisArgument, Value(argArray)});
+  return snowman::Call(trap, handler, {Value(target), thisArgument, Value(argArray)});
 }
 
 // 10.5.13 [[Construct]]
 Result<Object*> ProxyObject::Construct(Args args, Object* newTarget) {
-  Value trap = TRY(getTrap(this, u"construct"));
-  Object* target = proxyTarget;
+  auto [trap, target, handler] = TRY(getTrap(this, u"construct"));
   if (trap.isUndefined()) return snowman::Construct(target, args, newTarget);
   Object* argArray = CreateArrayFromList(args);
-  Value newObj = TRY(snowman::Call(trap, proxyHandler, {Value(target), Value(argArray), Value(newTarget)}));
+  Value newObj = TRY(snowman::Call(trap, handler, {Value(target), Value(argArray), Value(newTarget)}));
   if (!newObj.isObject()) return ThrowTypeError("'construct' on proxy: trap returned non-object");
   return newObj.asObject();
 }
