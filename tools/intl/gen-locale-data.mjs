@@ -87,7 +87,7 @@ const units = listOf('unit');
 // ---- time zones (cldr-bcp47): each non-deprecated bcp47 zone is one primary identifier (its IANA name, else the
 // first alias) and its other names are links to it; Etc/UTC and Etc/GMT and their links are all "UTC" (ECMA-402).
 const bcp47Zones = require('cldr-bcp47/bcp47/timezone.json').keyword.u.tz;
-const zoneNames = new Map();  // lowercase name -> primary
+const zoneNames = new Map();  // lowercase name -> [name, primary]
 const zoneRegions = [];  // [region, primary]
 for (const [id, info] of Object.entries(bcp47Zones)) {
   if (id.startsWith('_') || info._deprecated || !info._alias || id === 'unk') continue;
@@ -95,12 +95,13 @@ for (const [id, info] of Object.entries(bcp47Zones)) {
   const primary = id === 'utc' || id === 'gmt' ? 'UTC' : (info._iana ?? names[0]);
   for (const n of [...names, primary]) {
     const key = n.toLowerCase();
-    if (zoneNames.has(key) && zoneNames.get(key) !== primary) throw new Error(`time zone ${n}: two primaries`);
-    zoneNames.set(key, primary);
+    if (zoneNames.has(key) && zoneNames.get(key)[1] !== primary) throw new Error(`time zone ${n}: two primaries`);
+    zoneNames.set(key, [n, primary]);
   }
   if (id.length === 5) zoneRegions.push([id.slice(0, 2).toUpperCase(), primary]);
 }
-const timeZones = [...zoneNames].sort((a, b) => cmp(a[0], b[0]));
+// Sorted by the lowercase name (the lookup is case-insensitive): [identifier, primary identifier].
+const timeZones = [...zoneNames].sort((a, b) => cmp(a[0], b[0])).map(([, v]) => v);
 zoneRegions.sort((a, b) => cmp(a[0], b[0]) || cmp(a[1], b[1]));
 
 // ---- Locale info (cldr-core): calendar preferences, hour cycles and week data per region; RTL scripts ----
@@ -122,7 +123,8 @@ const weekOf = (table, r) => table[r] ?? table['001'];
 const regionWeeks = [...weekRegions].sort(cmp).map((r) =>
   [r, `${dayNumber[weekOf(week.firstDay, r)]}${weekOf(week.minDays, r)}${dayNumber[weekOf(week.weekendStart, r)]}${dayNumber[weekOf(week.weekendEnd, r)]}`]);
 const rtlScripts = [...scripts].filter((sc) => new Intl.Locale(`und-${sc}`).textInfo.direction === 'rtl').sort(cmp);
-const ltrScripts = [...scripts].filter((sc) => !sc.startsWith('Z') && new Intl.Locale(`und-${sc}`).textInfo.direction === 'ltr').sort(cmp);
+// Scripts whose scriptMetadata RTL field is UNKNOWN (Zyyy, Zinh, Zzzz, Brai) have no direction.
+const ltrScripts = [...scripts].filter((sc) => !sc.startsWith('Z') && sc !== 'Brai' && new Intl.Locale(`und-${sc}`).textInfo.direction === 'ltr').sort(cmp);
 
 const stringList = (name, list, comment) =>
   `// ${comment}\nstatic constexpr const char* ${name}[] = {\n` +
@@ -159,7 +161,7 @@ const out = [
   stringList('kCollationTypes', collationTypes, 'Intl.supportedValuesOf("collation").'),
   stringList('kCurrencies', currencies, 'Intl.supportedValuesOf("currency").'),
   stringList('kUnits', units, 'Intl.supportedValuesOf("unit"): the sanctioned simple units.'),
-  pairs('kTimeZones', timeZones, 'Time zone names (lowercase) -> primary identifier.'),
+  pairs('kTimeZones', timeZones, 'Time zone identifiers (sorted by their lowercase form) -> primary identifier.'),
   pairs('kTimeZoneRegions', zoneRegions, 'Region -> primary time zone identifiers in it, sorted.'),
   pairs('kRegionCalendars', regionCalendars, 'calendarPreferenceData: region -> calendars by preference.'),
   pairs('kRegionHourCycles', regionHourCycles, 'timeData: region -> hour cycles, preferred first.'),

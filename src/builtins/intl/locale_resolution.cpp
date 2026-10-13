@@ -123,9 +123,13 @@ ResolvedLocale ResolveLocale(const ServiceData& data, const std::vector<std::str
       break;
     }
     if (const LocaleOption* opt = options.find(key)) {
-      if (opt->kind == LocaleOption::Kind::String) {
-        std::string optionsValue = CanonicalizeUValue(key, asciiLower(opt->value));
-        if (optionsValue.empty()) optionsValue = "true";
+      if (opt->kind != LocaleOption::Kind::Undefined) {
+        // A null option (DateTimeFormat's hc when hour12 is given) is "" here: it matches a null in the locale data.
+        std::string optionsValue;
+        if (opt->kind == LocaleOption::Kind::String) {
+          optionsValue = CanonicalizeUValue(key, asciiLower(opt->value));
+          if (optionsValue.empty()) optionsValue = "true";
+        }
         if (optionsValue != value && contains(optionsValue)) {
           value = optionsValue;
           supportedKeyword.reset();

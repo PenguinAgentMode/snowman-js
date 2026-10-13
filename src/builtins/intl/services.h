@@ -57,6 +57,8 @@ std::vector<NumberPart> PartitionNumberPattern(const NumberFormatObject& nf, con
 std::u16string FormatNumeric(const NumberFormatObject& nf, const Decimal& x);
 // The plural category (CLDR letter) of x as nf formats it (cardinal or ordinal rules of nf's locale).
 char numberFormatPluralCategory(const NumberFormatObject& nf, const Decimal& x, bool ordinal = false);
+// The decimal separator of a locale and numbering system.
+std::u16string decimalSeparator(const std::string& locale, const std::string& numberingSystem);
 // A NumberFormat created as by new Intl.NumberFormat(locales, options), in the current realm.
 Result<NumberFormatObject*> createNumberFormat(Value locales, Value options);
 

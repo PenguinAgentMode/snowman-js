@@ -465,7 +465,7 @@ std::u16string getBestPattern(const Generator& g, const Skeleton& req) {
 // ---- time zones ----
 
 struct TimeZone {
-  std::string id;      // [[TimeZone]]
+  std::string id;      // [[TimeZone]]: the identifier as given, or the offset string
   int offsetMinutes;   // for offset zones and UTC; 0 for named zones (no offset data yet)
   bool isOffset;
 };
@@ -503,6 +503,7 @@ class DateTimeFormatObject : public Object {
   using Object::Object;
   std::string locale, dataLocale, calendar, numberingSystem;
   TimeZone timeZone;
+  std::string timeZonePrimary;  // the primary identifier of a named zone
   std::string hourCycle;  // "" when the format has no hour
   std::optional<std::string> dateStyle, timeStyle;
   std::u16string pattern;  // [[DateTimeFormat]].[[pattern]]
@@ -633,7 +634,7 @@ std::u16string zoneName(const DateTimeFormatObject& dtf, char16_t c, int count) 
   const TimeZone& tz = dtf.timeZone;
   bool longForm = count >= 4;
   if (c == u'O' || tz.isOffset) return gmtString(dtf, tz.offsetMinutes, longForm);
-  if (tz.id == "UTC") {
+  if (dtf.timeZonePrimary == "UTC" && tz.offsetMinutes == 0) {
     if (c == u'z') {
       std::vector<std::u16string_view> n = items(dateField(dtf.dataLocale, FUtcNames));
       n.resize(2);
@@ -674,13 +675,14 @@ std::u16string flexibleDayPeriod(const DateTimeFormatObject& dtf, const LocalTim
   std::vector<std::u16string_view> rules = items(dateField(dtf.dataLocale, FDayPeriodRules));
   int minute = t.hour * 60;
   bool exact = (!hasMinute || t.minute == 0) && (!hasSecond || t.second == 0);
+  if (exact && t.hour == 12 && !nameOf(u"noon").empty()) {
+    for (std::u16string_view r : rules)
+      if (r == u"noon=@720") return std::u16string(nameOf(u"noon"));
+  }
   for (std::u16string_view r : rules) {
     size_t eq = r.find(u'=');
     std::u16string_view key = r.substr(0, eq), value = r.substr(eq + 1);
-    if (value[0] == u'@') {
-      if (key == u"noon" && exact && t.hour == 12 && !nameOf(key).empty()) return std::u16string(nameOf(key));
-      continue;
-    }
+    if (value[0] == u'@') continue;
     size_t dash = value.find(u'-');
     int from = 0, before = 0;
     for (char16_t c : value.substr(0, dash)) from = from * 10 + (c - u'0');
@@ -701,10 +703,15 @@ void formatPatternInto(std::vector<DatePart>& out, const DateTimeFormatObject& d
     hasSecond |= tok.field && tok.ch == u's';
   }
   const std::string& nu = dtf.numberingSystem;
-  for (const Token& tok : tokens) {
+  for (size_t ti = 0; ti < tokens.size(); ti++) {
+    const Token& tok = tokens[ti];
     if (!tok.field) {
-      if (!out.empty() && std::u16string_view(out.back().type) == u"literal" && out.back().source == source) out.back().value += tok.text;
-      else out.push_back({u"literal", tok.text, source});
+      // The decimal separator before fractional seconds is the numbering system's.
+      std::u16string text = tok.text;
+      if (text == u"." && ti + 1 < tokens.size() && tokens[ti + 1].field && tokens[ti + 1].ch == u'S')
+        text = decimalSeparator(dtf.dataLocale, dtf.numberingSystem);
+      if (!out.empty() && std::u16string_view(out.back().type) == u"literal" && out.back().source == source) out.back().value += text;
+      else out.push_back({u"literal", text, source});
       continue;
     }
     int n = tok.count;
@@ -870,7 +877,7 @@ Result<DateTimeFormatObject*> CreateDateTimeFormat(Object* newTarget, Value loca
   Value timeZoneValue = TRY(Get(options, PropertyKey(u"timeZone")));
   std::string timeZone;
   if (timeZoneValue.isUndefined()) {
-    timeZone = "UTC";
+    timeZone = "UTC";  // SystemTimeZoneIdentifier: the host time zone of Date (TZ unset: UTC)
   } else {
     String* s = TRY(ToString(timeZoneValue));
     std::optional<std::string> ascii = toAscii(s->view());
@@ -879,8 +886,15 @@ Result<DateTimeFormatObject*> CreateDateTimeFormat(Object* newTarget, Value loca
   }
   if (std::optional<int> offset = parseOffset(timeZone)) {
     dtf->timeZone = {formatOffsetIdentifier(*offset), *offset, true};
-  } else if (std::optional<std::string> primary = data::primaryTimeZone(timeZone)) {
-    dtf->timeZone = {*primary, 0, false};
+  } else if (std::optional<std::string> identifier = data::timeZoneIdentifier(timeZone)) {
+    // [[TimeZone]] keeps the identifier as given (case-regularized); Etc/GMT±N are fixed offsets (sign inverted).
+    int offset = 0;
+    if (identifier->rfind("Etc/GMT", 0) == 0 && identifier->size() > 7) {
+      std::string n = identifier->substr(7);
+      offset = (n[0] == '-' ? 1 : -1) * std::stoi(n.substr(1)) * 60;
+    }
+    dtf->timeZone = {*identifier, offset, false};
+    dtf->timeZonePrimary = *data::primaryTimeZone(timeZone);
   } else {
     return ThrowRangeError("Intl.DateTimeFormat: invalid time zone " + timeZone);
   }

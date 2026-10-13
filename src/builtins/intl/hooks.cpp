@@ -1,8 +1,11 @@
 // The ECMA-402 locale-sensitive methods of String, Number and BigInt (hooks.h).
 #include "builtins/intl/hooks.h"
 
+#include <algorithm>
+
 #include "builtins/intl/intl.h"
 #include "builtins/intl/services.h"
+#include "builtins/string_util.h"
 
 namespace snowman::intl {
 
@@ -23,21 +26,21 @@ Result<std::string> transformCaseLanguage(Value locales) {
 
 namespace {
 
-bool isMoreAbove(char16_t c) {
-  // Combining marks of class 230 (above) that follow i/j in Lithuanian: the common ones.
-  return (c >= 0x0300 && c <= 0x0314) || c == 0x033D || c == 0x033E || c == 0x033F || c == 0x0340 || c == 0x0341 ||
-         c == 0x0342 || c == 0x0343 || c == 0x0344 || c == 0x0346 || c == 0x034A || c == 0x034B || c == 0x034C ||
-         c == 0x0350 || c == 0x0351 || c == 0x0352 || c == 0x0357 || c == 0x035B || (c >= 0x0363 && c <= 0x036F);
-}
+struct CodeRange {
+  char32_t first, last;
+};
+#include "builtins/intl/casing_data.inc"
 
-// A combining mark of class 230 or 0 that blocks After_I / After_Soft_Dotted (approximated by the combining block).
-bool isCombining(char16_t c) { return (c >= 0x0300 && c <= 0x036F) || (c >= 0x1AB0 && c <= 0x1AFF) || (c >= 0x1DC0 && c <= 0x1DFF) || (c >= 0x20D0 && c <= 0x20FF); }
-
-bool isSoftDotted(char16_t c) {
-  return c == u'i' || c == u'j' || c == 0x012F || c == 0x0249 || c == 0x0268 || c == 0x029D || c == 0x02B2 || c == 0x03F3 ||
-         c == 0x0456 || c == 0x0458 || c == 0x1D62 || c == 0x1D96 || c == 0x1DA4 || c == 0x1DA8 || c == 0x1E2D || c == 0x1ECB ||
-         c == 0x2071 || c == 0x2148 || c == 0x2149 || c == 0x2C7C;
+template <size_t N>
+bool inRanges(const CodeRange (&table)[N], char32_t cp) {
+  const CodeRange* end = table + N;
+  const CodeRange* it = std::upper_bound(table, end, cp, [](char32_t c, const CodeRange& r) { return c < r.first; });
+  return it != table && cp <= (it - 1)->last;
 }
+bool isAbove(char32_t cp) { return inRanges(kCombiningAbove, cp); }
+bool isStarter(char32_t cp) { return !inRanges(kCombiningNonzero, cp); }
+// A character that ends the After_I / After_Soft_Dotted / Before_Dot context: combining class 0 or 230.
+bool blocks(char32_t cp) { return isStarter(cp) || isAbove(cp); }
 
 }  // namespace
 
@@ -45,58 +48,72 @@ bool isSoftDotted(char16_t c) {
 String* transformCase(String* s, const std::string& language, bool upper, CaseMapping defaultMapping) {
   if (language.empty()) return defaultMapping(s, upper);
   std::u16string_view v = s->view();
+  std::vector<char32_t> cps;
+  for (size_t i = 0; i < v.size();) {
+    builtins::CodePointRecord r = builtins::CodePointAt(v, i);
+    cps.push_back(r.codePoint);
+    i += size_t(r.codeUnitCount);
+  }
   std::u16string out;
-  if (language == "tr" || language == "az") {
-    for (size_t i = 0; i < v.size(); i++) {
-      char16_t c = v[i];
-      if (upper) {
-        out.push_back(c == u'i' ? char16_t(0x0130) : c);
-        continue;
-      }
-      if (c == 0x0130) {
-        out.push_back(u'i');
-      } else if (c == u'I') {
-        // I followed by U+0307 (with no class-230 mark between) lowercases to i, dropping the dot; otherwise ı.
-        size_t j = i + 1;
-        while (j < v.size() && isCombining(v[j]) && v[j] != 0x0307 && !isMoreAbove(v[j])) j++;
-        if (j < v.size() && v[j] == 0x0307) {
-          out.push_back(u'i');
-          out.append(v.substr(i + 1, j - i - 1));
-          i = j;
-        } else {
-          out.push_back(0x0131);
-        }
-      } else if (c == 0x0307 && i > 0) {
-        // After_I: a dot above after I (already handled) or i stays.
-        out.push_back(c);
-      } else {
-        out.push_back(c);
-      }
+  auto append = [&](char32_t cp) {
+    if (cp >= 0x10000) {
+      out.push_back(char16_t(0xD800 + ((cp - 0x10000) >> 10)));
+      out.push_back(char16_t(0xDC00 + ((cp - 0x10000) & 0x3FF)));
+    } else {
+      out.push_back(char16_t(cp));
     }
-  } else {  // lt
-    for (size_t i = 0; i < v.size(); i++) {
-      char16_t c = v[i];
+  };
+  size_t n = cps.size();
+  // Before_Dot: a U+0307 follows, with only marks of classes other than 0 and 230 between.
+  auto beforeDot = [&](size_t i) {
+    for (size_t j = i + 1; j < n; j++) {
+      if (cps[j] == 0x307) return true;
+      if (blocks(cps[j])) return false;
+    }
+    return false;
+  };
+  // After the character `what` (I, or any Soft_Dotted), with only marks of classes other than 0 and 230 between.
+  auto after = [&](size_t i, bool softDotted) {
+    for (size_t k = i; k-- > 0;) {
+      if (softDotted ? inRanges(kSoftDotted, cps[k]) : cps[k] == u'I') return true;
+      if (blocks(cps[k])) return false;
+    }
+    return false;
+  };
+  // More_Above: a class-230 mark follows before the next starter.
+  auto moreAbove = [&](size_t i) {
+    for (size_t j = i + 1; j < n && !isStarter(cps[j]); j++)
+      if (isAbove(cps[j])) return true;
+    return false;
+  };
+  for (size_t i = 0; i < n; i++) {
+    char32_t c = cps[i];
+    if (language == "tr" || language == "az") {
       if (upper) {
-        // After_Soft_Dotted: drop U+0307 after a soft-dotted letter (with only non-230 marks between).
-        if (c == 0x0307) {
-          size_t j = i;
-          while (j > 0 && isCombining(v[j - 1]) && !isMoreAbove(v[j - 1])) j--;
-          if (j > 0 && isSoftDotted(v[j - 1])) continue;
-        }
-        out.push_back(c);
+        append(c == u'i' ? char32_t(0x0130) : c);
+      } else if (c == 0x0130) {
+        append(u'i');
+      } else if (c == u'I') {
+        append(beforeDot(i) ? char32_t(u'i') : char32_t(0x0131));
+      } else if (c == 0x0307 && after(i, false)) {
+        // After_I: the dot is absorbed into the i.
+      } else {
+        append(c);
+      }
+    } else {  // lt
+      if (upper) {
+        if (c == 0x0307 && after(i, true)) continue;  // After_Soft_Dotted
+        append(c);
         continue;
       }
-      bool moreAbove = false;
-      for (size_t j = i + 1; j < v.size() && isCombining(v[j]); j++)
-        if (isMoreAbove(v[j])) moreAbove = true;
       switch (c) {
-        case u'I': out += moreAbove ? u"i\u0307" : u"i"; break;
-        case u'J': out += moreAbove ? u"j\u0307" : u"j"; break;
-        case 0x012E: out += moreAbove ? u"\u012F\u0307" : u"\u012F"; break;
-        case 0x00CC: out += u"i\u0307\u0300"; break;
-        case 0x00CD: out += u"i\u0307\u0301"; break;
-        case 0x0128: out += u"i\u0307\u0303"; break;
-        default: out.push_back(c);
+        case u'I': append(u'i'); if (moreAbove(i)) append(0x0307); break;
+        case u'J': append(u'j'); if (moreAbove(i)) append(0x0307); break;
+        case 0x012E: append(0x012F); if (moreAbove(i)) append(0x0307); break;
+        case 0x00CC: append(u'i'); append(0x0307); append(0x0300); break;
+        case 0x00CD: append(u'i'); append(0x0307); append(0x0301); break;
+        case 0x0128: append(u'i'); append(0x0307); append(0x0303); break;
+        default: append(c);
       }
     }
   }

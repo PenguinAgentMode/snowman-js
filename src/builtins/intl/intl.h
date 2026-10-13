@@ -196,6 +196,8 @@ bool isSanctionedSimpleUnit(std::string_view unit);
 // Time zones: the primary identifier for a named time zone (case-insensitive), the primary identifiers (sorted),
 // and those of a region (sorted).
 std::optional<std::string> primaryTimeZone(std::string_view name);
+// The case-regularized identifier of a named time zone (Asia/Calcutta stays Asia/Calcutta).
+std::optional<std::string> timeZoneIdentifier(std::string_view name);
 std::vector<std::string> primaryTimeZones();
 std::vector<std::string> regionTimeZones(std::string_view region);
 // Locale info by region (falling back to "001"): calendars and hour cycles by preference, week data.
