@@ -116,8 +116,7 @@ Result<bool> DeclarativeEnvironment::DeleteBinding(String* name) {
   Binding* binding = find(name);
   if (!binding->deletable) return false;
   dynamic_ = true;
-  size_t at = size_t(binding - bindings_.data());
-  bindings_.erase(bindings_.begin() + ptrdiff_t(at));
+  bindings_.erase(size_t(binding - bindings_.data()));
   if (index_) {
     index_->clear();
     for (uint32_t i = 0; i < bindings_.size(); i++) (*index_)[bindings_[i].name] = i;
@@ -130,8 +129,6 @@ void DeclarativeEnvironment::trace(Tracer& tracer) {
   for (auto& binding : bindings_) {
     tracer.visit(reinterpret_cast<Cell*>(binding.name));
     tracer.visit(binding.value);
-    tracer.visit(reinterpret_cast<Cell*>(binding.indirectModule));
-    tracer.visit(reinterpret_cast<Cell*>(binding.indirectName));
   }
   tracer.visit(reinterpret_cast<Cell*>(disposeCapability));
 }
@@ -187,8 +184,14 @@ bool isOrdinaryObject(Object* object) { return typeid(*object) == typeid(Object)
 
 }  // namespace
 
+ObjectEnvironment::ObjectEnvironment(Object* bindingObject, bool isWithEnvironment, Environment* outer)
+    : Environment(Kind::Object, outer),
+      bindingObject(bindingObject),
+      isWithEnvironment(isWithEnvironment),
+      direct_(!isWithEnvironment && isOrdinaryObject(bindingObject)) {}
+
 std::optional<PropertySlot> ObjectEnvironment::ownDataSlot(String* name) {
-  if (isWithEnvironment || !isOrdinaryObject(bindingObject)) return std::nullopt;
+  if (!direct_) return std::nullopt;
   std::optional<PropertySlot> slot = bindingObject->properties().get(PropertyKey(name));
   if (slot && slot->accessor) return std::nullopt;
   return slot;
@@ -220,12 +223,9 @@ Result<void> ObjectEnvironment::InitializeBinding(String* name, Value value) {
 }
 
 Result<void> ObjectEnvironment::SetMutableBinding(String* name, Value value, bool strict) {
-  std::optional<PropertySlot> slot = ownDataSlot(name);
-  if (slot && slot->writable()) {
-    bindingObject->properties().setValue(PropertyKey(name), value);
-    return {};
-  }
   PropertyKey key(name);
+  // An own writable data property of an ordinary binding object (the ownDataSlot case) is set directly.
+  if (direct_ && bindingObject->properties().setWritableValue(key, value)) return {};
   bool stillExists = TRY(HasProperty(bindingObject, key));
   if (!stillExists && strict) return throwNotDefined(name);
   return Set(bindingObject, key, value, strict);
@@ -258,7 +258,7 @@ GlobalEnvironment::GlobalEnvironment(Object* globalObject, Object* thisValue)
       declarativeRecord(snowman::make<DeclarativeEnvironment>(nullptr)) {}
 
 Result<bool> GlobalEnvironment::HasBinding(String* name) {
-  if (declarativeRecord->hasBindingDirect(name)) return true;
+  if (declarativeRecord->find(name)) return true;
   return objectRecord->HasBinding(name);
 }
 
@@ -277,17 +277,25 @@ Result<void> GlobalEnvironment::CreateImmutableBinding(String* name, bool strict
 }
 
 Result<void> GlobalEnvironment::InitializeBinding(String* name, Value value) {
-  if (declarativeRecord->hasBindingDirect(name)) return declarativeRecord->InitializeBinding(name, value);
+  if (DeclarativeEnvironment::Binding* binding = declarativeRecord->find(name)) {
+    binding->value = value;
+    return {};
+  }
   return objectRecord->InitializeBinding(name, value);
 }
 
 Result<void> GlobalEnvironment::SetMutableBinding(String* name, Value value, bool strict) {
-  if (declarativeRecord->hasBindingDirect(name)) return declarativeRecord->SetMutableBinding(name, value, strict);
+  if (DeclarativeEnvironment::Binding* binding = declarativeRecord->find(name)) {
+    return declarativeRecord->setBinding(*binding, name, value, strict);
+  }
   return objectRecord->SetMutableBinding(name, value, strict);
 }
 
 Result<Value> GlobalEnvironment::GetBindingValue(String* name, bool strict) {
-  if (declarativeRecord->hasBindingDirect(name)) return declarativeRecord->GetBindingValue(name, strict);
+  if (DeclarativeEnvironment::Binding* binding = declarativeRecord->find(name)) {
+    if (binding->value.isEmpty()) return throwUninitialized(name);
+    return binding->value;
+  }
   return objectRecord->GetBindingValue(name, strict);
 }
 
@@ -355,10 +363,13 @@ void GlobalEnvironment::trace(Tracer& tracer) {
 
 Result<Value> ModuleEnvironment::GetBindingValue(String* name, bool strict) {
   Binding* binding = find(name);
-  if (binding->indirectModule) {
-    Environment* target = moduleEnvironmentOf(binding->indirectModule);
-    if (!target) return throwUninitialized(name);
-    return target->GetBindingValue(binding->indirectName, true);
+  if (binding->indirect) {
+    for (const Import& import : imports_) {
+      if (import.name != name) continue;
+      Environment* target = moduleEnvironmentOf(import.module);
+      if (!target) return throwUninitialized(name);
+      return target->GetBindingValue(import.targetName, true);
+    }
   }
   return DeclarativeEnvironment::GetBindingValue(name, strict);
 }
@@ -368,8 +379,17 @@ void ModuleEnvironment::CreateImportBinding(String* name, ModuleRecord* module, 
   binding.mutable_ = false;
   binding.strict = true;
   binding.value = Value::undefined();
-  binding.indirectModule = module;
-  binding.indirectName = targetName;
+  binding.indirect = true;
+  imports_.push_back(Import{name, module, targetName});
+}
+
+void ModuleEnvironment::trace(Tracer& tracer) {
+  DeclarativeEnvironment::trace(tracer);
+  for (const Import& import : imports_) {
+    tracer.visit(reinterpret_cast<Cell*>(import.name));
+    tracer.visit(reinterpret_cast<Cell*>(import.module));
+    tracer.visit(reinterpret_cast<Cell*>(import.targetName));
+  }
 }
 
 // ---- Private ----

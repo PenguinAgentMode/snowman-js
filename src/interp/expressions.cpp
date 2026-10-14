@@ -129,7 +129,7 @@ Environment* followCache(Environment* env, uint32_t hops) {
 Binding* slotBinding(Environment* env, uint32_t slot, String* name) {
   if (!isDeclarativeKind(env)) return nullptr;
   Binding* binding = static_cast<DeclarativeEnvironment*>(env)->bindingAt(slot);
-  if (!binding || binding->name != name || binding->indirectModule) return nullptr;
+  if (!binding || binding->name != name || binding->indirect) return nullptr;
   return binding;
 }
 
@@ -150,7 +150,7 @@ void verifyCache(Environment* start, Environment* target, Binding* binding, Stri
 }
 
 void recordSlot(IdentifierCache* cache, uint32_t hops, DeclarativeEnvironment* env, const Binding* binding) {
-  if (binding->indirectModule) return;
+  if (binding->indirect) return;
   cache->kind = IdentifierCache::Kind::Slot;
   cache->hops = hops;
   cache->slot = env->slotOf(binding);
@@ -279,7 +279,7 @@ Result<Reference> resolveIdentifier(const Identifier* id) {
       if (cacheable) recordSlot(cache, hops, declarative, binding);
       ref.kind = Reference::Kind::Environment;
       ref.env = env;
-      if (!binding->indirectModule) ref.slot = declarative->slotOf(binding);
+      if (!binding->indirect) ref.slot = declarative->slotOf(binding);
       return ref;
     }
     if (env->kind() == Environment::Kind::Global) {

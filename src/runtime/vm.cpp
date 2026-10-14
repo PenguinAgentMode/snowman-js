@@ -73,7 +73,10 @@ void VM::traceRoots(Tracer& tracer) {
   for (Job* job : jobs_) tracer.visit(job);
 }
 
+bool TakeHeapLimitExceeded();  // heap.cpp: the soft heap limit was passed (taken once)
+
 Result<void> CheckStack() {
+  if (TakeHeapLimitExceeded()) return ThrowRangeError("out of memory");
   char here;
   VM& v = vm();
   if (!v.stackLimit) {
