@@ -38,4 +38,8 @@ Owner: hardening. The full suite under an ASan+UBSan engine, triaged by top fram
 - ASan total: 0 reports over 102,994 scenarios (the full suite) at the normal GC budget.
 - ASan + SNOWMAN_GC_STRESS=1, full-suite shard 0/40 (2,555 scenarios, 1 job, 1,952 s): 16 reports, one cluster (class.cpp
   below). The normal budget rarely collects inside a test, so missing roots need the stress mode to show.
-- UBSan-only shard 0/4: 25,865 scenarios, 9 report files (the memcpy cluster below).
+- UBSan-only shards 0-2/4 (engine before the fixes): only the memcpy cluster below. Shard 3/4 on the fixed engine
+  (8d966b9): 25,662 scenarios, 0 reports. UBSan sweep complete.
+- ASan + SNOWMAN_GC_STRESS=1 widened pass (engine 8d966b9, --shard 0/2 of each directory, --jobs 2):
+  language/statements/class 4,374 / 4,374 pass, 0 reports; the other directories in progress
+  ($HOME/logs/gcs2-progress.txt).
