@@ -19,69 +19,24 @@ Agent "builtins" (workstream owner under the lead). Branch for the current batch
   IsTypedArrayFixedLength.
 - runtime/realm.h: Intrinsic::ShadowRealm, ShadowRealmPrototype.
 
-## Current (16:00 UTC): calendars wrap-up, then $262.agent step 3
+## FINAL STATE (parked, main b3dc641: ES-core 43,305 / 43,305, full 53,612 / 53,616)
 
-- Merged: calendars framework + gregory + group 4 (10979b4, main a1a2a5f), group 2 (cb6d5f1, main 579c3fa).
-- Group 3 ws/calendars-g3 f21aed9 (on 93b4e17, group 2 under it): slice +826, 0 regressions; full gate vs a1a2a5fc3
-  running (~/logs/g3gate.sh -> ~/logs/gate-g3-{core,full}.txt). Push results/f21aed9/full.jsonl with the MR.
-- Next small merge: ws/calendars-ref e27ba47 (WIP, unbuilt): the proposal's chinese/dangi ISO reference-year table in
-  calendar.cpp (NonISOMonthDayToISOReferenceDate) for the 4 PlainMonthDay rare-leap-month files. Reword before the MR.
-- KNOWN DATA GAP (lead's decision: leave): 9 intl402/Temporal chinese files (*/daysInYear/basic-chinese.js x4,
-  */monthCode/chinese-calendar-dates.js x5) fail because node's ICU 78.3, the source of calendar_chinese_data.inc,
-  deviates from the official (HKO) calendar: ICU puts CNY 2027 on 02-07 (official 02-06) and 2030 on 02-02 (official
-  02-03), so years 2026-2030 have the wrong lengths; and the 1987 leap month after month 7 (official: M06L). If it is ever
-  fixed: an astronomical new-moon / solar-term computation in UTC+8 (Meeus) in gen-calendars.mjs, cross-checked
-  against ICU everywhere else; no third-party data.
-- Skipped for now: 6 DTF dateStyle "Ramadan" tests (intl side); ZonedDateTime/links.js CST6CDT (tz side).
-- Then: $262.agent step 3 from notes/agent-design.md (shared SAB blocks, real atomics, waiter lists, agent threads with
-  16 MB stacks, process-wide heap budget, joins on exit/timeout); test with the 4-agent stress file at --jobs 4 under the
-  real runner. Each step its own gated merge.
+Merged, all with clean full gates: Promise.allKeyed/allSettledKeyed, Error.prototype.stack, Iterator.prototype.join,
+legacy RegExp statics, immutable ArrayBuffer, ShadowRealm (+ importValue), Promise.try / TypedArray
+[[PreventExtensions]] / Proxy capture / GetSubstitution limit, nonextensible-applies-to-private, the Temporal calendars
+(framework + gregory, groups 2-4, chinese/dangi reference years), $262.agent steps 1-4 (agent.{h,cpp}: threads on 16 MB
+coroutine stacks, mailboxes, process-wide waiter lists, _Exit once agents exist), the thread_local conversion and its
+audit, tools/lead/statics.mjs (run by gate.mjs), the soft memory limit (heap.cpp: RSS from statm vs SNOWMAN_MEM_MB,
+default 640; relief = malloc_trim + dead stack, no forced GC; then RangeError("out of memory") at the next CheckStack).
 
-## Current batch: $262.agent
-
-- ws/builtins5 d55e14b on main ec34f4f: $262.agent step 1 (host.cpp; conflict with $262.AbstractModuleSource resolved,
-  both kept) + notes + importValue through ImportModuleForRealm (ShadowRealm full slice 64/64). Full ES-core gate of
-  d55e14b running (vs results/c21bcd82e.json). Step 1 alone (6ce8f3e) was gated clean: 43,169, +3.
-- ws/builtins6 dd70aa8: nonextensible-applies-to-private, gated clean (43,166, 0 regressions; full slice +3), sent alone.
-- Merge order from the lead: survey 5aba3f349, the lead's main measurement, memcap's runtime-r 44d3159, then mine.
-  ws/builtins8 40f1c7e = d55e14b rebased onto runtime-r 44d3159 (host.cpp keeps AbstractModuleSource, IsHTMLDDA and agent):
-  ShadowRealm full slice 64/64; full ES-core gate running (/tmp/core11.jsonl). Then rebase step 2 (ws/builtins7) onto it
-  and gate; then the speed comparison (step-2 engine vs its base, same machine, quiet). Notes live on ws/builtins5;
-  never commit notes onto a gated sha.
-- d55e14b gated clean (43,169) and sent. Step 2 (thread_local) on ws/builtins7, rebased on main 258ff44 (tip 7ab3d0e),
-  gate running (/tmp/core10.jsonl, engine /tmp/engine-tls; main engine for the speed run: /tmp/engine-main258):
-  88850c4 runtime (vm, heap, atom table, emptyString, index strings, length key), 37fc0f0 builtins (lastIndex key,
-  Math.random state; seeded per thread by the Math installer), aa57585 interp (gCurrent, gStackPool thread_local;
-  gStackBytes std::atomic with an atomic reserve-then-check; gModuleAsyncEvaluationCount), 63fb221 parser (gChunk,
-  stackLimit; parser.h `extern thread_local` = interface change to list), 96ad528 intl caches, aeade2f temporal tz cache.
-  vm.h / heap.h unchanged. Next: gate it in quiet conditions, then the speed comparison vs main 7a345df (sum of ms over
-  the ES-core run, and CPU-heavy files alone).
-- Baselines: results/c21bcd82e.json (ES-core 43,163), results/c21bcd82e-full.json (full 50,887).
-
-## Earlier batch
-
-1. importValue: replace the stub in src/builtins/shadowrealm.cpp (ShadowRealmImportValue) with
-   `ImportModuleForRealm(evalRealm, specifierString, innerCapability);` + `#include "interp/module.h"`, once temporal2's
-   module work (hook ec0f102) is on main (the lead says when). Prototyped on e535e4b + ec0f102 (local branch proto-import in
-   ~/repo/wt2): importValue 20/20 scenarios, and the 3 formerly accidental files reject through the real paths (missing export
-   -> ExportGetter TypeError; syntax error / throwing / missing module -> onRejected TypeError).
-2. Date slowdown: DONE (no fix in my files). staging/sm/Date/dst-offset-caching-{2..8}-of-8 take 8.0-9.6 s CPU alone on
-   every commit from 8a5df0b to main (8a5df0b 8.6 s, 00dc9d9 8.6, 9f1e7e5 8.5, 9a1a42b 8.9, 797c7f7 9.0): no regression in
-   the range, they were always near the 10 s timeout and time out under load. gprof (main 46746ad, -pg): Date path ~1.3% of
-   6.95 s (2.97 M Date constructions + getTimezoneOffset + setTime); the rest is the interpreter: ResolveBinding 7.8% (27 M
-   calls), DeclarativeEnvironment::find 4.2% (160 M), evaluateStatement/evaluateMember/calls ~20%,
-   FunctionDeclarationInstantiation 2.3%, GC mark ~10%. A per-second localtime_r cache in date.cpp gave no measurable gain:
-   dropped. Routed to the lead as interpreter performance (src/interp/, interp2's unmerged perf work).
-
-## Left with others (agreed with the lead)
-
-- sm/regress/regress-602621, sm/lexical-environment/block-scoped-functions-annex-b-arguments: contradict ES-core
-  annexB/language/function-code/block-decl-func-skip-arguments.js; leave.
-- block-scoped-functions-annex-b-label / -deprecated-redecl (parser/scope.cpp exitScope: labelled block functions never become
-  Annex B candidates; `count == 1` excludes duplicates) and regress-610026 (AST memory): parser, temporal2's queue.
-- sm/extensions/recursion: interp/coroutine.h kStackBytesBudget (736 MB) is above the 700 MB RSS watchdog: memcap.
-- Intl-dependent staging failures since the intl merge (sm/Proxy/revoked-get-function-realm-typeerror, sm/String/internalUsage,
-  sm/extensions/quote-string-for-nul-character): intl's.
+Known gaps (leave unless asked):
+- 9 chinese intl402/Temporal files: ICU 78.3 differs from the official calendar (CNY 2027/2030, the 1987 leap month).
+  If ever fixed: astronomical computation in gen-calendars.mjs, cross-checked against ICU; no third-party data.
+- 2 staging Annex B `arguments` files contradict ES-core's block-decl-func-skip-arguments.js.
+- Soft memory limit edges: allocations in bursts between the 64K-cell samples can overshoot it (recursion.js peaks at
+  675 MB on perf2, under the 700 MB watchdog); parser AST memory (regress-610026) isn't sampled and still ends with the
+  parser's fatal out-of-memory under perf2. perf2b's GC scan without sortedCells_ lowers the cost of a GC at depth.
+- 6 DTF "Ramadan" dateStyle tests (intl side), ZonedDateTime/links.js CST6CDT (tz side).
 
 ## Monitor pitfall (seen 16:54)
 
