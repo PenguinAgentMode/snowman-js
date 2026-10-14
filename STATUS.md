@@ -1,5 +1,54 @@
 # Status
 
+## Closing summary (2026-10-14 ~00:50 UTC)
+
+**Final numbers** (main b3dc64161, measured by the lead; parse-only from 19dc92105):
+```
+REACHED  M1a  parse-only: ≥95% of positives parse, ≥50% of negative-parse tests rejected  (100.0% / 100.0%)
+REACHED  M1b  parse-only: ≥99.5% / ≥95%  (100.0% / 100.0%)
+REACHED  M2  test/harness ≥85 of 116  (116/116)
+REACHED  M3  no-feature language ≥80%, ES-core ≥20%  (100.0%, ES-core 100%)
+REACHED  M4  ES-core ≥35%  (100%)
+REACHED  M5  ES-core ≥55%  (100%)
+REACHED  M6  ES-core ≥70%  (100%)
+REACHED  M7  ES-core ≥85%  (100%)
+REACHED  M8  ES-core ≥95%  (100%)
+highest: M8
+ES-core: 43305 / 43305 files (100%)
+full suite: 53612 / 53616 files (99.99%)
+```
+`node t262/runner/milestones.mjs results/b3dc64161.json --parse-only results/19dc92105-parse.json --full results/b3dc64161-full.json`.
+Gates vs 5f3218f30: ES-core 0, full 0 regressions, new statics 0.
+
+**The day's progress** (full suite, measured on main): 83.49% (8a5df0b93, first full-suite run) → 94.91% (c21bcd82e)
+→ 96.25% → 96.31% → 97.41% → 99.62% (317949e37) → 99.69% → 99.95% (5f3218f30, ES-core 100%) → 99.99% (b3dc64161). ES-core went
+99.43% → 100% with 0 ES-core regressions at every merge (per-test gate, tools/lead/gate.mjs).
+
+**What landed, by area:** Temporal (built-ins 4,605/4,605; all CLDR calendars incl. astronomical Chinese/Dangi
+1900–2100); ECMA-402 without ICU (data generated reproducibly from node's CLDR/tz); module proposals (import
+defer/source/text/bytes), decorators, ShadowRealm, immutable ArrayBuffer, Promise.allKeyed, Error.stack,
+Iterator.join, legacy RegExp statics; $262.agent (real threads, Atomics.wait/notify) taking ES-core to 100%;
+legacy f.caller; Date legacy parsing; interpreter speed (identifier caches, smaller call frames: −36% on the
+slowest test, deeper stack on every probe); a soft memory limit (SNOWMAN_MEM_MB=640, RangeError before the
+watchdog); sanitizer sweeps (ASan full suite 0 reports; UBSan one finding, fixed; one GC use-after-free fixed).
+Runner changes (credited separately): module tests in place (+106), CanBlockIsFalse (+2), harness as prelude for
+script tests (+13), memory watchdog, machine guard, TMPDIR off /tmp, scattered order.
+
+**Known gaps (4 files):** staging/sm/lexical-environment/block-scoped-functions-annex-b-arguments.js and
+staging/sm/regress/regress-602621.js contradict ES-core's B.3.2.1 test (left); staging/sm/regress/regress-610026.js
+(2^22 blocks: parser/eval AST memory, fails as out of memory, not a crash); intl402/Temporal/ZonedDateTime/links.js
+(tzdb 2026d data). See "Known gaps" above for details.
+
+**Agent-system lessons** (all in AGENTS.md): /tmp is a tmpfs inside the 4 GB machine; never a foreground call over
+~10 min; every turn under the 300 KB stored-message limit (bigger strands the agent); an idle agent is woken by a
+message, not a notice (the lead pings at ETAs); agent_close frees neither the machine nor the 17-entry table (reuse
+entries); push WIP every 20 min with a handoff note; the lead gates orphaned branches itself, integrating
+overlapping ones into one commit.
+
+**Workers:** all parked with notes on their branches; hardening's widened GC_STRESS=1 pass is still running
+(notes/hardening.md, $HOME/logs/gcs2-progress.txt), and anything it finds is a follow-up.
+
+
 | Workstream | Owner (agent) | Branch | Directories | State |
 | --- | --- | --- | --- | --- |
 | memcap | (presumed dead 14:19 UTC: 47 min without a push or status, interrupt stays queued) → calendars to builtins; its ws/canblock ff86a5f rebased and gated by the lead (ws/canblock-r 7205b4d) | `ws/memcap`, `ws/runner`, `ws/measure` | `t262/`, `src/main.cpp`, `src/interp/cli.cpp` for the runner change | runner change gated: module tests 613 → 719 (+106, 0 newly failing); full-suite script check running; then post-merge measurement, then ws/interp2 + ws/runtime. Earlier: merged 5ff85e8: 480 MB main stack, 256 KB coroutine stacks + budgets (RangeError), parser depth guard, `ulimit -v` 1024 MB; 0 regressions. Open: dropped suspended generators keep their stack until exit (cap ~1,000; needs 2 heap.h methods); no CheckStack on nested array/object literals (SIGSEGV past ~400 levels in a generator; no test hits it) |
@@ -16,29 +65,24 @@ Lead-owned: `main`, `src/main.cpp`, `src/engine.h`, `src/runtime/*.h` (interface
 
 ## Latest result
 
-Post-merge run: **main 5f3218f30** (`tools/lead/measure.sh suite results/19dc92105.json`, 4 jobs, 1,732 s, run by
-the lead; `results/5f3218f30{,-full}.json`; JSONL `results/5f3218f30/suite.jsonl` on the results branch).
+Final run: **main b3dc64161** (`tools/lead/measure.sh suite results/5f3218f30.json`, 4 jobs, run by the lead;
+`results/b3dc64161{,-full}.json`; JSONL `results/b3dc64161/suite.jsonl` on the results branch).
 
-- milestones.mjs: highest **M8**; **ES-core: 43,305 / 43,305 files (100%)**; **full suite: 53,587 / 53,616 files
-  (99.95%)**; scenarios 102,962 / 102,994.
-- vs 19dc92105: ES-core +109 ($262.agent), 0 regressions; full +135, 0 regressions; new statics 0.
-- Command: `node t262/runner/milestones.mjs results/5f3218f30.json --full results/5f3218f30-full.json`
+- milestones.mjs (with parse-only `results/19dc92105-parse.json`): **every rung REACHED**; **ES-core 43,305 / 43,305
+  (100%)**; **full suite 53,612 / 53,616 (99.99%)**; parse-only 82,724 / 82,724.
+- vs 5f3218f30: ES-core 0 regressions; full +25 (13 runner-strict, 12 f.caller), 0 regressions; new statics 0.
 
-| Cluster | Passing (5f3218f30) | Files | % | vs 19dc92105 |
+| Cluster | Passing (b3dc64161) | Files | % | vs 5f3218f30 |
 | --- | ---: | ---: | ---: | ---: |
-| ES-core | 43,305 | 43,305 | 100.00 | +109 |
+| ES-core | 43,305 | 43,305 | 100.00 | +0 |
 | built-ins/Temporal | 4,605 | 4,605 | 100.00 | +0 |
 | intl402/Temporal | 2,028 | 2,029 | 99.95 | +0 |
 | intl402 (other) | 1,353 | 1,353 | 100.00 | +0 |
-| staging | 1,455 | 1,483 | 98.11 | +4 |
-| proposals (in ES-core dirs) | 841 | 841 | 100.00 | +22 |
-| **full suite** | **53,587** | **53,616** | **99.95** | **+135** |
+| staging | 1,480 | 1,483 | 99.80 | +25 |
+| proposals (in ES-core dirs) | 841 | 841 | 100.00 | +0 |
+| **full suite** | **53,612** | **53,616** | **99.99** | **+25** |
 
-The 29 files left: 28 staging (13 sm/strict runner artefact, on stability's ws/runner-strict; 12 legacy f.caller on
-ws/staging-caller bc68f1d7e, to gate; 2 contradict ES-core; 1 regress-610026 parser memory) and 1 intl402/Temporal
-(links.js, tz data).
-
-Earlier: 19dc92105 full 53,452 (99.69%); 317949e37 53,414 (99.62%); a1a2a5fc3 52,230 (97.41%); 29a14dfdd 51,639 (96.31%); 3edca9940 51,607 (96.25%); c21bcd82e 50,887 (94.91%); 8a5df0b93 44,766 (83.49%).
+Earlier: 5f3218f30 full 53,587 (99.95%); 19dc92105 53,452 (99.69%); 317949e37 53,414 (99.62%); a1a2a5fc3 52,230 (97.41%); 29a14dfdd 51,639 (96.31%); 3edca9940 51,607 (96.25%); c21bcd82e 50,887 (94.91%); 8a5df0b93 44,766 (83.49%).
 Previous: main 8a5df0b93, full 44,766 / 53,616 (83.49%), ES-core 43,059 (99.43%).
 
 ES-core residue at c21bcd82e (142 files; memcap, `tools/lead/es-core-residue.md` on ws/measure 4f999b1; node
@@ -57,21 +101,7 @@ fails 138 of them too):
 
 ## Merges awaiting a post-merge measurement
 
-Not in 5f3218f30's run:
-- 9c15385 int/caller 4fc7727 = main + staging-caller bc68f1d7e (legacy f.caller / f.arguments, ES 17.1 extension on
-  non-strict functions; InterpContext fields in interpreter.h, realm intrinsics). Gated by the lead vs 5f3218f30:
-  ES-core 0, full 0 regressions, +12 staging; new statics 0.
-- ws/runner-strict 5606282 (stability), a RUNNER change: script tests get the harness as --prelude and Ran as
-  --epilogue, so the strict scenario's "use strict" applies to the test only (INTERFACES.md §1). Old vs new runner
-  on the same binary 19dc92105 over the whole full suite: 53,452 → 53,465 files (+13, all staging/sm/strict), 0
-  newly failing, 0 HostScriptError; parse-only full suite unchanged (102,942 both); speed within noise after the
-  shared-prelude cache. Report: results branch results/5606282/. The +13 are the runner's, not the engine's.
-- 2b910d9 / ws/stability b3a61c6 (docs + results): 4 full runs of 19dc92105 identical (0 flaky files); parse-only
-  ES-core 82,724 / 82,724 (`results/19dc92105-parse.json`): **M1a and M1b reached (100.0% / 100.0%)**.
-
-Milestones with every input (main 5f3218f30 + parse 19dc92105): M1a, M1b, M2–M8 all REACHED; ES-core 43,305 /
-43,305 (100%); full 53,587 / 53,616 (99.95%). Command: `node t262/runner/milestones.mjs results/5f3218f30.json
---parse-only results/19dc92105-parse.json --full results/5f3218f30-full.json`.
+None: b3dc64161 covers everything (f.caller, perf batches 1–2, the soft memory limit, runner-strict, hardening).
 
 Runner change, measured in c21bcd82e: c21bcd8 ws/runner 43f03e9. Module tests run in place (`--prelude` /
 `--epilogue`). Old vs new runner on the same binary, over the 843 module-flagged files of the full suite: 613 → 719
@@ -116,8 +146,8 @@ on temporal2's branch). Report: results branch `results/43f03e9/MERGE_REQUEST.md
 
 ## Gate baseline
 
-- ES-core: `results/5f3218f30.json` (43,305 passing files); full suite: `results/5f3218f30-full.json` (53,587).
-  Check: `node tools/lead/gate.mjs results/5f3218f30.json <jsonl>` and `... results/5f3218f30-full.json <jsonl>`
+- ES-core: `results/b3dc64161.json` (43,305 passing files); full suite: `results/b3dc64161-full.json` (53,612).
+  Check: `node tools/lead/gate.mjs results/b3dc64161.json <jsonl>` and `... results/b3dc64161-full.json <jsonl>`
   (AGENTS.md). Gates already running against c21bcd82e stay valid (a subset of this baseline).
 
 ## Survey interim (main 7e957a05a)

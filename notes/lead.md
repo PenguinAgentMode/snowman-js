@@ -1,35 +1,23 @@
 # Lead handoff (snowman-js)
 
 Updated at every merge and measurement. A new lead (or the supervisor directly) continues from this file,
-STATUS.md and AGENTS.md alone. Last update: 2026-10-13 21:45 UTC, main 2a7dc0e (f.caller merged as 9c15385).
+STATUS.md and AGENTS.md alone. Last update: 2026-10-14 ~00:50 UTC, main b3dc641 measured (final).
 
 ## Numbers and baselines
 
-- Latest measured main: **5f3218f30**, full **53,587 / 53,616 (99.95%)**, ES-core **43,305 / 43,305 (100%)**, M8.
-  `node t262/runner/milestones.mjs results/5f3218f30.json --full results/5f3218f30-full.json`
-- Gate baselines: `results/5f3218f30{,-full}.json`; JSONL on the results branch at `results/5f3218f30/suite.jsonl`.
+- Final measured main: **b3dc64161**, full **53,612 / 53,616 (99.99%)**, ES-core **43,305 / 43,305 (100%)**, every
+  milestone reached (parse-only 19dc92105). Gate baselines: `results/b3dc64161{,-full}.json`.
 - Measure: `TMPDIR=$HOME/tmp tools/lead/measure.sh suite results/<previous>.json` in the background with a monitor
   (~22 min at 4 jobs). Then `gate.mjs <prev>-full.json results/<sha>/suite.jsonl` and `clusters.mjs <sha>-full.json
   <prev>-full.json`. Commit `results/<sha>{,-full}.json` to main, push the JSONL to the results branch (worktree
   under $HOME), update STATUS "Latest result", and send the supervisor milestones.mjs verbatim.
 
-## Merge queue (21:45 UTC)
+## Merge queue
 
-All milestones are REACHED: parse-only 100% (results/19dc92105-parse.json), ES-core 43,305 / 43,305, full 53,587
-measured at 5f3218f30. f.caller is merged (9c15385, gated +12), so expect ~53,599.
-1. int/perf c1214e2 = main 2a7dc0e + perf2 757a0f6 (perf batch 1 + frame fix), integrated by the lead because it
-   overlapped f.caller (function.cpp includes). 4 tco tests pass at 453–468 MB; stackdepth vs main: all deeper. Full
-   gate running in $HOME/wt/int4 → $HOME/logs/int4.{jsonl,done}; gate vs results/5f3218f30{,-full}.json. Merge
-   c1214e2 if clean AND perf2's own gate of 757a0f6 is clean (perf2 sends GC-stress + summed ms).
-2. builtins: ws/heaplimit 8191d53 (soft RSS limit SNOWMAN_MEM_MB=640 → RangeError "out of memory" after relief).
-   Stackdepth + tco numbers ~21:55, full gate ~22:35. The spread probe (696 MB on int/perf) must end in RangeError.
-3. stability (entry "chinese"): ws/runner-strict, the approved runner change for the 13 sm/strict files. New-runner
-   full run ~21:51, parse-only old/new ~22:20/22:50. It's a RUNNER gain: record old vs new per file in STATUS.
-4. perf2 (entry "decorators"): batch 2 ws/perf2b c1efddd, to rebase after c1214e2 lands.
-5. hardening (entry "intlfmt"): ASan 0 reports over all 102,994 scenarios; UBSan-only sweep 21:40 → ~22:45; then a
-   probe proving the sanitizers fire. tools/lead/sanitizers.md on ws/hardening, to merge at the end.
-After 1+2 land: measure main once (expect ~53,599 + nothing lost).
-Wake-ups: notices can be held after a notice-started turn, so ping workers by agent_send at their ETAs.
+Empty. All workers parked with notes on their branches; hardening's widened GC_STRESS=1 pass is still running
+(notes/hardening.md, $HOME/logs/gcs2-progress.txt on its machine); anything it finds is a follow-up merge.
+Left (4 files): 2 B.3.2 `arguments` staging tests (contradict ES-core), regress-610026 (parser/eval AST memory),
+intl402/Temporal/ZonedDateTime/links.js (tz data).
 
 How I merge: check overlap with `comm -12 <(git diff --name-only $base main|sort) <(git diff --name-only $base
 <sha>|sort)` (AGENTS.md older-base rule); merge the exact sha; `make -j4` warning-free; push; list it under
