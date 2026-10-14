@@ -14,8 +14,8 @@ STATUS.md and AGENTS.md alone. Last update: 2026-10-14 ~00:50 UTC, main b3dc641 
 
 ## Merge queue
 
-Empty. All workers parked with notes on their branches; hardening's widened GC_STRESS=1 pass is still running
-(notes/hardening.md, $HOME/logs/gcs2-progress.txt on its machine); anything it finds is a follow-up merge.
+Empty. Project closed; all workers parked. hardening's widened ASan + GC_STRESS=1 pass: 0 reports over 17,401
+scenarios (tools/lead/sanitizers.md lists what isn't covered yet, for a future GC-stress sweep).
 Left (4 files): 2 B.3.2 `arguments` staging tests (contradict ES-core), regress-610026 (parser/eval AST memory),
 intl402/Temporal/ZonedDateTime/links.js (tz data).
 

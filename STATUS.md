@@ -45,8 +45,10 @@ message, not a notice (the lead pings at ETAs); agent_close frees neither the ma
 entries); push WIP every 20 min with a handoff note; the lead gates orphaned branches itself, integrating
 overlapping ones into one commit.
 
-**Workers:** all parked with notes on their branches; hardening's widened GC_STRESS=1 pass is still running
-(notes/hardening.md, $HOME/logs/gcs2-progress.txt), and anything it finds is a follow-up.
+**Workers:** all parked, with handoff notes. hardening's widened ASan + GC_STRESS=1 pass (half of each GC-heavy
+directory, 17,401 scenarios) finished with 0 reports and no new finds; 454 timeouts are tests too slow at one
+collection per safepoint (448 RegExp property-escapes). Not covered: the other half of those directories, and GC
+stress over the rest of the suite beyond a 1/40 sample (tools/lead/sanitizers.md). The project is closed.
 
 
 | Workstream | Owner (agent) | Branch | Directories | State |
