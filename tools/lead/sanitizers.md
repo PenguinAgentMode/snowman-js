@@ -41,7 +41,9 @@ Owner: hardening. The full suite under an ASan+UBSan engine, triaged by top fram
 - UBSan-only shards 0-2/4 (engine before the fixes): only the memcpy cluster below. Shard 3/4 on the fixed engine
   (8d966b9): 25,662 scenarios, 0 reports. UBSan sweep complete.
 - ASan + SNOWMAN_GC_STRESS=1 widened pass (engine 8d966b9, --shard 0/2 of each directory, --jobs 2):
-  0 reports in 13 directories so far: statements/class 4,374, expressions/class 3,983, GeneratorPrototype 40,
-  AsyncGeneratorPrototype 48, statements/generators 276, statements/async-generator 300, for-await-of 1,207, Proxy 331,
-  Reflect 198, Array sort 57 (2 timeouts: resizable-buffer-default-comparator.js, slow under stress), splice 84,
-  flat 20, flatMap 21; all others pass. RegExp and Temporal in progress ($HOME/logs/gcs2-progress.txt).
+  done: 17,401 scenarios, 0 ASan reports, 16,947 pass, 454 timeouts (448 RegExp, mostly property-escapes/generated,
+  plus 4 Temporal and 2 Array sort: too slow at a collection per safepoint), 0 other failures. Per directory:
+  statements/class 4,374, expressions/class 3,983, GeneratorPrototype 40, AsyncGeneratorPrototype 48,
+  statements/generators 276, statements/async-generator 300, for-await-of 1,207, Proxy 331, Reflect 198, Array
+  sort 57, splice 84, flat 20, flatMap 21, RegExp 1,900, Temporal 4,562. Not covered: --shard 1/2 of these directories,
+  and GC stress over the rest of the suite (only the 1/40 sample).
