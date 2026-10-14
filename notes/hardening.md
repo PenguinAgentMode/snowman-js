@@ -40,7 +40,8 @@ Owner: hardening (sanitizer sweep: ASan + UBSan over the full suite). Lead: the 
   Evidence: the 16 class files 32/32, 0 ASan reports at GC_STRESS=1 (before: 16); UBSan TypedArray*/ArrayBuffer
   30 report files before, 0 after.
 - MERGED: 8d966b9 + docs (main d783202, cfc366c). UBSan shard 3/4 done on the fixed engine: 0 reports.
-- RUNNING (left for a successor if this agent stops):
+- DONE 01:38: widened GC_STRESS=1 pass, 17,401 scenarios, 0 reports (tools/lead/sanitizers.md). Parked.
+- WAS RUNNING (kept for the record):
   - UBSan shard 3/4 with engine-ubsan2 (fixed): $HOME/logs/run-ub3.sh -> ub3.done/.fail, reports $HOME/logs/ubsan3
     (`DIRS=$HOME/logs/ubsan3 node $HOME/logs/triage.js`). Shards 0-2 found only the memcpy cluster (fixed).
   - Widened GC_STRESS=1 pass: $HOME/logs/run-gcs2.sh (engine-asan2 = 8d966b9, --jobs 2, private copy $HOME/t262-b),
