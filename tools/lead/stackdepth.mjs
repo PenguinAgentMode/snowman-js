@@ -3,10 +3,15 @@
 // deepest tests (test/language/statements/for/tco-*-body.js, 100,000 nested calls) need more than 432 MB of that
 // stack, so a change must not lower any probe's depth: compare against main's engine before a gate.
 //
-//   node tools/lead/stackdepth.mjs <engine> [<baseline engine>]
+//   node tools/lead/stackdepth.mjs [--keep-mem-limit] <engine> [<baseline engine>]
 //
-// Prints the depth and peak RSS per probe (and the baseline's, and the depth change). Exit 1 if a probe ends without a RangeError
-// (a crash), or reaches a smaller depth than on the baseline engine.
+// Prints the depth and peak RSS per probe (and the baseline's, and the depth change). Exit 1 if a probe ends
+// without a RangeError (a crash), or reaches a smaller depth than on the baseline engine.
+//
+// Both engines run with SNOWMAN_MEM_MB=0 (no soft memory limit, runtime/heap.cpp): with the limit, a probe that
+// holds heap per level (spread) ends in its RangeError("out of memory") near 640 MB instead of at the end of the
+// stack, so the depth would measure the heap, and an engine with the limit would compare as a drop against one
+// without it. --keep-mem-limit runs them with the caller's environment instead.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -42,7 +47,10 @@ const TIME = fs.existsSync('/usr/bin/time') ? '/usr/bin/time' : null;
 function measure(engine, file, dir) {
   const rssFile = path.join(dir, 'rss');
   const command = TIME ? `exec ${TIME} -f %M -o "${rssFile}" "$0" "$1"` : 'exec "$0" "$1"';
-  const run = spawnSync('bash', ['-c', `ulimit -v ${VM_KB}; ${command}`, engine, file], { encoding: 'utf8' });
+  const run = spawnSync('bash', ['-c', `ulimit -v ${VM_KB}; ${command}`, engine, file], {
+    encoding: 'utf8',
+    env: ENV,
+  });
   const kb = TIME && fs.existsSync(rssFile) ? Number(fs.readFileSync(rssFile, 'utf8').trim().split('\n').pop()) : NaN;
   const rss = Number.isFinite(kb) ? Math.round(kb / 1024) : null;
   const match = /^depth (\d+)$/m.exec(run.stdout);
@@ -51,11 +59,14 @@ function measure(engine, file, dir) {
   return { depth: 0, rss, failure: what || `exit ${run.status}` };
 }
 
-const [engine, baseline] = process.argv.slice(2);
+const args = process.argv.slice(2);
+const keepMemLimit = args.includes('--keep-mem-limit');
+const [engine, baseline] = args.filter((arg) => arg !== '--keep-mem-limit');
 if (!engine) {
-  console.error('usage: node tools/lead/stackdepth.mjs <engine> [<baseline engine>]');
+  console.error('usage: node tools/lead/stackdepth.mjs [--keep-mem-limit] <engine> [<baseline engine>]');
   process.exit(2);
 }
+const ENV = keepMemLimit ? process.env : { ...process.env, SNOWMAN_MEM_MB: '0' };
 const dir = fs.mkdtempSync(path.join(process.env.TMPDIR || path.join(os.homedir(), 'tmp'), 'stackdepth-'));
 let failed = false;
 try {
